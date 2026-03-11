@@ -1,4 +1,5 @@
 .env
+ai-keys.env
 
 # Root tooling
 .gradle/

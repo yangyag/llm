@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "js-base64": "^3.7.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -1,6 +1,6 @@
 # Frontend (`front/`)
 
-단일 인사 화면을 제공하는 프론트엔드 모듈입니다. 이 디렉터리는 `llm` monorepo의 일부입니다.
+익명 게시판 프론트엔드 모듈입니다. 이 디렉터리는 `llm` monorepo의 일부입니다.
 
 ## 기술 스택
 - React 18
@@ -41,4 +41,18 @@ docker compose up -d --build
 ```
 
 ## 화면 동작
-- `/` 에서 `안녕하세요 LLM 입니다.` 한 문장만 표시
+- 게시글 목록, 글 작성, 글 상세를 한 앱 셸에서 처리
+- 게시글 본문과 답변 본문은 서버 전송 전에 Base64 인코딩
+- 제목은 평문으로 전송
+- 수정/삭제는 비밀번호 입력 방식
+- Base64는 보안 기능이 아니며, 전송 직전 문자열 포장에 가깝습니다.
+
+## 연동 API
+- `GET /api/v1/posts`
+- `POST /api/v1/posts`
+- `GET /api/v1/posts/{id}`
+- `PUT /api/v1/posts/{id}`
+- `DELETE /api/v1/posts/{id}`
+- `POST /api/v1/posts/{id}/replies`
+- `PUT /api/v1/posts/replies/{id}`
+- `DELETE /api/v1/posts/replies/{id}`

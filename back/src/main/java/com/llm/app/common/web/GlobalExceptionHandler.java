@@ -1,5 +1,13 @@
 package com.llm.app.common.web;
 
+import com.llm.app.board.exception.AiProviderNotConfiguredException;
+import com.llm.app.board.exception.AiReplyGenerationException;
+import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
+import com.llm.app.board.exception.BoardPostNotFoundException;
+import com.llm.app.board.exception.BoardReplyNotFoundException;
+import com.llm.app.board.exception.InvalidBoardPasswordException;
+import com.llm.app.board.exception.InvalidAiProviderException;
+import com.llm.app.board.exception.InvalidEncodedBodyException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
@@ -13,6 +21,62 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+	@ExceptionHandler({ InvalidEncodedBodyException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidEncodedBody(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_ENCODED_BODY", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ InvalidBoardPasswordException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidPassword(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.FORBIDDEN, "INVALID_PASSWORD", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ AiReplyModificationNotAllowedException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiReplyLocked(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.FORBIDDEN, "AI_REPLY_LOCKED", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ InvalidAiProviderException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidAiProvider(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_AI_PROVIDER", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ AiProviderNotConfiguredException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiProviderNotConfigured(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, "AI_PROVIDER_NOT_CONFIGURED", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ AiReplyGenerationException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiReplyGeneration(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_GATEWAY, "AI_REPLY_GENERATION_FAILED", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ BoardPostNotFoundException.class, BoardReplyNotFoundException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleBoardNotFound(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", exception.getMessage(), request);
+	}
 
 	@ExceptionHandler({
 		ConstraintViolationException.class,

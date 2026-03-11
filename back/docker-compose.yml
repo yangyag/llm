@@ -4,6 +4,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    env_file:
+      - ../ai-keys.env
+    environment:
+      APP_DB_HOST: ${APP_DB_HOST:-host.docker.internal}
+      APP_DB_PORT: ${APP_DB_PORT:-5432}
+      APP_DB_NAME: ${APP_DB_NAME:-yangyag}
+      APP_DB_USER: ${APP_DB_USER:-yangyag}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-yangyag1!}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8082:8080"
     restart: unless-stopped
