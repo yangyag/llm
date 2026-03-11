@@ -1,0 +1,15 @@
+.env
+
+# Root tooling
+.gradle/
+.legacy/
+
+# Frontend artifacts
+front/node_modules/
+front/dist/
+
+# Backend artifacts
+back/.gradle/
+back/build/
+back/build-local/
+back/frontend-local-artifacts/

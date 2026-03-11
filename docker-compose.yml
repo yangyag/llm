@@ -1,0 +1,24 @@
+services:
+  back:
+    container_name: llm-back
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    environment:
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5174,http://localhost:8083}
+    ports:
+      - "8082:8080"
+    restart: unless-stopped
+
+  front:
+    container_name: llm-front
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    ports:
+      - "8083:80"
+    depends_on:
+      - back
+    restart: unless-stopped
