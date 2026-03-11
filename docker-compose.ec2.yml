@@ -1,0 +1,38 @@
+services:
+  db:
+    image: yangyag2/llm-db:18
+    container_name: llm-db
+    env_file:
+      - ./llm.env
+    volumes:
+      - llm-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  back:
+    image: yangyag2/llm-back:latest
+    container_name: llm-back
+    env_file:
+      - ./llm.env
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  front:
+    image: yangyag2/llm-front:latest
+    container_name: llm-front
+    ports:
+      - "8083:80"
+    depends_on:
+      - back
+    restart: unless-stopped
+
+volumes:
+  llm-pgdata:

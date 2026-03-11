@@ -1,4 +1,5 @@
 .env
+llm.env
 ai-keys.env
 
 # Root tooling

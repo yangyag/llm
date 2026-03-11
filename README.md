@@ -16,7 +16,6 @@ llm/
 ## 통합 실행
 ```bash
 cp .env.example .env
-cp ai-keys.env.example ai-keys.env
 docker compose up -d --build
 ```
 
@@ -28,6 +27,61 @@ docker compose up -d --build
 ```bash
 docker compose down
 ```
+
+## EC2 이미지 배포
+소스 빌드 없이 Docker Hub 이미지로 바로 기동:
+
+```bash
+cat >/home/ubuntu/llm.env <<'EOF'
+APP_CORS_ALLOWED_ORIGINS=http://43.202.113.123:8083
+APP_DB_HOST=llm-db
+APP_DB_PORT=5432
+APP_DB_NAME=yangyag
+APP_DB_USER=yangyag
+APP_DB_PASSWORD=yangyag1!
+POSTGRES_DB=yangyag
+POSTGRES_USER=yangyag
+POSTGRES_PASSWORD=yangyag1!
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+XAI_API_KEY=
+EOF
+
+vi /home/ubuntu/llm.env
+
+docker pull yangyag2/llm-front:latest
+docker pull yangyag2/llm-back:latest
+docker pull yangyag2/llm-db:18
+
+docker network create llm-net
+docker volume create llm-pgdata
+docker run -d --name llm-db --network llm-net --env-file /home/ubuntu/llm.env -v llm-pgdata:/var/lib/postgresql yangyag2/llm-db:18
+docker run -d --name llm-back --network llm-net --env-file /home/ubuntu/llm.env yangyag2/llm-back:latest
+docker run -d --name llm-front --network llm-net -p 8083:80 yangyag2/llm-front:latest
+```
+
+기존 컨테이너를 업데이트할 때:
+
+```bash
+docker rm -f llm-front llm-back llm-db || true
+docker pull yangyag2/llm-front:latest
+docker pull yangyag2/llm-back:latest
+docker pull yangyag2/llm-db:18
+docker network create llm-net || true
+docker volume create llm-pgdata
+docker run -d --name llm-db --network llm-net --env-file /home/ubuntu/llm.env -v llm-pgdata:/var/lib/postgresql yangyag2/llm-db:18
+docker run -d --name llm-back --network llm-net --env-file /home/ubuntu/llm.env yangyag2/llm-back:latest
+docker run -d --name llm-front --network llm-net -p 8083:80 yangyag2/llm-front:latest
+```
+
+접속:
+- Frontend: `http://EC2_PUBLIC_IP:8083`
+
+운영 메모:
+- 외부 보안그룹은 보통 `22`, `8083`만 열면 됩니다.
+- `8080`, `8082`, `5432`는 외부에 열지 않습니다.
+- EC2에서는 `/home/ubuntu/llm.env` 파일 하나만 관리하면 됩니다.
+- EC2 배포용 compose와 `docker run` 모두 front/back/db를 같은 Docker 네트워크에 올리고, 백엔드는 내부 `llm-db:5432`로만 접속합니다.
 
 ## 현재 범위
 - 익명 게시글 작성, 목록 조회, 상세 조회
@@ -43,7 +97,7 @@ docker compose down
 - 실제 기밀성이 필요해지면 Base64가 아니라 별도의 암호화 설계를 추가해야 합니다.
 
 ## DB 연결
-- 기존 Docker PostgreSQL 컨테이너 재사용
+- 로컬 통합 실행 기준
 - 포트: `5432`
 - DB: `yangyag`
 - User: `yangyag`
@@ -73,8 +127,6 @@ cd back && ./gradlew clean test
 cd front && npm run build
 ```
 
-## AI 설정 파일
-- 루트 `ai-keys.env`에 API 키를 입력합니다.
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `XAI_API_KEY`
+## AI 설정
+- 로컬 Docker 실행은 루트 `ai-keys.env`를 사용합니다.
+- EC2 배포는 루트 `llm.env.example`를 복사한 `llm.env` 파일 하나로 DB 설정과 AI 키를 함께 관리합니다.

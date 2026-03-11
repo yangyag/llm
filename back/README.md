@@ -50,7 +50,6 @@ docker compose up -d --build
 ```bash
 docker build -t llm-backend:local .
 docker run --rm --name llm-back -p 8082:8080 \
-  -e APP_CORS_ALLOWED_ORIGINS="http://localhost:8083,http://localhost:5174" \
   -e APP_DB_HOST="host.docker.internal" \
   -e APP_DB_PORT="5432" \
   -e APP_DB_NAME="yangyag" \
@@ -73,10 +72,6 @@ docker run --rm --name llm-back -p 8082:8080 \
 - `APP_DB_USER`
 - `APP_DB_PASSWORD`
 
-## AI 설정 키
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `ANTHROPIC_API_KEY`
-- `ANTHROPIC_MODEL`
-- `XAI_API_KEY`
-- `XAI_MODEL`
+## AI 설정
+- 로컬 Docker 실행은 루트 `ai-keys.env`를 사용합니다.
+- EC2 배포는 루트 `llm.env` 파일을 `--env-file`로 전달합니다.
