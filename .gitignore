@@ -2,7 +2,6 @@
 
 # Root tooling
 .gradle/
-.legacy/
 
 # Frontend artifacts
 front/node_modules/
