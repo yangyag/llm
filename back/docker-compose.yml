@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - ../ai-keys.env
+      - ../llm.env
     environment:
       APP_DB_HOST: ${APP_DB_HOST:-host.docker.internal}
       APP_DB_PORT: ${APP_DB_PORT:-5432}

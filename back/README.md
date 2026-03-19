@@ -45,7 +45,7 @@ APP_DB_HOST=localhost ./gradlew bootRun
 ## 통합 Docker 실행 (권장)
 루트에서 front/back를 함께 기동:
 ```bash
-docker compose up -d --build
+docker compose --env-file llm.env up -d --build
 ```
 
 ## 백엔드 단독 Docker 실행
@@ -82,5 +82,4 @@ docker run --rm --name llm-back -p 8082:8080 \
 - `APP_ATTACHMENTS_MAX_REQUEST_SIZE`
 
 ## AI 설정
-- 로컬 Docker 실행은 루트 `ai-keys.env`를 사용합니다.
-- EC2 배포는 루트 `llm.env` 파일을 `--env-file`로 전달합니다.
+- 로컬 Docker 실행과 EC2 배포 모두 루트 `llm.env` 파일 하나를 사용합니다.

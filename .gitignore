@@ -1,6 +1,7 @@
 .env
 llm.env
 ai-keys.env
+aws/llm.env
 
 # Root tooling
 .gradle/

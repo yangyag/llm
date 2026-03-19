@@ -21,7 +21,7 @@
 ## 디렉터리 규칙
 - `front/`: UI, 라우팅, 상태관리, 프론트 Docker 빌드
 - `back/`: API, 도메인, 테스트, 정적 자산, 백엔드 Docker 빌드
-- 루트: 통합 실행/문서(`docker-compose.yml`, `.env.example`, `README.md`)
+- 루트: 통합 실행/문서(`docker-compose.yml`, `llm.env.example`, `README.md`)
 
 ## 멀티 에이전트 역할
 - `A0-Orchestrator`: 작업 분해, 우선순위, 통합 문서/결과 정리

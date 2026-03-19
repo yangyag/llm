@@ -8,15 +8,15 @@ llm/
   front/                  # React 게시판 UI
   back/                   # Spring Boot 게시판 API
   docker-compose.yml      # 통합 실행
-  .env.example
+  llm.env.example
   README.md
   AGENTS.md
 ```
 
 ## 통합 실행
 ```bash
-cp .env.example .env
-docker compose up -d --build
+cp llm.env.example llm.env
+docker compose --env-file llm.env up -d --build
 ```
 
 접속:
@@ -136,8 +136,7 @@ cd front && npm run build
 ```
 
 ## AI 설정
-- 로컬 Docker 실행은 루트 `ai-keys.env`를 사용합니다.
-- EC2 배포는 루트 `llm.env.example`를 복사한 `llm.env` 파일 하나로 DB 설정과 AI 키를 함께 관리합니다.
+- 로컬 Docker 실행과 EC2 배포 모두 루트 `llm.env` 파일 하나로 DB 설정과 AI 키를 함께 관리합니다.
 
 ## 첨부파일 정책
 - 게시글당 첨부파일은 1개만 허용합니다.
