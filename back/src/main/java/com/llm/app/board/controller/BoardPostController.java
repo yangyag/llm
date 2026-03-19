@@ -10,17 +10,23 @@ import com.llm.app.board.dto.UpdateBoardPostRequest;
 import com.llm.app.board.dto.UpdateBoardReplyRequest;
 import com.llm.app.board.service.BoardService;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("/api/v1/posts")
@@ -41,16 +47,16 @@ public class BoardPostController {
 		return boardService.getPost(id);
 	}
 
-	@PostMapping
+	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
-	public BoardPostDetailResponse createPost(@Valid @RequestBody CreateBoardPostRequest request) {
+	public BoardPostDetailResponse createPost(@Valid @ModelAttribute CreateBoardPostRequest request) {
 		return boardService.createPost(request);
 	}
 
-	@PutMapping("/{id}")
+	@PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public BoardPostDetailResponse updatePost(
 		@PathVariable Long id,
-		@Valid @RequestBody UpdateBoardPostRequest request
+		@Valid @ModelAttribute UpdateBoardPostRequest request
 	) {
 		return boardService.updatePost(id, request);
 	}
@@ -77,6 +83,26 @@ public class BoardPostController {
 		@Valid @RequestBody CreateAiReplyRequest request
 	) {
 		return boardService.createAiReply(id, request);
+	}
+
+	@GetMapping("/{id}/attachment")
+	public ResponseEntity<Resource> downloadAttachment(@PathVariable Long id) {
+		var attachment = boardService.downloadAttachment(id);
+		MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+		if (attachment.contentType() != null && !attachment.contentType().isBlank()) {
+			mediaType = MediaType.parseMediaType(attachment.contentType());
+		}
+		return ResponseEntity.ok()
+			.contentType(mediaType)
+			.contentLength(attachment.size())
+			.header(
+				org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+				ContentDisposition.attachment()
+					.filename(attachment.originalFilename(), StandardCharsets.UTF_8)
+					.build()
+					.toString()
+			)
+			.body(attachment.resource());
 	}
 
 	@PutMapping("/replies/{replyId}")

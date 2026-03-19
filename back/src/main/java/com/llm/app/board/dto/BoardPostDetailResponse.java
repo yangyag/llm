@@ -9,6 +9,7 @@ public record BoardPostDetailResponse(
 	String body,
 	Instant createdAt,
 	Instant updatedAt,
+	BoardAttachmentDto attachment,
 	List<BoardReplyDto> replies
 ) {
 }

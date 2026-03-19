@@ -18,11 +18,29 @@ function encodeBodyBase64(value) {
   return fromUint8Array(new TextEncoder().encode(value));
 }
 
+function buildPostFormData({ title, body, password, attachment, removeAttachment = false }) {
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("bodyBase64", encodeBodyBase64(body));
+  formData.append("password", password);
+
+  if (attachment) {
+    formData.append("attachment", attachment);
+  }
+
+  if (removeAttachment) {
+    formData.append("removeAttachment", "true");
+  }
+
+  return formData;
+}
+
 async function requestJson(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(withApiBase(path), {
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(options.headers ?? {})
     },
     ...options
@@ -52,25 +70,17 @@ export function getPost(postId) {
   return requestJson(`/api/v1/posts/${postId}`);
 }
 
-export function createPost({ title, body, password }) {
+export function createPost({ title, body, password, attachment }) {
   return requestJson("/api/v1/posts", {
     method: "POST",
-    body: JSON.stringify({
-      title,
-      bodyBase64: encodeBodyBase64(body),
-      password
-    })
+    body: buildPostFormData({ title, body, password, attachment })
   });
 }
 
-export function updatePost(postId, { title, body, password }) {
+export function updatePost(postId, { title, body, password, attachment, removeAttachment = false }) {
   return requestJson(`/api/v1/posts/${postId}`, {
     method: "PUT",
-    body: JSON.stringify({
-      title,
-      bodyBase64: encodeBodyBase64(body),
-      password
-    })
+    body: buildPostFormData({ title, body, password, attachment, removeAttachment })
   });
 }
 
@@ -113,4 +123,8 @@ export function deleteReply(replyId, password) {
     method: "DELETE",
     body: JSON.stringify({ password })
   });
+}
+
+export function getApiUrl(path) {
+  return withApiBase(path);
 }

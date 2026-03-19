@@ -12,8 +12,16 @@ services:
       APP_DB_NAME: ${APP_DB_NAME:-yangyag}
       APP_DB_USER: ${APP_DB_USER:-yangyag}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-yangyag1!}
+      APP_ATTACHMENTS_ROOT_PATH: ${APP_ATTACHMENTS_ROOT_PATH:-/var/lib/llm/attachments}
+      APP_ATTACHMENTS_MAX_FILE_SIZE: ${APP_ATTACHMENTS_MAX_FILE_SIZE:-100MB}
+      APP_ATTACHMENTS_MAX_REQUEST_SIZE: ${APP_ATTACHMENTS_MAX_REQUEST_SIZE:-100MB}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - llm-back-attachments:/var/lib/llm/attachments
     ports:
       - "8082:8080"
     restart: unless-stopped
+
+volumes:
+  llm-back-attachments:

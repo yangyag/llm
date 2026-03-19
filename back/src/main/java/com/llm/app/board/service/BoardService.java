@@ -13,19 +13,26 @@ import com.llm.app.board.dto.UpdateBoardReplyRequest;
 import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
 import com.llm.app.board.exception.BoardPostNotFoundException;
 import com.llm.app.board.exception.BoardReplyNotFoundException;
+import com.llm.app.board.exception.BoardAttachmentNotFoundException;
+import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidBoardPasswordException;
+import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardReply;
+import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
 import com.llm.app.board.repository.BoardPostSummaryProjection;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @Transactional
@@ -34,25 +41,31 @@ public class BoardService {
 
 	private final BoardPostRepository boardPostRepository;
 	private final BoardReplyRepository boardReplyRepository;
+	private final BoardAttachmentRepository boardAttachmentRepository;
 	private final BoardContentCodec boardContentCodec;
 	private final BoardMapper boardMapper;
 	private final PasswordEncoder passwordEncoder;
 	private final AiReplyGenerator aiReplyGenerator;
+	private final AttachmentStorageService attachmentStorageService;
 
 	public BoardService(
 		BoardPostRepository boardPostRepository,
 		BoardReplyRepository boardReplyRepository,
+		BoardAttachmentRepository boardAttachmentRepository,
 		BoardContentCodec boardContentCodec,
 		BoardMapper boardMapper,
 		PasswordEncoder passwordEncoder,
-		AiReplyGenerator aiReplyGenerator
+		AiReplyGenerator aiReplyGenerator,
+		AttachmentStorageService attachmentStorageService
 	) {
 		this.boardPostRepository = boardPostRepository;
 		this.boardReplyRepository = boardReplyRepository;
+		this.boardAttachmentRepository = boardAttachmentRepository;
 		this.boardContentCodec = boardContentCodec;
 		this.boardMapper = boardMapper;
 		this.passwordEncoder = passwordEncoder;
 		this.aiReplyGenerator = aiReplyGenerator;
+		this.attachmentStorageService = attachmentStorageService;
 	}
 
 	@Transactional(readOnly = true)
@@ -66,35 +79,38 @@ public class BoardService {
 
 	@Transactional(readOnly = true)
 	public BoardPostDetailResponse getPost(Long id) {
-		return boardMapper.toDetailResponse(findPostWithReplies(id));
+		return toDetailResponse(findPostWithReplies(id));
 	}
 
 	public BoardPostDetailResponse createPost(CreateBoardPostRequest request) {
 		Instant now = Instant.now();
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
-			request.title().trim(),
-			boardContentCodec.decodeBody(request.bodyBase64()),
-			passwordEncoder.encode(request.password()),
+			request.getTitle().trim(),
+			boardContentCodec.decodeBody(request.getBodyBase64()),
+			passwordEncoder.encode(request.getPassword()),
 			now,
 			now
 		));
-		return boardMapper.toDetailResponse(savedPost);
+		replaceAttachment(savedPost, request.getAttachment(), false, now);
+		return toDetailResponse(savedPost);
 	}
 
 	public BoardPostDetailResponse updatePost(Long id, UpdateBoardPostRequest request) {
 		BoardPost post = findPostWithReplies(id);
-		verifyPassword(request.password(), post.getPasswordHash());
+		verifyPassword(request.getPassword(), post.getPasswordHash());
 		post.update(
-			request.title().trim(),
-			boardContentCodec.decodeBody(request.bodyBase64()),
+			request.getTitle().trim(),
+			boardContentCodec.decodeBody(request.getBodyBase64()),
 			Instant.now()
 		);
-		return boardMapper.toDetailResponse(post);
+		replaceAttachment(post, request.getAttachment(), request.isRemoveAttachment(), Instant.now());
+		return toDetailResponse(post);
 	}
 
 	public void deletePost(Long id, BoardPasswordRequest request) {
 		BoardPost post = findPostWithReplies(id);
 		verifyPassword(request.password(), post.getPasswordHash());
+		findAttachment(post.getId()).ifPresent(this::deleteAttachment);
 		boardPostRepository.delete(post);
 	}
 
@@ -110,7 +126,7 @@ public class BoardService {
 		);
 		post.getReplies().add(reply);
 		boardReplyRepository.saveAndFlush(reply);
-		return boardMapper.toDetailResponse(findPostWithReplies(postId));
+		return toDetailResponse(findPostWithReplies(postId));
 	}
 
 	public BoardPostDetailResponse createAiReply(Long postId, CreateAiReplyRequest request) {
@@ -129,7 +145,7 @@ public class BoardService {
 		);
 		post.getReplies().add(reply);
 		boardReplyRepository.saveAndFlush(reply);
-		return boardMapper.toDetailResponse(findPostWithReplies(postId));
+		return toDetailResponse(findPostWithReplies(postId));
 	}
 
 	public BoardPostDetailResponse updateReply(Long replyId, UpdateBoardReplyRequest request) {
@@ -137,7 +153,7 @@ public class BoardService {
 		ensureReplyIsEditable(reply);
 		verifyPassword(request.password(), reply.getPasswordHash());
 		reply.update(boardContentCodec.decodeBody(request.bodyBase64()), Instant.now());
-		return boardMapper.toDetailResponse(findPostWithReplies(reply.getPost().getId()));
+		return toDetailResponse(findPostWithReplies(reply.getPost().getId()));
 	}
 
 	public BoardPostDetailResponse deleteReply(Long replyId, BoardPasswordRequest request) {
@@ -148,7 +164,20 @@ public class BoardService {
 		reply.getPost().getReplies().remove(reply);
 		boardReplyRepository.delete(reply);
 		boardReplyRepository.flush();
-		return boardMapper.toDetailResponse(findPostWithReplies(postId));
+		return toDetailResponse(findPostWithReplies(postId));
+	}
+
+	@Transactional(readOnly = true)
+	public BoardAttachmentDownload downloadAttachment(Long postId) {
+		BoardPost post = findPostWithReplies(postId);
+		BoardAttachment attachment = findAttachment(post.getId())
+			.orElseThrow(() -> new BoardAttachmentNotFoundException(postId));
+		return new BoardAttachmentDownload(
+			attachmentStorageService.loadAsResource(attachment),
+			attachment.getOriginalFilename(),
+			attachment.getContentType(),
+			attachment.getSize()
+		);
 	}
 
 	private BoardPost findPostWithReplies(Long id) {
@@ -171,5 +200,52 @@ public class BoardService {
 		if (reply.isAi()) {
 			throw new AiReplyModificationNotAllowedException();
 		}
+	}
+
+	private BoardPostDetailResponse toDetailResponse(BoardPost post) {
+		return boardMapper.toDetailResponse(post, findAttachment(post.getId()).orElse(null));
+	}
+
+	private Optional<BoardAttachment> findAttachment(Long postId) {
+		return boardAttachmentRepository.findByPost_Id(postId);
+	}
+
+	private void replaceAttachment(BoardPost post, MultipartFile attachment, boolean removeAttachment, Instant now) {
+		boolean hasNewAttachment = hasAttachmentUpload(attachment);
+		if (removeAttachment && hasNewAttachment) {
+			throw new InvalidAttachmentRequestException("removeAttachment cannot be true when attachment is uploaded");
+		}
+
+		Optional<BoardAttachment> existingAttachment = findAttachment(post.getId());
+		if (removeAttachment) {
+			existingAttachment.ifPresent(this::deleteAttachment);
+			return;
+		}
+
+		if (!hasNewAttachment) {
+			return;
+		}
+
+		existingAttachment.ifPresent(this::deleteAttachment);
+		AttachmentStorageService.StoredAttachment storedAttachment = attachmentStorageService.store(attachment);
+		boardAttachmentRepository.save(new BoardAttachment(
+			post,
+			storedAttachment.originalFilename(),
+			storedAttachment.storedFilename(),
+			storedAttachment.storagePath(),
+			storedAttachment.contentType(),
+			storedAttachment.size(),
+			now
+		));
+	}
+
+	private void deleteAttachment(BoardAttachment attachment) {
+		attachmentStorageService.deleteIfExists(attachment.getStoragePath());
+		boardAttachmentRepository.delete(attachment);
+		boardAttachmentRepository.flush();
+	}
+
+	private boolean hasAttachmentUpload(MultipartFile attachment) {
+		return attachment != null && StringUtils.hasText(attachment.getOriginalFilename());
 	}
 }

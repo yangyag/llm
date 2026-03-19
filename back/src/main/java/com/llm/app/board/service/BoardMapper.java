@@ -4,6 +4,8 @@ import com.llm.app.board.dto.BoardPostDetailResponse;
 import com.llm.app.board.dto.BoardPostListResponse;
 import com.llm.app.board.dto.BoardPostSummaryDto;
 import com.llm.app.board.dto.BoardReplyDto;
+import com.llm.app.board.dto.BoardAttachmentDto;
+import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardReply;
 import com.llm.app.board.repository.BoardPostSummaryProjection;
@@ -32,7 +34,7 @@ public class BoardMapper {
 		);
 	}
 
-	public BoardPostDetailResponse toDetailResponse(BoardPost post) {
+	public BoardPostDetailResponse toDetailResponse(BoardPost post, BoardAttachment attachment) {
 		List<BoardReplyDto> replies = post.getReplies().stream()
 			.map(this::toReplyDto)
 			.toList();
@@ -43,7 +45,22 @@ public class BoardMapper {
 			post.getBody(),
 			post.getCreatedAt(),
 			post.getUpdatedAt(),
+			toAttachmentDto(post.getId(), attachment),
 			replies
+		);
+	}
+
+	private BoardAttachmentDto toAttachmentDto(Long postId, BoardAttachment attachment) {
+		if (attachment == null) {
+			return null;
+		}
+
+		return new BoardAttachmentDto(
+			attachment.getId(),
+			attachment.getOriginalFilename(),
+			attachment.getSize(),
+			attachment.getContentType(),
+			"/api/v1/posts/" + postId + "/attachment"
 		);
 	}
 

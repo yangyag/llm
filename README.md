@@ -39,6 +39,9 @@ APP_DB_PORT=5432
 APP_DB_NAME=yangyag
 APP_DB_USER=yangyag
 APP_DB_PASSWORD=yangyag1!
+APP_ATTACHMENTS_ROOT_PATH=/var/lib/llm/attachments
+APP_ATTACHMENTS_MAX_FILE_SIZE=100MB
+APP_ATTACHMENTS_MAX_REQUEST_SIZE=100MB
 POSTGRES_DB=yangyag
 POSTGRES_USER=yangyag
 POSTGRES_PASSWORD=yangyag1!
@@ -55,8 +58,9 @@ docker pull yangyag2/llm-db:18
 
 docker network create llm-net
 docker volume create llm-pgdata
+docker volume create llm-back-attachments
 docker run -d --name llm-db --network llm-net --env-file /home/ubuntu/llm.env -v llm-pgdata:/var/lib/postgresql yangyag2/llm-db:18
-docker run -d --name llm-back --network llm-net --env-file /home/ubuntu/llm.env yangyag2/llm-back:latest
+docker run -d --name llm-back --network llm-net --env-file /home/ubuntu/llm.env -v llm-back-attachments:/var/lib/llm/attachments yangyag2/llm-back:latest
 docker run -d --name llm-front --network llm-net -p 8083:80 yangyag2/llm-front:latest
 ```
 
@@ -69,8 +73,9 @@ docker pull yangyag2/llm-back:latest
 docker pull yangyag2/llm-db:18
 docker network create llm-net || true
 docker volume create llm-pgdata
+docker volume create llm-back-attachments
 docker run -d --name llm-db --network llm-net --env-file /home/ubuntu/llm.env -v llm-pgdata:/var/lib/postgresql yangyag2/llm-db:18
-docker run -d --name llm-back --network llm-net --env-file /home/ubuntu/llm.env yangyag2/llm-back:latest
+docker run -d --name llm-back --network llm-net --env-file /home/ubuntu/llm.env -v llm-back-attachments:/var/lib/llm/attachments yangyag2/llm-back:latest
 docker run -d --name llm-front --network llm-net -p 8083:80 yangyag2/llm-front:latest
 ```
 
@@ -85,11 +90,14 @@ docker run -d --name llm-front --network llm-net -p 8083:80 yangyag2/llm-front:l
 
 ## 현재 범위
 - 익명 게시글 작성, 목록 조회, 상세 조회
+- 게시글 첨부파일 1개 업로드/교체/삭제/다운로드
 - 답변 작성/수정/삭제
 - AI 답변 생성(GPT / Claude / Grok)
 - 게시글 수정/삭제
 - 게시글/답변 본문은 프론트에서 Base64 인코딩 후 전송
+- 게시글 작성/수정은 `multipart/form-data`로 전송하고, 본문은 `bodyBase64` 필드로 함께 보냅니다.
 - 서버는 디코딩 후 PostgreSQL 18에 저장
+- 첨부파일 메타데이터는 DB에 저장하고, 실제 파일은 백엔드 업로드 디렉터리에 저장합니다.
 
 ## 전송 방식 주의
 - Base64는 보안 기능이 아닙니다.
@@ -130,3 +138,8 @@ cd front && npm run build
 ## AI 설정
 - 로컬 Docker 실행은 루트 `ai-keys.env`를 사용합니다.
 - EC2 배포는 루트 `llm.env.example`를 복사한 `llm.env` 파일 하나로 DB 설정과 AI 키를 함께 관리합니다.
+
+## 첨부파일 정책
+- 게시글당 첨부파일은 1개만 허용합니다.
+- 최대 업로드 크기는 기본 `100MB`입니다.
+- 첨부파일은 게시글 상세에서 누구나 다운로드할 수 있습니다.

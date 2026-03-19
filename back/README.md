@@ -13,12 +13,14 @@
 - `bodyBase64`는 보안용 필드가 아닙니다.
 - 서버는 요청을 받은 뒤 Base64를 디코딩하고 평문 본문을 DB에 저장합니다.
 - 실제 암호화가 필요하면 API 계약부터 별도로 바꿔야 합니다.
+- 게시글 작성/수정은 `multipart/form-data`를 사용하고, 본문은 `bodyBase64` 필드로 전달합니다.
 
 ## API
 - `GET /api/v1/health`
 - `GET /api/v1/posts`
 - `POST /api/v1/posts`
 - `GET /api/v1/posts/{id}`
+- `GET /api/v1/posts/{id}/attachment`
 - `PUT /api/v1/posts/{id}`
 - `DELETE /api/v1/posts/{id}`
 - `POST /api/v1/posts/{id}/replies`
@@ -55,6 +57,8 @@ docker run --rm --name llm-back -p 8082:8080 \
   -e APP_DB_NAME="yangyag" \
   -e APP_DB_USER="yangyag" \
   -e APP_DB_PASSWORD="yangyag1!" \
+  -e APP_ATTACHMENTS_ROOT_PATH="/var/lib/llm/attachments" \
+  -v llm-back-attachments:/var/lib/llm/attachments \
   --add-host=host.docker.internal:host-gateway \
   llm-backend:local
 ```
@@ -71,6 +75,11 @@ docker run --rm --name llm-back -p 8082:8080 \
 - `APP_DB_NAME`
 - `APP_DB_USER`
 - `APP_DB_PASSWORD`
+
+## 첨부파일 설정 키
+- `APP_ATTACHMENTS_ROOT_PATH`
+- `APP_ATTACHMENTS_MAX_FILE_SIZE`
+- `APP_ATTACHMENTS_MAX_REQUEST_SIZE`
 
 ## AI 설정
 - 로컬 Docker 실행은 루트 `ai-keys.env`를 사용합니다.

@@ -5,6 +5,7 @@ import {
   createReply,
   deletePost,
   deleteReply,
+  getApiUrl,
   getPost,
   getPosts,
   updatePost,
@@ -49,6 +50,18 @@ function updatePageInUrl(page, { replace = false } = {}) {
   window.history[method]({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function formatFileSize(size) {
+  if (!Number.isFinite(size) || size < 1024) {
+    return `${size ?? 0}B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)}KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(1)}MB`;
+}
+
 function WelcomePage() {
   const [view, setView] = useState("list");
   const [posts, setPosts] = useState([]);
@@ -58,9 +71,14 @@ function WelcomePage() {
   const [selectedPost, setSelectedPost] = useState(null);
   const [postActionMode, setPostActionMode] = useState("none");
   const [postForm, setPostForm] = useState(EMPTY_POST_FORM);
+  const [postAttachmentFile, setPostAttachmentFile] = useState(null);
+  const [postAttachmentInputKey, setPostAttachmentInputKey] = useState(0);
   const [replyForm, setReplyForm] = useState(EMPTY_REPLY_FORM);
   const [selectedAiProvider, setSelectedAiProvider] = useState("GPT");
   const [postEditForm, setPostEditForm] = useState(EMPTY_POST_FORM);
+  const [postEditAttachmentFile, setPostEditAttachmentFile] = useState(null);
+  const [postEditAttachmentInputKey, setPostEditAttachmentInputKey] = useState(0);
+  const [removePostAttachment, setRemovePostAttachment] = useState(false);
   const [replyEditState, setReplyEditState] = useState({ replyId: null, body: "", password: "" });
   const [postDeletePassword, setPostDeletePassword] = useState("");
   const [replyDeleteState, setReplyDeleteState] = useState({ replyId: null, password: "" });
@@ -144,6 +162,9 @@ function WelcomePage() {
         body: payload.body,
         password: ""
       });
+      setPostEditAttachmentFile(null);
+      setPostEditAttachmentInputKey((prev) => prev + 1);
+      setRemovePostAttachment(false);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -166,6 +187,8 @@ function WelcomePage() {
   function openWrite() {
     setView("write");
     setPostForm(EMPTY_POST_FORM);
+    setPostAttachmentFile(null);
+    setPostAttachmentInputKey((prev) => prev + 1);
     setPostActionMode("none");
     setPostActionError("");
     setReplyActionError("");
@@ -182,6 +205,9 @@ function WelcomePage() {
     setReplyEditState({ replyId: null, body: "", password: "" });
     setReplyDeleteState({ replyId: null, password: "" });
     setPostDeletePassword("");
+    setPostEditAttachmentFile(null);
+    setPostEditAttachmentInputKey((prev) => prev + 1);
+    setRemovePostAttachment(false);
     setPostActionError("");
     setReplyActionError("");
     setAiReplyError("");
@@ -200,6 +226,9 @@ function WelcomePage() {
       body: selectedPost.body,
       password: ""
     });
+    setPostEditAttachmentFile(null);
+    setPostEditAttachmentInputKey((prev) => prev + 1);
+    setRemovePostAttachment(false);
     setPostDeletePassword("");
     setPostActionError("");
     setPostActionMode("edit");
@@ -216,6 +245,9 @@ function WelcomePage() {
     setPostDeletePassword("");
     setPostActionError("");
     setPostEditForm((prev) => ({ ...prev, password: "" }));
+    setPostEditAttachmentFile(null);
+    setPostEditAttachmentInputKey((prev) => prev + 1);
+    setRemovePostAttachment(false);
   }
 
   function openReplyEditPanel(reply) {
@@ -251,8 +283,13 @@ function WelcomePage() {
     setMessage("");
 
     try {
-      const created = await createPost(postForm);
+      const created = await createPost({
+        ...postForm,
+        attachment: postAttachmentFile
+      });
       setPostForm(EMPTY_POST_FORM);
+      setPostAttachmentFile(null);
+      setPostAttachmentInputKey((prev) => prev + 1);
       navigateToPage(1, { replace: true });
       await loadPosts(1);
       openDetail(created.id);
@@ -276,11 +313,18 @@ function WelcomePage() {
     setPostActionError("");
 
     try {
-      const updated = await updatePost(selectedPostId, postEditForm);
+      const updated = await updatePost(selectedPostId, {
+        ...postEditForm,
+        attachment: postEditAttachmentFile,
+        removeAttachment: removePostAttachment
+      });
       setSelectedPost(updated);
       setPostActionMode("none");
       setPostActionError("");
       setPostEditForm((prev) => ({ ...prev, password: "" }));
+      setPostEditAttachmentFile(null);
+      setPostEditAttachmentInputKey((prev) => prev + 1);
+      setRemovePostAttachment(false);
       await loadPosts(currentPage);
       setMessage("게시글을 수정했습니다.");
     } catch (submitError) {
@@ -576,6 +620,18 @@ function WelcomePage() {
                   required
                 />
               </label>
+              <label className="field">
+                <span>첨부파일</span>
+                <input
+                  key={postAttachmentInputKey}
+                  type="file"
+                  onChange={(event) => setPostAttachmentFile(event.target.files?.[0] ?? null)}
+                />
+              </label>
+              <p className="section-meta">
+                첨부파일은 1개만 업로드할 수 있으며 최대 100MB까지 허용됩니다.
+                {postAttachmentFile ? ` 현재 선택: ${postAttachmentFile.name} (${formatFileSize(postAttachmentFile.size)})` : ""}
+              </p>
               <button type="submit" className="primary-button wide-button" disabled={submitting}>
                 {submitting ? "등록 중..." : "게시글 등록"}
               </button>
@@ -610,6 +666,27 @@ function WelcomePage() {
                     </div>
                   </div>
                   <p className="detail-body">{selectedPost.body}</p>
+                  {selectedPost.attachment ? (
+                    <div className="attachment-panel">
+                      <span className="attachment-label">첨부파일</span>
+                      <div className="attachment-card">
+                        <div>
+                          <strong>{selectedPost.attachment.originalFilename}</strong>
+                          <p className="section-meta">
+                            {formatFileSize(selectedPost.attachment.size)}
+                            {selectedPost.attachment.contentType ? ` · ${selectedPost.attachment.contentType}` : ""}
+                          </p>
+                        </div>
+                        <a
+                          className="ghost-button attachment-link"
+                          href={getApiUrl(selectedPost.attachment.downloadUrl)}
+                          download={selectedPost.attachment.originalFilename}
+                        >
+                          다운로드
+                        </a>
+                      </div>
+                    </div>
+                  ) : null}
                   {postActionMode === "edit" ? (
                     <form className="form-grid compact-form action-panel" onSubmit={handleUpdatePost}>
                       <label className="field">
@@ -643,6 +720,58 @@ function WelcomePage() {
                           required
                         />
                       </label>
+                      {selectedPost.attachment ? (
+                        <div className="attachment-panel">
+                          <span className="attachment-label">현재 첨부파일</span>
+                          <div className="attachment-card">
+                            <div>
+                              <strong>{selectedPost.attachment.originalFilename}</strong>
+                              <p className="section-meta">{formatFileSize(selectedPost.attachment.size)}</p>
+                            </div>
+                            <a
+                              className="ghost-button attachment-link"
+                              href={getApiUrl(selectedPost.attachment.downloadUrl)}
+                              download={selectedPost.attachment.originalFilename}
+                            >
+                              다운로드
+                            </a>
+                          </div>
+                        </div>
+                      ) : null}
+                      <label className="field">
+                        <span>{selectedPost.attachment ? "새 첨부파일로 교체" : "첨부파일 추가"}</span>
+                        <input
+                          key={postEditAttachmentInputKey}
+                          type="file"
+                          onChange={(event) => {
+                            const nextFile = event.target.files?.[0] ?? null;
+                            setPostActionError("");
+                            setPostEditAttachmentFile(nextFile);
+                            if (nextFile) {
+                              setRemovePostAttachment(false);
+                            }
+                          }}
+                        />
+                      </label>
+                      {postEditAttachmentFile ? (
+                        <p className="section-meta">
+                          새 파일 선택: {postEditAttachmentFile.name} ({formatFileSize(postEditAttachmentFile.size)})
+                        </p>
+                      ) : null}
+                      {selectedPost.attachment ? (
+                        <label className="checkbox-field">
+                          <input
+                            type="checkbox"
+                            checked={removePostAttachment}
+                            disabled={postEditAttachmentFile != null}
+                            onChange={(event) => {
+                              setPostActionError("");
+                              setRemovePostAttachment(event.target.checked);
+                            }}
+                          />
+                          <span>현재 첨부파일 삭제</span>
+                        </label>
+                      ) : null}
                       {postActionError ? <p className="panel-error">{postActionError}</p> : null}
                       <div className="action-form-actions">
                         <button type="submit" className="ghost-button" disabled={submitting}>

@@ -1,37 +1,51 @@
 package com.llm.app.board.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
+import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardReply;
+import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Comparator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
@@ -50,30 +64,34 @@ class BoardPostControllerTest {
 	@Autowired
 	private BoardReplyRepository boardReplyRepository;
 
+	@Autowired
+	private BoardAttachmentRepository boardAttachmentRepository;
+
+	@Value("${app.attachments.root-path}")
+	private String attachmentRootPath;
+
 	@MockBean
 	private AiReplyGenerator aiReplyGenerator;
 
 	@BeforeEach
-	void setUp() {
+	void setUp() throws IOException {
+		boardAttachmentRepository.deleteAll();
 		boardReplyRepository.deleteAll();
 		boardPostRepository.deleteAll();
+		deleteRecursively(Path.of(attachmentRootPath));
 	}
 
 	@Test
 	void postAndReplyCrudShouldWork() throws Exception {
-		MvcResult createResult = mockMvc.perform(post("/api/v1/posts")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "첫 글",
-					  "bodyBase64": "%s",
-					  "password": "secret"
-					}
-					""".formatted(encode("첫 번째 게시글 본문"))))
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "첫 글")
+				.param("bodyBase64", encode("첫 번째 게시글 본문"))
+				.param("password", "secret"))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.id", notNullValue()))
 			.andExpect(jsonPath("$.title").value("첫 글"))
 			.andExpect(jsonPath("$.body").value("첫 번째 게시글 본문"))
+			.andExpect(jsonPath("$.attachment").value(nullValue()))
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
@@ -102,15 +120,10 @@ class BoardPostControllerTest {
 
 		long replyId = extractFirstReplyId(replyResult.getResponse().getContentAsString());
 
-		mockMvc.perform(put("/api/v1/posts/{id}", postId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "수정된 글",
-					  "bodyBase64": "%s",
-					  "password": "secret"
-					}
-					""".formatted(encode("수정된 본문"))))
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.param("title", "수정된 글")
+				.param("bodyBase64", encode("수정된 본문"))
+				.param("password", "secret"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.title").value("수정된 글"))
 			.andExpect(jsonPath("$.body").value("수정된 본문"));
@@ -150,16 +163,112 @@ class BoardPostControllerTest {
 	}
 
 	@Test
-	void invalidBase64ShouldReturnBadRequest() throws Exception {
-		mockMvc.perform(post("/api/v1/posts")
+	void attachmentLifecycleShouldWork() throws Exception {
+		MockMultipartFile firstAttachment = new MockMultipartFile(
+			"attachment",
+			"guide.txt",
+			"text/plain",
+			"첫 첨부".getBytes(StandardCharsets.UTF_8)
+		);
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(firstAttachment)
+				.param("title", "첨부 글")
+				.param("bodyBase64", encode("본문"))
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.attachment.originalFilename").value("guide.txt"))
+			.andExpect(jsonPath("$.attachment.size").value(firstAttachment.getSize()))
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		assertThat(objectMapper.readTree(createResult.getResponse().getContentAsString())
+			.path("attachment")
+			.path("downloadUrl")
+			.asText()).isEqualTo("/api/v1/posts/" + postId + "/attachment");
+
+		assertThat(boardAttachmentRepository.findByPost_Id(postId)).isPresent();
+
+		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Disposition", containsString("attachment")))
+			.andExpect(content().bytes("첫 첨부".getBytes(StandardCharsets.UTF_8)));
+
+		MockMultipartFile replacementAttachment = new MockMultipartFile(
+			"attachment",
+			"update.txt",
+			"text/plain",
+			"교체 파일".getBytes(StandardCharsets.UTF_8)
+		);
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.file(replacementAttachment)
+				.param("title", "첨부 글 수정")
+				.param("bodyBase64", encode("본문 수정"))
+				.param("password", "secret"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.attachment.originalFilename").value("update.txt"))
+			.andExpect(jsonPath("$.body").value("본문 수정"));
+
+		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes("교체 파일".getBytes(StandardCharsets.UTF_8)));
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.param("title", "첨부 글 수정")
+				.param("bodyBase64", encode("본문 수정"))
+				.param("password", "secret")
+				.param("removeAttachment", "true"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.attachment").value(nullValue()));
+
+		assertThat(boardAttachmentRepository.findByPost_Id(postId)).isEmpty();
+
+		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+			.andExpect(status().isNotFound());
+	}
+
+	@Test
+	void deletingPostShouldDeleteAttachmentMetadataAndFile() throws Exception {
+		MockMultipartFile attachment = new MockMultipartFile(
+			"attachment",
+			"delete.txt",
+			"text/plain",
+			"삭제 파일".getBytes(StandardCharsets.UTF_8)
+		);
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(attachment)
+				.param("title", "삭제 첨부")
+				.param("bodyBase64", encode("본문"))
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		BoardAttachment savedAttachment = boardAttachmentRepository.findByPost_Id(postId).orElseThrow();
+		Path attachmentPath = Path.of(attachmentRootPath).resolve(savedAttachment.getStoragePath());
+		assertThat(Files.exists(attachmentPath)).isTrue();
+
+		mockMvc.perform(delete("/api/v1/posts/{id}", postId)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
-					  "title": "bad",
-					  "bodyBase64": "%%%bad%%%",
 					  "password": "secret"
 					}
 					"""))
+			.andExpect(status().isNoContent());
+
+		assertThat(boardAttachmentRepository.findByPost_Id(postId)).isEmpty();
+		assertThat(Files.exists(attachmentPath)).isFalse();
+	}
+
+	@Test
+	void invalidBase64ShouldReturnBadRequest() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "bad")
+				.param("bodyBase64", "%%%bad%%%")
+				.param("password", "secret"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
 	}
@@ -168,15 +277,10 @@ class BoardPostControllerTest {
 	void bodyShouldPreserveLeadingTrailingWhitespace() throws Exception {
 		String originalBody = "  첫 줄\n둘째 줄  \n";
 
-		MvcResult createResult = mockMvc.perform(post("/api/v1/posts")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "공백 보존",
-					  "bodyBase64": "%s",
-					  "password": "secret"
-					}
-					""".formatted(encode(originalBody))))
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "공백 보존")
+				.param("bodyBase64", encode(originalBody))
+				.param("password", "secret"))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.body").value(originalBody))
 			.andReturn();
@@ -189,15 +293,10 @@ class BoardPostControllerTest {
 	@Test
 	void bodyLongerThan20000ShouldStillBeAccepted() throws Exception {
 		String largeBody = "a".repeat(30_000);
-		MvcResult createResult = mockMvc.perform(post("/api/v1/posts")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "긴 본문",
-					  "bodyBase64": "%s",
-					  "password": "secret"
-					}
-					""".formatted(encode(largeBody))))
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "긴 본문")
+				.param("bodyBase64", encode(largeBody))
+				.param("password", "secret"))
 			.andExpect(status().isCreated())
 			.andReturn();
 
@@ -224,30 +323,66 @@ class BoardPostControllerTest {
 	void bodyLongerThanOneMillionShouldReturnBadRequest() throws Exception {
 		String tooLargeBody = "a".repeat(1_000_001);
 
-		mockMvc.perform(post("/api/v1/posts")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "너무 긴 본문",
-					  "bodyBase64": "%s",
-					  "password": "secret"
-					}
-					""".formatted(encode(tooLargeBody))))
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "너무 긴 본문")
+				.param("bodyBase64", encode(tooLargeBody))
+				.param("password", "secret"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
 	}
 
 	@Test
+	void tooLargeAttachmentShouldReturnPayloadTooLarge() throws Exception {
+		byte[] largeAttachment = new byte[2 * 1024 * 1024 + 1];
+		MockMultipartFile attachment = new MockMultipartFile(
+			"attachment",
+			"big.bin",
+			"application/octet-stream",
+			largeAttachment
+		);
+
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(attachment)
+				.param("title", "큰 파일")
+				.param("bodyBase64", encode("본문"))
+				.param("password", "secret"))
+			.andExpect(status().isPayloadTooLarge())
+			.andExpect(jsonPath("$.code").value("ATTACHMENT_TOO_LARGE"));
+	}
+
+	@Test
+	void removeAttachmentAndUploadTogetherShouldReturnBadRequest() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "첨부 글")
+				.param("bodyBase64", encode("본문"))
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		MockMultipartFile attachment = new MockMultipartFile(
+			"attachment",
+			"bad.txt",
+			"text/plain",
+			"bad".getBytes(StandardCharsets.UTF_8)
+		);
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.file(attachment)
+				.param("title", "첨부 글")
+				.param("bodyBase64", encode("본문"))
+				.param("password", "secret")
+				.param("removeAttachment", "true"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+	}
+
+	@Test
 	void wrongPasswordShouldReturnForbidden() throws Exception {
-		MvcResult createResult = mockMvc.perform(post("/api/v1/posts")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "pw",
-					  "bodyBase64": "%s",
-					  "password": "right"
-					}
-					""".formatted(encode("비밀번호 테스트"))))
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "pw")
+				.param("bodyBase64", encode("비밀번호 테스트"))
+				.param("password", "right"))
 			.andExpect(status().isCreated())
 			.andReturn();
 
@@ -266,15 +401,10 @@ class BoardPostControllerTest {
 
 		long replyId = extractFirstReplyId(replyResult.getResponse().getContentAsString());
 
-		mockMvc.perform(put("/api/v1/posts/{id}", postId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "수정 시도",
-					  "bodyBase64": "%s",
-					  "password": "wrong"
-					}
-					""".formatted(encode("수정 실패 본문"))))
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.param("title", "수정 시도")
+				.param("bodyBase64", encode("수정 실패 본문"))
+				.param("password", "wrong"))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("INVALID_PASSWORD"));
 
@@ -376,15 +506,10 @@ class BoardPostControllerTest {
 
 	@Test
 	void aiReplyShouldBeStoredAndLocked() throws Exception {
-		MvcResult createResult = mockMvc.perform(post("/api/v1/posts")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "AI 테스트",
-					  "bodyBase64": "%s",
-					  "password": "secret"
-					}
-					""".formatted(encode("AI가 답변할 본문"))))
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "AI 테스트")
+				.param("bodyBase64", encode("AI가 답변할 본문"))
+				.param("password", "secret"))
 			.andExpect(status().isCreated())
 			.andReturn();
 
@@ -431,15 +556,10 @@ class BoardPostControllerTest {
 
 	@Test
 	void invalidAiProviderShouldReturnBadRequest() throws Exception {
-		MvcResult createResult = mockMvc.perform(post("/api/v1/posts")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "title": "AI 공급자 테스트",
-					  "bodyBase64": "%s",
-					  "password": "secret"
-					}
-					""".formatted(encode("본문"))))
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "AI 공급자 테스트")
+				.param("bodyBase64", encode("본문"))
+				.param("password", "secret"))
 			.andExpect(status().isCreated())
 			.andReturn();
 
@@ -473,6 +593,36 @@ class BoardPostControllerTest {
 			return objectMapper.readTree(responseBody).path("replies").get(0).path("id").asLong();
 		} catch (Exception exception) {
 			throw new IllegalStateException("Failed to extract reply id", exception);
+		}
+	}
+
+	private MockMultipartHttpServletRequestBuilder multipartPost(String uriTemplate, Object... uriVariables) {
+		return multipart(uriTemplate, uriVariables);
+	}
+
+	private MockMultipartHttpServletRequestBuilder multipartPut(String uriTemplate, Object... uriVariables) {
+		MockMultipartHttpServletRequestBuilder builder = multipart(uriTemplate, uriVariables);
+		builder.with(request -> {
+			request.setMethod("PUT");
+			return request;
+		});
+		return builder;
+	}
+
+	private void deleteRecursively(Path rootPath) throws IOException {
+		if (!Files.exists(rootPath)) {
+			return;
+		}
+
+		try (var paths = Files.walk(rootPath)) {
+			paths.sorted(Comparator.reverseOrder())
+				.forEach(path -> {
+					try {
+						Files.deleteIfExists(path);
+					} catch (IOException exception) {
+						throw new IllegalStateException("Failed to delete " + path, exception);
+					}
+				});
 		}
 	}
 }

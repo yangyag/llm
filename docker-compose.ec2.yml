@@ -18,6 +18,8 @@ services:
     container_name: llm-back
     env_file:
       - ./llm.env
+    volumes:
+      - llm-back-attachments:/var/lib/llm/attachments
     depends_on:
       db:
         condition: service_healthy
@@ -36,3 +38,4 @@ services:
 
 volumes:
   llm-pgdata:
+  llm-back-attachments:

@@ -3,8 +3,12 @@ package com.llm.app.common.web;
 import com.llm.app.board.exception.AiProviderNotConfiguredException;
 import com.llm.app.board.exception.AiReplyGenerationException;
 import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
+import com.llm.app.board.exception.AttachmentStorageException;
+import com.llm.app.board.exception.AttachmentTooLargeException;
+import com.llm.app.board.exception.BoardAttachmentNotFoundException;
 import com.llm.app.board.exception.BoardPostNotFoundException;
 import com.llm.app.board.exception.BoardReplyNotFoundException;
+import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidBoardPasswordException;
 import com.llm.app.board.exception.InvalidAiProviderException;
 import com.llm.app.board.exception.InvalidEncodedBodyException;
@@ -17,6 +21,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -54,6 +59,14 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_AI_PROVIDER", exception.getMessage(), request);
 	}
 
+	@ExceptionHandler({ InvalidAttachmentRequestException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidAttachmentRequest(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_ATTACHMENT_REQUEST", exception.getMessage(), request);
+	}
+
 	@ExceptionHandler({ AiProviderNotConfiguredException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiProviderNotConfigured(
 		RuntimeException exception,
@@ -70,12 +83,36 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.BAD_GATEWAY, "AI_REPLY_GENERATION_FAILED", exception.getMessage(), request);
 	}
 
-	@ExceptionHandler({ BoardPostNotFoundException.class, BoardReplyNotFoundException.class })
+	@ExceptionHandler({ BoardPostNotFoundException.class, BoardReplyNotFoundException.class, BoardAttachmentNotFoundException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleBoardNotFound(
 		RuntimeException exception,
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleAttachmentTooLarge(
+		MaxUploadSizeExceededException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.PAYLOAD_TOO_LARGE, "ATTACHMENT_TOO_LARGE", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler(AttachmentTooLargeException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleAttachmentTooLarge(
+		AttachmentTooLargeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.PAYLOAD_TOO_LARGE, "ATTACHMENT_TOO_LARGE", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler(AttachmentStorageException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleAttachmentStorage(
+		AttachmentStorageException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "ATTACHMENT_STORAGE_ERROR", exception.getMessage(), request);
 	}
 
 	@ExceptionHandler({
