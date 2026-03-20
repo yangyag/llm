@@ -9,5 +9,7 @@ public interface BoardPostSummaryProjection {
 
 	long getReplyCount();
 
+	boolean getHasAttachment();
+
 	Instant getCreatedAt();
 }

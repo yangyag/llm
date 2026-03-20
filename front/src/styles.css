@@ -100,6 +100,7 @@ body {
 
 .post-list-item,
 .primary-button,
+.submit-button,
 .ghost-button,
 .danger-button {
   font: inherit;
@@ -111,6 +112,7 @@ body {
 
 .post-list-item:hover,
 .primary-button:hover,
+.submit-button:hover,
 .ghost-button:hover,
 .danger-button:hover {
   transform: translateY(-1px);
@@ -125,10 +127,30 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.post-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .post-list-item strong,
 .post-list-item span,
 .post-list-item time {
   display: block;
+}
+
+.attachment-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(84, 214, 141, 0.14);
+  border: 1px solid rgba(84, 214, 141, 0.28);
+  color: #bff3d0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .post-list-item span,
@@ -171,6 +193,7 @@ body {
 }
 
 .primary-button,
+.submit-button,
 .ghost-button,
 .danger-button {
   padding: 12px 16px;
@@ -179,6 +202,11 @@ body {
 .primary-button {
   background: linear-gradient(135deg, #ff8a00, #ff5e5b);
   color: #fff7ef;
+}
+
+.submit-button {
+  background: linear-gradient(135deg, #1f9d55, #37c871);
+  color: #f3fff7;
 }
 
 .ghost-button {

@@ -14,10 +14,12 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
 			select
 				p.id as id,
 				p.title as title,
-				count(r.id) as replyCount,
+				count(distinct r.id) as replyCount,
+				case when count(distinct a.id) > 0 then true else false end as hasAttachment,
 				p.createdAt as createdAt
 			from BoardPost p
 			left join p.replies r
+			left join BoardAttachment a on a.post = p
 			group by p.id, p.title, p.createdAt
 			order by p.createdAt desc
 			""",

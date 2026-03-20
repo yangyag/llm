@@ -103,7 +103,8 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.pageSize").value(10))
 			.andExpect(jsonPath("$.totalItems").value(1))
 			.andExpect(jsonPath("$.totalPages").value(1))
-			.andExpect(jsonPath("$.items[0].replyCount").value(0));
+			.andExpect(jsonPath("$.items[0].replyCount").value(0))
+			.andExpect(jsonPath("$.items[0].hasAttachment").value(false));
 
 		MvcResult replyResult = mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
 				.contentType(MediaType.APPLICATION_JSON)
@@ -188,6 +189,11 @@ class BoardPostControllerTest {
 			.asText()).isEqualTo("/api/v1/posts/" + postId + "/attachment");
 
 		assertThat(boardAttachmentRepository.findByPost_Id(postId)).isPresent();
+
+		mockMvc.perform(get("/api/v1/posts"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[0].title").value("첨부 글"))
+			.andExpect(jsonPath("$.items[0].hasAttachment").value(true));
 
 		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
 			.andExpect(status().isOk())
@@ -464,15 +470,27 @@ class BoardPostControllerTest {
 		boardReplyRepository.save(new BoardReply(latestPost, "답변 A", "hash-a", baseTime.plusSeconds(30), baseTime.plusSeconds(30)));
 		boardReplyRepository.save(new BoardReply(latestPost, "답변 B", "hash-b", baseTime.plusSeconds(31), baseTime.plusSeconds(31)));
 		boardReplyRepository.save(new BoardReply(twelfthPost, "답변 C", "hash-c", baseTime.plusSeconds(32), baseTime.plusSeconds(32)));
+		boardAttachmentRepository.save(new BoardAttachment(
+			latestPost,
+			"latest.txt",
+			"latest-stored.txt",
+			"2026/03/latest-stored.txt",
+			"text/plain",
+			128,
+			baseTime.plusSeconds(40)
+		));
 		boardReplyRepository.flush();
+		boardAttachmentRepository.flush();
 
 		mockMvc.perform(get("/api/v1/posts").param("page", "1"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items", hasSize(10)))
 			.andExpect(jsonPath("$.items[0].title").value("글 21"))
 			.andExpect(jsonPath("$.items[0].replyCount").value(2))
+			.andExpect(jsonPath("$.items[0].hasAttachment").value(true))
 			.andExpect(jsonPath("$.items[9].title").value("글 12"))
 			.andExpect(jsonPath("$.items[9].replyCount").value(1))
+			.andExpect(jsonPath("$.items[9].hasAttachment").value(false))
 			.andExpect(jsonPath("$.page").value(1))
 			.andExpect(jsonPath("$.pageSize").value(10))
 			.andExpect(jsonPath("$.totalItems").value(21))

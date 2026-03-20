@@ -22,6 +22,7 @@ public class BoardMapper {
 					post.getId(),
 					post.getTitle(),
 					Math.toIntExact(post.getReplyCount()),
+					post.getHasAttachment(),
 					post.getCreatedAt()
 				))
 				.toList(),

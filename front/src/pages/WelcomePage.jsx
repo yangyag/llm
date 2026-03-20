@@ -63,6 +63,7 @@ function formatFileSize(size) {
 }
 
 function WelcomePage() {
+  const createPostFormId = "create-post-form";
   const [view, setView] = useState("list");
   const [posts, setPosts] = useState([]);
   const [currentPage, setCurrentPage] = useState(() => getPageFromLocation());
@@ -487,8 +488,14 @@ function WelcomePage() {
             <button type="button" className="ghost-button" onClick={openList}>
               목록
             </button>
-            <button type="button" className="primary-button" onClick={openWrite}>
-              글쓰기
+            <button
+              type={view === "write" ? "submit" : "button"}
+              form={view === "write" ? createPostFormId : undefined}
+              className={view === "write" ? "submit-button" : "primary-button"}
+              onClick={view === "write" ? undefined : openWrite}
+              disabled={view === "write" && submitting}
+            >
+              {view === "write" ? (submitting ? "등록 중..." : "등록") : "글쓰기"}
             </button>
           </div>
         </header>
@@ -523,7 +530,10 @@ function WelcomePage() {
                     className="post-list-item"
                     onClick={() => openDetail(post.id)}
                   >
-                    <strong>{post.title}</strong>
+                    <div className="post-title-row">
+                      <strong>{post.title}</strong>
+                      {post.hasAttachment ? <span className="attachment-badge">첨부</span> : null}
+                    </div>
                     <span>답변 {post.replyCount}개</span>
                     <time>{new Date(post.createdAt).toLocaleString()}</time>
                   </button>
@@ -591,7 +601,7 @@ function WelcomePage() {
             <div className="section-heading">
               <h2>새 글 작성</h2>
             </div>
-            <form className="form-grid" onSubmit={handleCreatePost}>
+            <form id={createPostFormId} className="form-grid" onSubmit={handleCreatePost}>
               <label className="field">
                 <span>제목</span>
                 <input
@@ -632,9 +642,6 @@ function WelcomePage() {
                 첨부파일은 1개만 업로드할 수 있으며 최대 100MB까지 허용됩니다.
                 {postAttachmentFile ? ` 현재 선택: ${postAttachmentFile.name} (${formatFileSize(postAttachmentFile.size)})` : ""}
               </p>
-              <button type="submit" className="primary-button wide-button" disabled={submitting}>
-                {submitting ? "등록 중..." : "게시글 등록"}
-              </button>
             </form>
           </section>
         ) : null}

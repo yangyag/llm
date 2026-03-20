@@ -6,6 +6,7 @@ public record BoardPostSummaryDto(
 	Long id,
 	String title,
 	int replyCount,
+	boolean hasAttachment,
 	Instant createdAt
 ) {
 }
