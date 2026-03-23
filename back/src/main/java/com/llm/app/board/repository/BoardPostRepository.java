@@ -14,13 +14,19 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
 			select
 				p.id as id,
 				p.title as title,
+				p.mode as mode,
+				case
+					when p.mode = com.llm.app.board.model.BoardPostMode.FILE_CONVERSION_REQUEST and count(distinct a.id) > 0
+						then true
+					else false
+				end as conversionReady,
 				count(distinct r.id) as replyCount,
 				case when count(distinct a.id) > 0 then true else false end as hasAttachment,
 				p.createdAt as createdAt
 			from BoardPost p
 			left join p.replies r
 			left join BoardAttachment a on a.post = p
-			group by p.id, p.title, p.createdAt
+			group by p.id, p.title, p.mode, p.createdAt
 			order by p.createdAt desc
 			""",
 		countQuery = "select count(p) from BoardPost p"

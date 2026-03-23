@@ -18,13 +18,14 @@ function encodeBodyBase64(value) {
   return fromUint8Array(new TextEncoder().encode(value));
 }
 
-function buildPostFormData({ title, body, password, attachment, removeAttachment = false }) {
+function buildPostFormData({ title, body, password, attachment, removeAttachment = false, mode = "NORMAL" }) {
   const formData = new FormData();
   formData.append("title", title);
-  formData.append("bodyBase64", encodeBodyBase64(body));
+  formData.append("mode", mode);
+  formData.append("bodyBase64", mode === "FILE_CONVERSION_REQUEST" ? body : encodeBodyBase64(body));
   formData.append("password", password);
 
-  if (attachment) {
+  if (attachment && mode !== "FILE_CONVERSION_REQUEST") {
     formData.append("attachment", attachment);
   }
 
@@ -70,17 +71,17 @@ export function getPost(postId) {
   return requestJson(`/api/v1/posts/${postId}`);
 }
 
-export function createPost({ title, body, password, attachment }) {
+export function createPost({ title, body, password, attachment, mode = "NORMAL" }) {
   return requestJson("/api/v1/posts", {
     method: "POST",
-    body: buildPostFormData({ title, body, password, attachment })
+    body: buildPostFormData({ title, body, password, attachment, mode })
   });
 }
 
-export function updatePost(postId, { title, body, password, attachment, removeAttachment = false }) {
+export function updatePost(postId, { title, body, password, attachment, removeAttachment = false, mode = "NORMAL" }) {
   return requestJson(`/api/v1/posts/${postId}`, {
     method: "PUT",
-    body: buildPostFormData({ title, body, password, attachment, removeAttachment })
+    body: buildPostFormData({ title, body, password, attachment, removeAttachment, mode })
   });
 }
 
@@ -127,4 +128,10 @@ export function deleteReply(replyId, password) {
 
 export function getApiUrl(path) {
   return withApiBase(path);
+}
+
+export function convertPostToAttachment(postId) {
+  return requestJson(`/api/v1/posts/${postId}/conversion`, {
+    method: "POST"
+  });
 }

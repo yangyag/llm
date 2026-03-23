@@ -23,6 +23,7 @@ import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
 import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
+import com.llm.app.board.model.BoardPostMode;
 import com.llm.app.board.model.BoardReply;
 import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
@@ -91,6 +92,8 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.id", notNullValue()))
 			.andExpect(jsonPath("$.title").value("첫 글"))
 			.andExpect(jsonPath("$.body").value("첫 번째 게시글 본문"))
+			.andExpect(jsonPath("$.mode").value("NORMAL"))
+			.andExpect(jsonPath("$.conversionReady").value(false))
 			.andExpect(jsonPath("$.attachment").value(nullValue()))
 			.andReturn();
 
@@ -103,6 +106,8 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.pageSize").value(10))
 			.andExpect(jsonPath("$.totalItems").value(1))
 			.andExpect(jsonPath("$.totalPages").value(1))
+			.andExpect(jsonPath("$.items[0].mode").value("NORMAL"))
+			.andExpect(jsonPath("$.items[0].conversionReady").value(false))
 			.andExpect(jsonPath("$.items[0].replyCount").value(0))
 			.andExpect(jsonPath("$.items[0].hasAttachment").value(false));
 
@@ -280,6 +285,147 @@ class BoardPostControllerTest {
 	}
 
 	@Test
+	void fileConversionRequestLifecycleShouldWork() throws Exception {
+		byte[] zipBytes = "PK\u0003\u0004demo-zip".getBytes(StandardCharsets.UTF_8);
+		String encodedZip = Base64.getEncoder().encodeToString(zipBytes);
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "zip 요청")
+				.param("mode", "FILE_CONVERSION_REQUEST")
+				.param("bodyBase64", encodedZip)
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.body").value(encodedZip))
+			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
+			.andExpect(jsonPath("$.conversionReady").value(false))
+			.andExpect(jsonPath("$.attachment").value(nullValue()))
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(get("/api/v1/posts"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[0].mode").value("FILE_CONVERSION_REQUEST"))
+			.andExpect(jsonPath("$.items[0].conversionReady").value(false));
+
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
+			.andExpect(jsonPath("$.conversionReady").value(true))
+			.andExpect(jsonPath("$.attachment.originalFilename").value("post-" + postId + ".zip"));
+
+		mockMvc.perform(get("/api/v1/posts"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[0].mode").value("FILE_CONVERSION_REQUEST"))
+			.andExpect(jsonPath("$.items[0].conversionReady").value(true));
+
+		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Disposition", containsString("post-" + postId + ".zip")))
+			.andExpect(content().bytes(zipBytes));
+
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.conversionReady").value(true));
+	}
+
+	@Test
+	void fileConversionRequestShouldAcceptLargeRawBodyWithoutDecodeLengthCheck() throws Exception {
+		String rawBody = "a".repeat(1_100_000);
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "큰 변환 요청")
+				.param("mode", "FILE_CONVERSION_REQUEST")
+				.param("bodyBase64", rawBody)
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.body").value(rawBody))
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		assertThat(boardPostRepository.findById(postId)).isPresent();
+		assertThat(boardPostRepository.findById(postId).orElseThrow().getBody()).hasSize(rawBody.length());
+	}
+
+	@Test
+	void fileConversionRequestShouldRejectAttachmentUpload() throws Exception {
+		MockMultipartFile attachment = new MockMultipartFile(
+			"attachment",
+			"source.zip",
+			"application/zip",
+			"zip".getBytes(StandardCharsets.UTF_8)
+		);
+
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(attachment)
+				.param("title", "zip 요청")
+				.param("mode", "FILE_CONVERSION_REQUEST")
+				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8)))
+				.param("password", "secret"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+	}
+
+	@Test
+	void conversionShouldFailWhenPostModeIsNormal() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "일반 글")
+				.param("bodyBase64", encode("본문"))
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_FILE_CONVERSION_REQUEST"));
+	}
+
+	@Test
+	void invalidRawBase64ShouldFailAtConversionTime() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "잘못된 zip")
+				.param("mode", "FILE_CONVERSION_REQUEST")
+				.param("bodyBase64", "%%%bad%%%")
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
+	}
+
+	@Test
+	void convertedFileConversionPostShouldBeLocked() throws Exception {
+		String encodedZip = Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8));
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "잠금 테스트")
+				.param("mode", "FILE_CONVERSION_REQUEST")
+				.param("bodyBase64", encodedZip)
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.conversionReady").value(true));
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.param("title", "수정 시도")
+				.param("mode", "FILE_CONVERSION_REQUEST")
+				.param("bodyBase64", encodedZip)
+				.param("password", "secret"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FILE_CONVERSION_LOCKED"));
+	}
+
+	@Test
 	void bodyShouldPreserveLeadingTrailingWhitespace() throws Exception {
 		String originalBody = "  첫 줄\n둘째 줄  \n";
 
@@ -452,9 +598,11 @@ class BoardPostControllerTest {
 		BoardPost latestPost = null;
 		BoardPost twelfthPost = null;
 		for (int i = 1; i <= 21; i++) {
+			BoardPostMode mode = i == 21 ? BoardPostMode.FILE_CONVERSION_REQUEST : BoardPostMode.NORMAL;
 			BoardPost savedPost = boardPostRepository.save(new BoardPost(
 				"글 " + i,
 				"본문 " + i,
+				mode,
 				"hash-" + i,
 				baseTime.plusSeconds(i),
 				baseTime.plusSeconds(i)
@@ -486,9 +634,13 @@ class BoardPostControllerTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items", hasSize(10)))
 			.andExpect(jsonPath("$.items[0].title").value("글 21"))
+			.andExpect(jsonPath("$.items[0].mode").value("FILE_CONVERSION_REQUEST"))
+			.andExpect(jsonPath("$.items[0].conversionReady").value(true))
 			.andExpect(jsonPath("$.items[0].replyCount").value(2))
 			.andExpect(jsonPath("$.items[0].hasAttachment").value(true))
 			.andExpect(jsonPath("$.items[9].title").value("글 12"))
+			.andExpect(jsonPath("$.items[9].mode").value("NORMAL"))
+			.andExpect(jsonPath("$.items[9].conversionReady").value(false))
 			.andExpect(jsonPath("$.items[9].replyCount").value(1))
 			.andExpect(jsonPath("$.items[9].hasAttachment").value(false))
 			.andExpect(jsonPath("$.page").value(1))
@@ -592,6 +744,29 @@ class BoardPostControllerTest {
 					"""))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_AI_PROVIDER"));
+	}
+
+	@Test
+	void aiReplyShouldBeRejectedForFileConversionRequestPost() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "변환 요청")
+				.param("mode", "FILE_CONVERSION_REQUEST")
+				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8)))
+				.param("password", "secret"))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "provider": "GPT"
+					}
+					"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("AI_REPLY_NOT_ALLOWED"));
 	}
 
 	private String encode(String value) {

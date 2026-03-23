@@ -3,6 +3,8 @@ package com.llm.app.board.model;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -27,6 +29,10 @@ public class BoardPost {
 	@Column(nullable = false, columnDefinition = "text")
 	private String body;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 40)
+	private BoardPostMode mode;
+
 	@Column(name = "password_hash", nullable = false, length = 120)
 	private String passwordHash;
 
@@ -43,9 +49,10 @@ public class BoardPost {
 	protected BoardPost() {
 	}
 
-	public BoardPost(String title, String body, String passwordHash, Instant createdAt, Instant updatedAt) {
+	public BoardPost(String title, String body, BoardPostMode mode, String passwordHash, Instant createdAt, Instant updatedAt) {
 		this.title = title;
 		this.body = body;
+		this.mode = mode;
 		this.passwordHash = passwordHash;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
@@ -61,6 +68,10 @@ public class BoardPost {
 
 	public String getBody() {
 		return body;
+	}
+
+	public BoardPostMode getMode() {
+		return mode;
 	}
 
 	public String getPasswordHash() {
@@ -79,9 +90,10 @@ public class BoardPost {
 		return replies;
 	}
 
-	public void update(String title, String body, Instant updatedAt) {
+	public void update(String title, String body, BoardPostMode mode, Instant updatedAt) {
 		this.title = title;
 		this.body = body;
+		this.mode = mode;
 		this.updatedAt = updatedAt;
 	}
 }

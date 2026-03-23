@@ -1,5 +1,6 @@
 package com.llm.app.board.dto;
 
+import com.llm.app.board.model.BoardPostMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.web.multipart.MultipartFile;
@@ -11,6 +12,8 @@ public class UpdateBoardPostRequest {
 
 	@NotBlank(message = "bodyBase64 is required")
 	private String bodyBase64;
+
+	private BoardPostMode mode = BoardPostMode.NORMAL;
 
 	@NotBlank(message = "password is required")
 	@Size(max = 100, message = "password must be 100 characters or less")
@@ -34,6 +37,16 @@ public class UpdateBoardPostRequest {
 
 	public void setBodyBase64(String bodyBase64) {
 		this.bodyBase64 = bodyBase64;
+	}
+
+	public BoardPostMode getMode() {
+		return mode;
+	}
+
+	public void setMode(BoardPostMode mode) {
+		if (mode != null) {
+			this.mode = mode;
+		}
 	}
 
 	public String getPassword() {

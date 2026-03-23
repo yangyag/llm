@@ -153,6 +153,31 @@ body {
   letter-spacing: 0.04em;
 }
 
+.post-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(143, 183, 255, 0.14);
+  border: 1px solid rgba(143, 183, 255, 0.28);
+  color: #d6e6ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.post-mode-badge.file {
+  background: rgba(255, 138, 0, 0.14);
+  border-color: rgba(255, 138, 0, 0.28);
+  color: #ffd7b0;
+}
+
+.post-mode-badge.success {
+  background: rgba(84, 214, 141, 0.14);
+  border-color: rgba(84, 214, 141, 0.28);
+  color: #bff3d0;
+}
+
 .post-list-item span,
 .post-list-item time,
 .empty-state,
@@ -245,7 +270,44 @@ body {
 
 .detail-body {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 18px 0 0;
+}
+
+.detail-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.conversion-summary-card {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.conversion-summary-header,
+.conversion-summary-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.conversion-summary-header strong {
+  color: #eef5ff;
+}
+
+.conversion-summary-stats {
+  color: #c5cfde;
+  font-size: 0.92rem;
 }
 
 .attachment-panel {
@@ -331,6 +393,12 @@ body {
   flex-wrap: wrap;
 }
 
+.post-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+}
+
 .provider-option {
   display: inline-flex;
   align-items: center;
@@ -340,6 +408,28 @@ body {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
+}
+
+.post-mode-options .provider-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px 18px;
+  text-align: left;
+}
+
+.post-mode-options .provider-option input {
+  margin: 0;
+}
+
+.post-mode-options .provider-option span {
+  display: block;
+  text-align: left;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 .provider-option input {
@@ -420,6 +510,10 @@ button:disabled {
 @media (max-width: 860px) {
   .split-layout {
     flex-direction: column;
+  }
+
+  .post-mode-options {
+    grid-template-columns: 1fr;
   }
 }
 

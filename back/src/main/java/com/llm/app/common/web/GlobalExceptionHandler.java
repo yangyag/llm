@@ -3,15 +3,18 @@ package com.llm.app.common.web;
 import com.llm.app.board.exception.AiProviderNotConfiguredException;
 import com.llm.app.board.exception.AiReplyGenerationException;
 import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
+import com.llm.app.board.exception.AiReplyNotAllowedException;
 import com.llm.app.board.exception.AttachmentStorageException;
 import com.llm.app.board.exception.AttachmentTooLargeException;
 import com.llm.app.board.exception.BoardAttachmentNotFoundException;
 import com.llm.app.board.exception.BoardPostNotFoundException;
 import com.llm.app.board.exception.BoardReplyNotFoundException;
+import com.llm.app.board.exception.FileConversionLockedException;
 import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidBoardPasswordException;
 import com.llm.app.board.exception.InvalidAiProviderException;
 import com.llm.app.board.exception.InvalidEncodedBodyException;
+import com.llm.app.board.exception.InvalidFileConversionRequestException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
@@ -43,12 +46,28 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.FORBIDDEN, "INVALID_PASSWORD", exception.getMessage(), request);
 	}
 
+	@ExceptionHandler({ FileConversionLockedException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleFileConversionLocked(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.FORBIDDEN, "FILE_CONVERSION_LOCKED", exception.getMessage(), request);
+	}
+
 	@ExceptionHandler({ AiReplyModificationNotAllowedException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiReplyLocked(
 		RuntimeException exception,
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.FORBIDDEN, "AI_REPLY_LOCKED", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ AiReplyNotAllowedException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiReplyNotAllowed(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_REQUEST, "AI_REPLY_NOT_ALLOWED", exception.getMessage(), request);
 	}
 
 	@ExceptionHandler({ InvalidAiProviderException.class })
@@ -65,6 +84,14 @@ public class GlobalExceptionHandler {
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_ATTACHMENT_REQUEST", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ InvalidFileConversionRequestException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidFileConversionRequest(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_FILE_CONVERSION_REQUEST", exception.getMessage(), request);
 	}
 
 	@ExceptionHandler({ AiProviderNotConfiguredException.class })

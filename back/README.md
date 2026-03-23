@@ -5,21 +5,24 @@
 ## 역할
 - REST API 제공
 - PostgreSQL 게시글/답변 저장
-- 본문 Base64 디코딩 및 비밀번호 검증
+- 일반 게시글 본문 Base64 디코딩 및 비밀번호 검증
+- 파일 변환 요청 글의 ZIP Base64 -> 파일 변환 및 다운로드 제공
 - AI 답변 생성 프록시(OpenAI / Anthropic / xAI)
 - 백엔드 API 테스트(JUnit/MockMvc) 제공
 
 ## 전송 방식 주의
 - `bodyBase64`는 보안용 필드가 아닙니다.
-- 서버는 요청을 받은 뒤 Base64를 디코딩하고 평문 본문을 DB에 저장합니다.
+- 일반 게시글은 요청을 받은 뒤 Base64를 디코딩하고 평문 본문을 DB에 저장합니다.
+- 파일 변환 요청 게시글은 Base64 문자열 자체를 저장하고, 별도 변환 API 호출 시 ZIP 파일로 디코딩합니다.
 - 실제 암호화가 필요하면 API 계약부터 별도로 바꿔야 합니다.
-- 게시글 작성/수정은 `multipart/form-data`를 사용하고, 본문은 `bodyBase64` 필드로 전달합니다.
+- 게시글 작성/수정은 `multipart/form-data`를 사용하고, 본문은 `bodyBase64`, `mode` 필드로 전달합니다.
 
 ## API
 - `GET /api/v1/health`
 - `GET /api/v1/posts`
 - `POST /api/v1/posts`
 - `GET /api/v1/posts/{id}`
+- `POST /api/v1/posts/{id}/conversion`
 - `GET /api/v1/posts/{id}/attachment`
 - `PUT /api/v1/posts/{id}`
 - `DELETE /api/v1/posts/{id}`

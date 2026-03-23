@@ -85,6 +85,11 @@ public class BoardPostController {
 		return boardService.createAiReply(id, request);
 	}
 
+	@PostMapping("/{id}/conversion")
+	public BoardPostDetailResponse convertPostToAttachment(@PathVariable Long id) {
+		return boardService.convertPostToAttachment(id);
+	}
+
 	@GetMapping("/{id}/attachment")
 	public ResponseEntity<Resource> downloadAttachment(@PathVariable Long id) {
 		var attachment = boardService.downloadAttachment(id);

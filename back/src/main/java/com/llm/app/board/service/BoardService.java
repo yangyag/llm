@@ -11,13 +11,17 @@ import com.llm.app.board.dto.CreateBoardReplyRequest;
 import com.llm.app.board.dto.UpdateBoardPostRequest;
 import com.llm.app.board.dto.UpdateBoardReplyRequest;
 import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
+import com.llm.app.board.exception.AiReplyNotAllowedException;
 import com.llm.app.board.exception.BoardPostNotFoundException;
 import com.llm.app.board.exception.BoardReplyNotFoundException;
 import com.llm.app.board.exception.BoardAttachmentNotFoundException;
+import com.llm.app.board.exception.FileConversionLockedException;
 import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidBoardPasswordException;
+import com.llm.app.board.exception.InvalidFileConversionRequestException;
 import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
+import com.llm.app.board.model.BoardPostMode;
 import com.llm.app.board.model.BoardReply;
 import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
@@ -84,9 +88,12 @@ public class BoardService {
 
 	public BoardPostDetailResponse createPost(CreateBoardPostRequest request) {
 		Instant now = Instant.now();
+		BoardPostMode mode = request.getMode();
+		validateAttachmentRules(mode, request.getAttachment(), false, Optional.empty());
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
-			boardContentCodec.decodeBody(request.getBodyBase64()),
+			resolvePostBody(mode, request.getBodyBase64()),
+			mode,
 			passwordEncoder.encode(request.getPassword()),
 			now,
 			now
@@ -97,10 +104,14 @@ public class BoardService {
 
 	public BoardPostDetailResponse updatePost(Long id, UpdateBoardPostRequest request) {
 		BoardPost post = findPostWithReplies(id);
+		ensurePostIsEditable(post);
 		verifyPassword(request.getPassword(), post.getPasswordHash());
+		BoardPostMode mode = request.getMode();
+		validateAttachmentRules(mode, request.getAttachment(), request.isRemoveAttachment(), findAttachment(post.getId()));
 		post.update(
 			request.getTitle().trim(),
-			boardContentCodec.decodeBody(request.getBodyBase64()),
+			resolvePostBody(mode, request.getBodyBase64()),
+			mode,
 			Instant.now()
 		);
 		replaceAttachment(post, request.getAttachment(), request.isRemoveAttachment(), Instant.now());
@@ -129,8 +140,40 @@ public class BoardService {
 		return toDetailResponse(findPostWithReplies(postId));
 	}
 
+	public BoardPostDetailResponse convertPostToAttachment(Long postId) {
+		BoardPost post = findPostWithReplies(postId);
+		if (post.getMode() != BoardPostMode.FILE_CONVERSION_REQUEST) {
+			throw new InvalidFileConversionRequestException("conversion is only allowed for file conversion request posts");
+		}
+
+		Optional<BoardAttachment> existingAttachment = findAttachment(postId);
+		if (existingAttachment.isPresent()) {
+			return toDetailResponse(post);
+		}
+
+		byte[] zipBytes = boardContentCodec.decodeBinary(post.getBody());
+		AttachmentStorageService.StoredAttachment storedAttachment = attachmentStorageService.store(
+			"post-" + postId + ".zip",
+			"application/zip",
+			zipBytes
+		);
+		boardAttachmentRepository.saveAndFlush(new BoardAttachment(
+			post,
+			storedAttachment.originalFilename(),
+			storedAttachment.storedFilename(),
+			storedAttachment.storagePath(),
+			storedAttachment.contentType(),
+			storedAttachment.size(),
+			Instant.now()
+		));
+		return toDetailResponse(post);
+	}
+
 	public BoardPostDetailResponse createAiReply(Long postId, CreateAiReplyRequest request) {
 		BoardPost post = findPostWithReplies(postId);
+		if (post.getMode() == BoardPostMode.FILE_CONVERSION_REQUEST) {
+			throw new AiReplyNotAllowedException();
+		}
 		AiProvider provider = AiProvider.from(request.provider());
 		String generatedReply = aiReplyGenerator.generateReply(provider, post.getTitle(), post.getBody());
 		Instant now = Instant.now();
@@ -202,12 +245,46 @@ public class BoardService {
 		}
 	}
 
+	private void ensurePostIsEditable(BoardPost post) {
+		if (post.getMode() == BoardPostMode.FILE_CONVERSION_REQUEST && findAttachment(post.getId()).isPresent()) {
+			throw new FileConversionLockedException(post.getId());
+		}
+	}
+
 	private BoardPostDetailResponse toDetailResponse(BoardPost post) {
 		return boardMapper.toDetailResponse(post, findAttachment(post.getId()).orElse(null));
 	}
 
 	private Optional<BoardAttachment> findAttachment(Long postId) {
 		return boardAttachmentRepository.findByPost_Id(postId);
+	}
+
+	private String resolvePostBody(BoardPostMode mode, String bodyBase64) {
+		if (mode == BoardPostMode.FILE_CONVERSION_REQUEST) {
+			return bodyBase64;
+		}
+		return boardContentCodec.decodeBody(bodyBase64);
+	}
+
+	private void validateAttachmentRules(
+		BoardPostMode mode,
+		MultipartFile attachment,
+		boolean removeAttachment,
+		Optional<BoardAttachment> existingAttachment
+	) {
+		if (mode != BoardPostMode.FILE_CONVERSION_REQUEST) {
+			return;
+		}
+
+		boolean hasNewAttachment = hasAttachmentUpload(attachment);
+		if (hasNewAttachment) {
+			throw new InvalidAttachmentRequestException("attachment is not allowed for file conversion request posts");
+		}
+		if (existingAttachment.isPresent() && !removeAttachment) {
+			throw new InvalidAttachmentRequestException(
+				"existing attachment must be removed before changing to file conversion request mode"
+			);
+		}
 	}
 
 	private void replaceAttachment(BoardPost post, MultipartFile attachment, boolean removeAttachment, Instant now) {

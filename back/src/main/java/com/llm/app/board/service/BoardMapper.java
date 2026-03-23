@@ -21,6 +21,8 @@ public class BoardMapper {
 				.map(post -> new BoardPostSummaryDto(
 					post.getId(),
 					post.getTitle(),
+					post.getMode(),
+					post.getConversionReady(),
 					Math.toIntExact(post.getReplyCount()),
 					post.getHasAttachment(),
 					post.getCreatedAt()
@@ -44,6 +46,8 @@ public class BoardMapper {
 			post.getId(),
 			post.getTitle(),
 			post.getBody(),
+			post.getMode(),
+			post.getMode() == com.llm.app.board.model.BoardPostMode.FILE_CONVERSION_REQUEST && attachment != null,
 			post.getCreatedAt(),
 			post.getUpdatedAt(),
 			toAttachmentDto(post.getId(), attachment),

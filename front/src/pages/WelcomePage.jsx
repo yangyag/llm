@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  convertPostToAttachment,
   createAiReply,
   createPost,
   createReply,
@@ -12,10 +13,21 @@ import {
   updateReply
 } from "../api";
 
+const POST_MODES = {
+  NORMAL: "NORMAL",
+  FILE_CONVERSION_REQUEST: "FILE_CONVERSION_REQUEST"
+};
+
+const POST_MODE_OPTIONS = [
+  { value: POST_MODES.NORMAL, label: "일반 게시글 작성" },
+  { value: POST_MODES.FILE_CONVERSION_REQUEST, label: "파일 변환 요청" }
+];
+
 const EMPTY_POST_FORM = {
   title: "",
   body: "",
-  password: ""
+  password: "",
+  mode: POST_MODES.NORMAL
 };
 
 const EMPTY_REPLY_FORM = {
@@ -33,7 +45,7 @@ const DEFAULT_PAGINATION = {
 };
 
 function isInvalidPasswordError(error) {
-  return error?.code === "INVALID_PASSWORD" || error?.status === 403;
+  return error?.code === "INVALID_PASSWORD" || (error?.status === 403 && !error?.code);
 }
 
 function getPageFromLocation() {
@@ -48,6 +60,26 @@ function updatePageInUrl(page, { replace = false } = {}) {
   url.searchParams.set("page", String(nextPage));
   const method = replace ? "replaceState" : "pushState";
   window.history[method]({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function isFileConversionMode(mode) {
+  return mode === POST_MODES.FILE_CONVERSION_REQUEST;
+}
+
+function getPostModeLabel(mode) {
+  return isFileConversionMode(mode) ? "파일 변환 요청" : "일반";
+}
+
+function getPostBodyLabel(mode) {
+  return isFileConversionMode(mode) ? "Base64 본문" : "본문";
+}
+
+function getPostBodyHelp(mode) {
+  if (isFileConversionMode(mode)) {
+    return "ZIP 파일을 Base64로 변환한 문자열을 그대로 붙여넣습니다. 이 모드에서는 첨부파일을 업로드하지 않습니다.";
+  }
+
+  return "일반 게시글 본문은 전송 직전에 Base64로 인코딩됩니다.";
 }
 
 function formatFileSize(size) {
@@ -161,7 +193,8 @@ function WelcomePage() {
       setPostEditForm({
         title: payload.title,
         body: payload.body,
-        password: ""
+        password: "",
+        mode: payload.mode ?? POST_MODES.NORMAL
       });
       setPostEditAttachmentFile(null);
       setPostEditAttachmentInputKey((prev) => prev + 1);
@@ -218,14 +251,15 @@ function WelcomePage() {
   }
 
   function openPostEditPanel() {
-    if (!selectedPost) {
+    if (!selectedPost || selectedPost.conversionReady) {
       return;
     }
 
     setPostEditForm({
       title: selectedPost.title,
       body: selectedPost.body,
-      password: ""
+      password: "",
+      mode: selectedPost.mode ?? POST_MODES.NORMAL
     });
     setPostEditAttachmentFile(null);
     setPostEditAttachmentInputKey((prev) => prev + 1);
@@ -331,6 +365,8 @@ function WelcomePage() {
     } catch (submitError) {
       if (isInvalidPasswordError(submitError)) {
         setPostActionError("비밀번호가 일치하지 않습니다.");
+      } else if (submitError?.code === "FILE_CONVERSION_LOCKED") {
+        setError("변환 완료된 파일 변환 요청 글은 수정할 수 없습니다.");
       } else {
         setError(submitError.message);
       }
@@ -474,6 +510,27 @@ function WelcomePage() {
     }
   }
 
+  async function handleConvertPost() {
+    if (!selectedPostId) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const detail = await convertPostToAttachment(selectedPostId);
+      setSelectedPost(detail);
+      await loadPosts(currentPage);
+      setMessage("파일 변환을 완료했습니다.");
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const pageNumbers = Array.from({ length: pagination.totalPages }, (_, index) => index + 1);
 
   return (
@@ -532,6 +589,10 @@ function WelcomePage() {
                   >
                     <div className="post-title-row">
                       <strong>{post.title}</strong>
+                      <span className={`post-mode-badge${isFileConversionMode(post.mode) ? " file" : ""}`}>
+                        {getPostModeLabel(post.mode)}
+                      </span>
+                      {post.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
                       {post.hasAttachment ? <span className="attachment-badge">첨부</span> : null}
                     </div>
                     <span>답변 {post.replyCount}개</span>
@@ -602,6 +663,33 @@ function WelcomePage() {
               <h2>새 글 작성</h2>
             </div>
             <form id={createPostFormId} className="form-grid" onSubmit={handleCreatePost}>
+              <div className="field">
+                <span>작성 모드</span>
+                <div className="provider-options post-mode-options" role="radiogroup" aria-label="게시글 모드">
+                  {POST_MODE_OPTIONS.map((option) => (
+                    <label key={option.value} className="provider-option">
+                      <input
+                        type="radio"
+                        name="post-mode"
+                        value={option.value}
+                        checked={postForm.mode === option.value}
+                        onChange={(event) => {
+                          const nextMode = event.target.value;
+                          setPostForm((prev) => ({
+                            ...prev,
+                            mode: nextMode
+                          }));
+                          if (nextMode === POST_MODES.FILE_CONVERSION_REQUEST) {
+                            setPostAttachmentFile(null);
+                            setPostAttachmentInputKey((prev) => prev + 1);
+                          }
+                        }}
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <label className="field">
                 <span>제목</span>
                 <input
@@ -612,7 +700,7 @@ function WelcomePage() {
                 />
               </label>
               <label className="field">
-                <span>본문</span>
+                <span>{getPostBodyLabel(postForm.mode)}</span>
                 <textarea
                   value={postForm.body}
                   onChange={(event) => setPostForm((prev) => ({ ...prev, body: event.target.value }))}
@@ -620,6 +708,7 @@ function WelcomePage() {
                   required
                 />
               </label>
+              <p className="section-meta">{getPostBodyHelp(postForm.mode)}</p>
               <label className="field">
                 <span>비밀번호</span>
                 <input
@@ -630,18 +719,24 @@ function WelcomePage() {
                   required
                 />
               </label>
-              <label className="field">
-                <span>첨부파일</span>
-                <input
-                  key={postAttachmentInputKey}
-                  type="file"
-                  onChange={(event) => setPostAttachmentFile(event.target.files?.[0] ?? null)}
-                />
-              </label>
-              <p className="section-meta">
-                첨부파일은 1개만 업로드할 수 있으며 최대 100MB까지 허용됩니다.
-                {postAttachmentFile ? ` 현재 선택: ${postAttachmentFile.name} (${formatFileSize(postAttachmentFile.size)})` : ""}
-              </p>
+              {isFileConversionMode(postForm.mode) ? (
+                <p className="section-meta">파일 변환 요청 모드에서는 결과 ZIP 파일만 생성되며, 일반 첨부파일은 업로드하지 않습니다.</p>
+              ) : (
+                <>
+                  <label className="field">
+                    <span>첨부파일</span>
+                    <input
+                      key={postAttachmentInputKey}
+                      type="file"
+                      onChange={(event) => setPostAttachmentFile(event.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  <p className="section-meta">
+                    첨부파일은 1개만 업로드할 수 있으며 최대 100MB까지 허용됩니다.
+                    {postAttachmentFile ? ` 현재 선택: ${postAttachmentFile.name} (${formatFileSize(postAttachmentFile.size)})` : ""}
+                  </p>
+                </>
+              )}
             </form>
           </section>
         ) : null}
@@ -661,21 +756,63 @@ function WelcomePage() {
                   <div className="detail-top">
                     <div>
                       <h3>{selectedPost.title}</h3>
+                      <div className="detail-meta-row">
+                        <span className={`post-mode-badge${isFileConversionMode(selectedPost.mode) ? " file" : ""}`}>
+                          {getPostModeLabel(selectedPost.mode)}
+                        </span>
+                        {selectedPost.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
+                      </div>
                       <time>{new Date(selectedPost.createdAt).toLocaleString()}</time>
                     </div>
                     <div className="inline-actions">
-                      <button type="button" className="ghost-button" onClick={openPostEditPanel}>
-                        수정
-                      </button>
+                      {!selectedPost.conversionReady ? (
+                        <button type="button" className="ghost-button" onClick={openPostEditPanel}>
+                          수정
+                        </button>
+                      ) : null}
+                      {isFileConversionMode(selectedPost.mode) && !selectedPost.conversionReady ? (
+                        <button
+                          type="button"
+                          className="primary-button"
+                          onClick={handleConvertPost}
+                          disabled={submitting || aiSubmitting}
+                        >
+                          {submitting ? "변환 중..." : "파일 변환"}
+                        </button>
+                      ) : null}
                       <button type="button" className="danger-button" onClick={openPostDeletePanel}>
                         삭제
                       </button>
                     </div>
                   </div>
-                  <p className="detail-body">{selectedPost.body}</p>
+                  {isFileConversionMode(selectedPost.mode) ? (
+                    <div className="conversion-summary-card">
+                      <div className="conversion-summary-header">
+                        <strong>Base64 본문 숨김</strong>
+                        <span className={`post-mode-badge${selectedPost.conversionReady ? " success" : " file"}`}>
+                          {selectedPost.conversionReady ? "변환 완료" : "변환 대기"}
+                        </span>
+                      </div>
+                      <p className="section-meta">
+                        파일 변환 요청 글의 raw Base64 본문은 상세 화면에서 숨겨집니다.
+                      </p>
+                      <div className="conversion-summary-stats">
+                        <span>본문 길이 {selectedPost.body.length.toLocaleString()}자</span>
+                        <span>
+                          {selectedPost.conversionReady
+                            ? "ZIP 파일이 생성되어 다운로드할 수 있습니다."
+                            : "파일 변환 버튼을 누르면 ZIP 파일을 생성할 수 있습니다."}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="detail-body">{selectedPost.body}</p>
+                  )}
                   {selectedPost.attachment ? (
                     <div className="attachment-panel">
-                      <span className="attachment-label">첨부파일</span>
+                      <span className="attachment-label">
+                        {isFileConversionMode(selectedPost.mode) ? "변환된 파일" : "첨부파일"}
+                      </span>
                       <div className="attachment-card">
                         <div>
                           <strong>{selectedPost.attachment.originalFilename}</strong>
@@ -696,6 +833,30 @@ function WelcomePage() {
                   ) : null}
                   {postActionMode === "edit" ? (
                     <form className="form-grid compact-form action-panel" onSubmit={handleUpdatePost}>
+                      <div className="field">
+                        <span>작성 모드</span>
+                        <div className="provider-options post-mode-options" role="radiogroup" aria-label="수정 게시글 모드">
+                          {POST_MODE_OPTIONS.map((option) => (
+                            <label key={option.value} className="provider-option">
+                              <input
+                                type="radio"
+                                name="edit-post-mode"
+                                value={option.value}
+                                checked={postEditForm.mode === option.value}
+                                onChange={(event) => {
+                                  setPostActionError("");
+                                  setPostEditForm((prev) => ({ ...prev, mode: event.target.value }));
+                                  if (event.target.value === POST_MODES.FILE_CONVERSION_REQUEST) {
+                                    setPostEditAttachmentFile(null);
+                                    setPostEditAttachmentInputKey((prev) => prev + 1);
+                                  }
+                                }}
+                              />
+                              <span>{option.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                       <label className="field">
                         <span>제목</span>
                         <input
@@ -706,7 +867,7 @@ function WelcomePage() {
                         />
                       </label>
                       <label className="field">
-                        <span>본문</span>
+                        <span>{getPostBodyLabel(postEditForm.mode)}</span>
                         <textarea
                           value={postEditForm.body}
                           onChange={(event) => setPostEditForm((prev) => ({ ...prev, body: event.target.value }))}
@@ -714,6 +875,7 @@ function WelcomePage() {
                           required
                         />
                       </label>
+                      <p className="section-meta">{getPostBodyHelp(postEditForm.mode)}</p>
                       <label className="field">
                         <span>비밀번호</span>
                         <input
@@ -745,26 +907,32 @@ function WelcomePage() {
                           </div>
                         </div>
                       ) : null}
-                      <label className="field">
-                        <span>{selectedPost.attachment ? "새 첨부파일로 교체" : "첨부파일 추가"}</span>
-                        <input
-                          key={postEditAttachmentInputKey}
-                          type="file"
-                          onChange={(event) => {
-                            const nextFile = event.target.files?.[0] ?? null;
-                            setPostActionError("");
-                            setPostEditAttachmentFile(nextFile);
-                            if (nextFile) {
-                              setRemovePostAttachment(false);
-                            }
-                          }}
-                        />
-                      </label>
-                      {postEditAttachmentFile ? (
-                        <p className="section-meta">
-                          새 파일 선택: {postEditAttachmentFile.name} ({formatFileSize(postEditAttachmentFile.size)})
-                        </p>
-                      ) : null}
+                      {isFileConversionMode(postEditForm.mode) ? (
+                        <p className="section-meta">파일 변환 요청 모드에서는 일반 첨부파일을 업로드할 수 없습니다.</p>
+                      ) : (
+                        <>
+                          <label className="field">
+                            <span>{selectedPost.attachment ? "새 첨부파일로 교체" : "첨부파일 추가"}</span>
+                            <input
+                              key={postEditAttachmentInputKey}
+                              type="file"
+                              onChange={(event) => {
+                                const nextFile = event.target.files?.[0] ?? null;
+                                setPostActionError("");
+                                setPostEditAttachmentFile(nextFile);
+                                if (nextFile) {
+                                  setRemovePostAttachment(false);
+                                }
+                              }}
+                            />
+                          </label>
+                          {postEditAttachmentFile ? (
+                            <p className="section-meta">
+                              새 파일 선택: {postEditAttachmentFile.name} ({formatFileSize(postEditAttachmentFile.size)})
+                            </p>
+                          ) : null}
+                        </>
+                      )}
                       {selectedPost.attachment ? (
                         <label className="checkbox-field">
                           <input
@@ -776,12 +944,26 @@ function WelcomePage() {
                               setRemovePostAttachment(event.target.checked);
                             }}
                           />
-                          <span>현재 첨부파일 삭제</span>
+                          <span>
+                            {isFileConversionMode(postEditForm.mode) ? "현재 첨부파일 삭제 후 파일 변환 요청으로 변경" : "현재 첨부파일 삭제"}
+                          </span>
                         </label>
+                      ) : null}
+                      {isFileConversionMode(postEditForm.mode) && selectedPost.attachment && !removePostAttachment ? (
+                        <p className="panel-error">파일 변환 요청 모드로 바꾸려면 현재 첨부파일을 먼저 삭제해야 합니다.</p>
                       ) : null}
                       {postActionError ? <p className="panel-error">{postActionError}</p> : null}
                       <div className="action-form-actions">
-                        <button type="submit" className="ghost-button" disabled={submitting}>
+                        <button
+                          type="submit"
+                          className="ghost-button"
+                          disabled={
+                            submitting ||
+                            (isFileConversionMode(postEditForm.mode) &&
+                              selectedPost.attachment != null &&
+                              !removePostAttachment)
+                          }
+                        >
                           게시글 수정
                         </button>
                         <button type="button" className="ghost-button" onClick={closePostActionPanel}>
@@ -850,38 +1032,40 @@ function WelcomePage() {
                       </button>
                     </form>
 
-                    <div className="card inset-card form-grid ai-reply-card">
-                      <div className="section-heading">
-                        <h3>AI가 답변달기</h3>
+                    {!isFileConversionMode(selectedPost.mode) ? (
+                      <div className="card inset-card form-grid ai-reply-card">
+                        <div className="section-heading">
+                          <h3>AI가 답변달기</h3>
+                        </div>
+                        <p className="section-meta">현재 게시글 본문을 기준으로 AI 답변을 생성합니다.</p>
+                        <div className="provider-options" role="radiogroup" aria-label="AI provider">
+                          {["GPT", "Claude", "Grok"].map((provider) => (
+                            <label key={provider} className="provider-option">
+                              <input
+                                type="radio"
+                                name="ai-provider"
+                                value={provider}
+                                checked={selectedAiProvider === provider}
+                                onChange={(event) => {
+                                  setAiReplyError("");
+                                  setSelectedAiProvider(event.target.value);
+                                }}
+                              />
+                              <span>{provider}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {aiReplyError ? <p className="panel-error">{aiReplyError}</p> : null}
+                        <button
+                          type="button"
+                          className="ghost-button wide-button"
+                          onClick={handleCreateAiReply}
+                          disabled={aiSubmitting || submitting}
+                        >
+                          {aiSubmitting ? "AI 답변 생성 중..." : "AI가 답변달기"}
+                        </button>
                       </div>
-                      <p className="section-meta">현재 게시글 본문을 기준으로 AI 답변을 생성합니다.</p>
-                      <div className="provider-options" role="radiogroup" aria-label="AI provider">
-                        {["GPT", "Claude", "Grok"].map((provider) => (
-                          <label key={provider} className="provider-option">
-                            <input
-                              type="radio"
-                              name="ai-provider"
-                              value={provider}
-                              checked={selectedAiProvider === provider}
-                              onChange={(event) => {
-                                setAiReplyError("");
-                                setSelectedAiProvider(event.target.value);
-                              }}
-                            />
-                            <span>{provider}</span>
-                          </label>
-                        ))}
-                      </div>
-                      {aiReplyError ? <p className="panel-error">{aiReplyError}</p> : null}
-                      <button
-                        type="button"
-                        className="ghost-button wide-button"
-                        onClick={handleCreateAiReply}
-                        disabled={aiSubmitting || submitting}
-                      >
-                        {aiSubmitting ? "AI 답변 생성 중..." : "AI가 답변달기"}
-                      </button>
-                    </div>
+                    ) : null}
                   </div>
 
                   {selectedPost.replies.length === 0 ? (
