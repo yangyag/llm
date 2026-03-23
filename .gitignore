@@ -14,3 +14,6 @@ back/.gradle/
 back/build/
 back/build-local/
 back/frontend-local-artifacts/
+
+# Local utility scripts
+etc/*.py
