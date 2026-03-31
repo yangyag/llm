@@ -48,16 +48,29 @@ function isInvalidPasswordError(error) {
   return error?.code === "INVALID_PASSWORD" || (error?.status === 403 && !error?.code);
 }
 
-function getPageFromLocation() {
-  const params = new URLSearchParams(window.location.search);
-  const value = Number.parseInt(params.get("page") ?? "1", 10);
-  return Number.isFinite(value) && value > 0 ? value : 1;
+function normalizeSearchQuery(value) {
+  return value.trim();
 }
 
-function updatePageInUrl(page, { replace = false } = {}) {
+function getListStateFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const pageValue = Number.parseInt(params.get("page") ?? "1", 10);
+  return {
+    page: Number.isFinite(pageValue) && pageValue > 0 ? pageValue : 1,
+    query: normalizeSearchQuery(params.get("query") ?? "")
+  };
+}
+
+function updateListStateInUrl(page, query, { replace = false } = {}) {
   const nextPage = Math.max(page, 1);
+  const normalizedQuery = normalizeSearchQuery(query);
   const url = new URL(window.location.href);
   url.searchParams.set("page", String(nextPage));
+  if (normalizedQuery) {
+    url.searchParams.set("query", normalizedQuery);
+  } else {
+    url.searchParams.delete("query");
+  }
   const method = replace ? "replaceState" : "pushState";
   window.history[method]({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
@@ -96,9 +109,12 @@ function formatFileSize(size) {
 
 function WelcomePage() {
   const createPostFormId = "create-post-form";
+  const initialListState = getListStateFromLocation();
   const [view, setView] = useState("list");
   const [posts, setPosts] = useState([]);
-  const [currentPage, setCurrentPage] = useState(() => getPageFromLocation());
+  const [currentPage, setCurrentPage] = useState(initialListState.page);
+  const [searchQuery, setSearchQuery] = useState(initialListState.query);
+  const [searchInput, setSearchInput] = useState(initialListState.query);
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
   const [selectedPostId, setSelectedPostId] = useState(null);
   const [selectedPost, setSelectedPost] = useState(null);
@@ -127,7 +143,10 @@ function WelcomePage() {
 
   useEffect(() => {
     function handlePopState() {
-      setCurrentPage(getPageFromLocation());
+      const nextListState = getListStateFromLocation();
+      setCurrentPage(nextListState.page);
+      setSearchQuery(nextListState.query);
+      setSearchInput(nextListState.query);
       setView("list");
     }
 
@@ -137,9 +156,9 @@ function WelcomePage() {
 
   useEffect(() => {
     if (view === "list") {
-      loadPosts(currentPage);
+      loadPosts(currentPage, searchQuery);
     }
-  }, [view, currentPage]);
+  }, [view, currentPage, searchQuery]);
 
   useEffect(() => {
     if (view === "detail" && selectedPostId != null) {
@@ -147,15 +166,20 @@ function WelcomePage() {
     }
   }, [view, selectedPostId]);
 
-  async function loadPosts(page = currentPage) {
+  async function loadPosts(page = currentPage, query = searchQuery) {
     setLoading(true);
     setError("");
 
     try {
-      const payload = await getPosts(page);
+      const normalizedQuery = normalizeSearchQuery(query);
+      const payload = await getPosts(page, normalizedQuery);
       if ((payload.totalPages ?? 0) > 0 && page > payload.totalPages) {
-        navigateToPage(payload.totalPages, { replace: true });
-        return loadPosts(payload.totalPages);
+        navigateToList(payload.totalPages, normalizedQuery, { replace: true });
+        return loadPosts(payload.totalPages, normalizedQuery);
+      }
+      if ((payload.totalPages ?? 0) === 0 && page > 1) {
+        navigateToList(1, normalizedQuery, { replace: true });
+        return loadPosts(1, normalizedQuery);
       }
 
       setPosts(payload.items ?? []);
@@ -168,6 +192,7 @@ function WelcomePage() {
         hasNext: payload.hasNext ?? false
       });
       setCurrentPage(payload.page ?? page);
+      setSearchQuery(normalizedQuery);
       return payload;
     } catch (loadError) {
       setError(loadError.message);
@@ -177,10 +202,24 @@ function WelcomePage() {
     }
   }
 
-  function navigateToPage(page, options = {}) {
+  function navigateToList(page, query = searchQuery, options = {}) {
     const nextPage = Math.max(page, 1);
-    updatePageInUrl(nextPage, options);
+    const normalizedQuery = normalizeSearchQuery(query);
+    updateListStateInUrl(nextPage, normalizedQuery, options);
     setCurrentPage(nextPage);
+    setSearchQuery(normalizedQuery);
+  }
+
+  function handleSearchSubmit(event) {
+    event.preventDefault();
+    const nextQuery = normalizeSearchQuery(searchInput);
+    setSearchInput(nextQuery);
+    navigateToList(1, nextQuery);
+  }
+
+  function handleSearchReset() {
+    setSearchInput("");
+    navigateToList(1, "");
   }
 
   async function loadPostDetail(postId) {
@@ -325,7 +364,7 @@ function WelcomePage() {
       setPostForm(EMPTY_POST_FORM);
       setPostAttachmentFile(null);
       setPostAttachmentInputKey((prev) => prev + 1);
-      navigateToPage(1, { replace: true });
+      navigateToList(1, searchQuery, { replace: true });
       await loadPosts(1);
       openDetail(created.id);
       setMessage("게시글을 등록했습니다.");
@@ -561,100 +600,137 @@ function WelcomePage() {
         {error ? <p className="message-banner error">{error}</p> : null}
 
         {view === "list" ? (
-          <section className="card">
-            <div className="section-heading">
-              <div>
-                <h2>게시글 목록</h2>
-                <p className="section-meta">
-                  총 {pagination.totalItems}개, 페이지 {pagination.page}
-                  {pagination.totalPages > 0 ? ` / ${pagination.totalPages}` : ""}
-                </p>
-              </div>
-              <button type="button" className="ghost-button" onClick={() => loadPosts(currentPage)}>
-                새로고침
-              </button>
+          <>
+            <div className="download-link-row">
+              <a
+                className="download-link"
+                href={getApiUrl("/encode_zip_to_base64.zip")}
+                download="encode_zip_to_base64.zip"
+              >
+                * 파일 변환기 다운로드
+              </a>
             </div>
-            {loading ? (
-              <p className="empty-state">불러오는 중...</p>
-            ) : posts.length === 0 ? (
-              <p className="empty-state">아직 게시글이 없습니다. 첫 글을 작성해 보세요.</p>
-            ) : (
-              <div className="post-list">
-                {posts.map((post) => (
-                  <button
-                    key={post.id}
-                    type="button"
-                    className="post-list-item"
-                    onClick={() => openDetail(post.id)}
-                  >
-                    <div className="post-title-row">
-                      <strong>{post.title}</strong>
-                      <span className={`post-mode-badge${isFileConversionMode(post.mode) ? " file" : ""}`}>
-                        {getPostModeLabel(post.mode)}
-                      </span>
-                      {post.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
-                      {post.hasAttachment ? <span className="attachment-badge">첨부</span> : null}
-                    </div>
-                    <span>답변 {post.replyCount}개</span>
-                    <time>{new Date(post.createdAt).toLocaleString()}</time>
-                  </button>
-                ))}
+
+            <section className="card">
+              <div className="section-heading">
+                <div>
+                  <h2>게시글 목록</h2>
+                  <p className="section-meta">
+                    {searchQuery ? `검색 결과 ${pagination.totalItems}개` : `총 ${pagination.totalItems}개`}, 페이지 {pagination.page}
+                    {pagination.totalPages > 0 ? ` / ${pagination.totalPages}` : ""}
+                  </p>
+                </div>
+                <button type="button" className="ghost-button" onClick={() => loadPosts(currentPage, searchQuery)}>
+                  새로고침
+                </button>
               </div>
-            )}
-
-            {posts.length > 0 ? (
-              <div className="pagination">
-                <button
-                  type="button"
-                  className="ghost-button pagination-button"
-                  onClick={() => navigateToPage(1)}
-                  disabled={!pagination.hasPrevious}
-                >
-                  처음
-                </button>
-
-                <button
-                  type="button"
-                  className="ghost-button pagination-button"
-                  onClick={() => navigateToPage(currentPage - 1)}
-                  disabled={!pagination.hasPrevious}
-                >
-                  이전
-                </button>
-
-                <div className="pagination-numbers">
-                  {pageNumbers.map((pageNumber) => (
+              <form className="search-bar" onSubmit={handleSearchSubmit}>
+                <label className="field search-field">
+                  <span>검색어</span>
+                  <input
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    placeholder="제목 검색"
+                  />
+                </label>
+                <div className="search-actions">
+                  <button type="submit" className="submit-button" disabled={loading}>
+                    검색
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={handleSearchReset}
+                    disabled={loading || (!searchQuery && !searchInput)}
+                  >
+                    초기화
+                  </button>
+                </div>
+              </form>
+              {loading ? (
+                <p className="empty-state">불러오는 중...</p>
+              ) : posts.length === 0 ? (
+                <p className="empty-state">
+                  {searchQuery ? "검색 결과가 없습니다. 다른 검색어로 다시 시도해 보세요." : "아직 게시글이 없습니다. 첫 글을 작성해 보세요."}
+                </p>
+              ) : (
+                <div className="post-list">
+                  {posts.map((post) => (
                     <button
-                      key={pageNumber}
+                      key={post.id}
                       type="button"
-                      className={`ghost-button pagination-button${pageNumber === currentPage ? " active" : ""}`}
-                      onClick={() => navigateToPage(pageNumber)}
+                      className="post-list-item"
+                      onClick={() => openDetail(post.id)}
                     >
-                      {pageNumber}
+                      <div className="post-title-row">
+                        <strong>{post.title}</strong>
+                        <span className={`post-mode-badge${isFileConversionMode(post.mode) ? " file" : ""}`}>
+                          {getPostModeLabel(post.mode)}
+                        </span>
+                        {post.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
+                        {post.hasAttachment ? <span className="attachment-badge">첨부</span> : null}
+                      </div>
+                      <span>답변 {post.replyCount}개</span>
+                      <time>{new Date(post.createdAt).toLocaleString()}</time>
                     </button>
                   ))}
                 </div>
+              )}
 
-                <button
-                  type="button"
-                  className="ghost-button pagination-button"
-                  onClick={() => navigateToPage(currentPage + 1)}
-                  disabled={!pagination.hasNext}
-                >
-                  다음
-                </button>
+              {posts.length > 0 ? (
+                <div className="pagination">
+                  <button
+                    type="button"
+                    className="ghost-button pagination-button"
+                    onClick={() => navigateToList(1)}
+                    disabled={!pagination.hasPrevious}
+                  >
+                    처음
+                  </button>
 
-                <button
-                  type="button"
-                  className="ghost-button pagination-button"
-                  onClick={() => navigateToPage(pagination.totalPages)}
-                  disabled={!pagination.hasNext}
-                >
-                  끝
-                </button>
-              </div>
-            ) : null}
-          </section>
+                  <button
+                    type="button"
+                    className="ghost-button pagination-button"
+                    onClick={() => navigateToList(currentPage - 1)}
+                    disabled={!pagination.hasPrevious}
+                  >
+                    이전
+                  </button>
+
+                  <div className="pagination-numbers">
+                    {pageNumbers.map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        className={`ghost-button pagination-button${pageNumber === currentPage ? " active" : ""}`}
+                        onClick={() => navigateToList(pageNumber)}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="ghost-button pagination-button"
+                    onClick={() => navigateToList(currentPage + 1)}
+                    disabled={!pagination.hasNext}
+                  >
+                    다음
+                  </button>
+
+                  <button
+                    type="button"
+                    className="ghost-button pagination-button"
+                    onClick={() => navigateToList(pagination.totalPages)}
+                    disabled={!pagination.hasNext}
+                  >
+                    끝
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          </>
         ) : null}
 
         {view === "write" ? (

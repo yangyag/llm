@@ -28,6 +28,7 @@ import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
 import com.llm.app.board.repository.BoardPostSummaryProjection;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -73,9 +74,11 @@ public class BoardService {
 	}
 
 	@Transactional(readOnly = true)
-	public BoardPostListResponse getPosts(int page) {
+	public BoardPostListResponse getPosts(int page, String query) {
 		int pageNumber = Math.max(page, 1);
+		String keyword = toKeywordPattern(query);
 		Page<BoardPostSummaryProjection> posts = boardPostRepository.findPostSummaries(
+			keyword,
 			PageRequest.of(pageNumber - 1, POSTS_PAGE_SIZE)
 		);
 		return boardMapper.toListResponse(posts);
@@ -257,6 +260,14 @@ public class BoardService {
 
 	private Optional<BoardAttachment> findAttachment(Long postId) {
 		return boardAttachmentRepository.findByPost_Id(postId);
+	}
+
+	private String toKeywordPattern(String query) {
+		if (!StringUtils.hasText(query)) {
+			return null;
+		}
+
+		return "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
 	}
 
 	private String resolvePostBody(BoardPostMode mode, String bodyBase64) {

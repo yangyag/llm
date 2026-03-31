@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
 	@Query(
@@ -26,12 +27,19 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
 			from BoardPost p
 			left join p.replies r
 			left join BoardAttachment a on a.post = p
+			where :keywordPattern is null
+				or lower(p.title) like :keywordPattern
 			group by p.id, p.title, p.mode, p.createdAt
 			order by p.createdAt desc
 			""",
-		countQuery = "select count(p) from BoardPost p"
+		countQuery = """
+			select count(p)
+			from BoardPost p
+			where :keywordPattern is null
+				or lower(p.title) like :keywordPattern
+			"""
 	)
-	Page<BoardPostSummaryProjection> findPostSummaries(Pageable pageable);
+	Page<BoardPostSummaryProjection> findPostSummaries(@Param("keywordPattern") String keywordPattern, Pageable pageable);
 
 	@EntityGraph(attributePaths = "replies")
 	Optional<BoardPost> findWithRepliesById(Long id);

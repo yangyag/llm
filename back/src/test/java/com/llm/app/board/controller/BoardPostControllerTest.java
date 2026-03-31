@@ -285,6 +285,44 @@ class BoardPostControllerTest {
 	}
 
 	@Test
+	void shouldSearchPostsByTitle() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "스프링 질문")
+				.param("bodyBase64", encode("JPA 페이징이 궁금합니다"))
+				.param("password", "secret"))
+			.andExpect(status().isCreated());
+
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "리액트 질문")
+				.param("bodyBase64", encode("UI를 만들고 싶어요"))
+				.param("password", "secret"))
+			.andExpect(status().isCreated());
+
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "잡담")
+				.param("bodyBase64", encode("오늘 날씨가 좋네요"))
+				.param("password", "secret"))
+			.andExpect(status().isCreated());
+
+		mockMvc.perform(get("/api/v1/posts").queryParam("query", "질문"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items", hasSize(2)))
+			.andExpect(jsonPath("$.totalItems").value(2));
+
+		mockMvc.perform(get("/api/v1/posts").queryParam("query", "리액트"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items", hasSize(1)))
+			.andExpect(jsonPath("$.items[0].title").value("리액트 질문"))
+			.andExpect(jsonPath("$.totalItems").value(1));
+
+		mockMvc.perform(get("/api/v1/posts").queryParam("query", "없는 검색어"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items", hasSize(0)))
+			.andExpect(jsonPath("$.totalItems").value(0))
+			.andExpect(jsonPath("$.totalPages").value(0));
+	}
+
+	@Test
 	void fileConversionRequestLifecycleShouldWork() throws Exception {
 		byte[] zipBytes = "PK\u0003\u0004demo-zip".getBytes(StandardCharsets.UTF_8);
 		String encodedZip = Base64.getEncoder().encodeToString(zipBytes);

@@ -38,8 +38,11 @@ public class BoardPostController {
 	}
 
 	@GetMapping
-	public BoardPostListResponse getPosts(@RequestParam(defaultValue = "1") int page) {
-		return boardService.getPosts(page);
+	public BoardPostListResponse getPosts(
+		@RequestParam(defaultValue = "1") int page,
+		@RequestParam(required = false) String query
+	) {
+		return boardService.getPosts(page, query);
 	}
 
 	@GetMapping("/{id}")

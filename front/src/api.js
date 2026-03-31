@@ -62,8 +62,12 @@ async function requestJson(path, options = {}) {
   return response.json();
 }
 
-export function getPosts(page = 1) {
+export function getPosts(page = 1, query = "") {
   const params = new URLSearchParams({ page: String(page) });
+  const normalizedQuery = query.trim();
+  if (normalizedQuery) {
+    params.set("query", normalizedQuery);
+  }
   return requestJson(`/api/v1/posts?${params.toString()}`);
 }
 
