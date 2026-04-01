@@ -33,9 +33,6 @@ public class BoardPost {
 	@Column(nullable = false, length = 40)
 	private BoardPostMode mode;
 
-	@Column(name = "password_hash", nullable = false, length = 120)
-	private String passwordHash;
-
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -49,11 +46,10 @@ public class BoardPost {
 	protected BoardPost() {
 	}
 
-	public BoardPost(String title, String body, BoardPostMode mode, String passwordHash, Instant createdAt, Instant updatedAt) {
+	public BoardPost(String title, String body, BoardPostMode mode, Instant createdAt, Instant updatedAt) {
 		this.title = title;
 		this.body = body;
 		this.mode = mode;
-		this.passwordHash = passwordHash;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
 	}
@@ -72,10 +68,6 @@ public class BoardPost {
 
 	public BoardPostMode getMode() {
 		return mode;
-	}
-
-	public String getPasswordHash() {
-		return passwordHash;
 	}
 
 	public Instant getCreatedAt() {

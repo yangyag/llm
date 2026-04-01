@@ -15,10 +15,6 @@ public class UpdateBoardPostRequest {
 
 	private BoardPostMode mode = BoardPostMode.NORMAL;
 
-	@NotBlank(message = "password is required")
-	@Size(max = 100, message = "password must be 100 characters or less")
-	private String password;
-
 	private MultipartFile attachment;
 
 	private boolean removeAttachment;
@@ -47,14 +43,6 @@ public class UpdateBoardPostRequest {
 		if (mode != null) {
 			this.mode = mode;
 		}
-	}
-
-	public String getPassword() {
-		return password;
-	}
-
-	public void setPassword(String password) {
-		this.password = password;
 	}
 
 	public MultipartFile getAttachment() {

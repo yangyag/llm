@@ -594,3 +594,62 @@ button:disabled {
     flex: 1;
   }
 }
+
+/* Login page */
+.login-shell {
+  max-width: 420px;
+}
+
+.login-card {
+  padding: 2rem;
+}
+
+.login-card .form-grid {
+  gap: 1.25rem;
+}
+
+.field-hint {
+  margin: -0.75rem 0 0;
+  font-size: 0.85rem;
+  color: #f59e0b;
+}
+
+.auth-username {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #6b7280);
+  padding: 0.25rem 0.5rem;
+}
+
+/* Batch delete */
+.post-list-item-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.post-list-item-row .post-list-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.post-checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0 0.75rem 0 0;
+  align-self: center;
+  cursor: pointer;
+  accent-color: var(--primary, #2563eb);
+  flex-shrink: 0;
+}
+
+.batch-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  margin-bottom: 0.5rem;
+}
+
+.batch-select-all {
+  font-size: 0.85rem;
+}

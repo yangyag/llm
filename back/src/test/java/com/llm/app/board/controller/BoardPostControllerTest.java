@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.llm.app.auth.JwtProvider;
 import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
 import com.llm.app.board.model.BoardAttachment;
@@ -71,8 +72,13 @@ class BoardPostControllerTest {
 	@Value("${app.attachments.root-path}")
 	private String attachmentRootPath;
 
+	@Autowired
+	private JwtProvider jwtProvider;
+
 	@MockBean
 	private AiReplyGenerator aiReplyGenerator;
+
+	private String token;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -80,14 +86,15 @@ class BoardPostControllerTest {
 		boardReplyRepository.deleteAll();
 		boardPostRepository.deleteAll();
 		deleteRecursively(Path.of(attachmentRootPath));
+		token = jwtProvider.generateToken("admin");
 	}
 
 	@Test
 	void postAndReplyCrudShouldWork() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "첫 글")
-				.param("bodyBase64", encode("첫 번째 게시글 본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("첫 번째 게시글 본문")))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.id", notNullValue()))
 			.andExpect(jsonPath("$.title").value("첫 글"))
@@ -112,11 +119,11 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.items[0].hasAttachment").value(false));
 
 		MvcResult replyResult = mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
+				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
-					  "bodyBase64": "%s",
-					  "password": "reply-secret"
+					  "bodyBase64": "%s"
 					}
 					""".formatted(encode("첫 답변"))))
 			.andExpect(status().isCreated())
@@ -127,41 +134,30 @@ class BoardPostControllerTest {
 		long replyId = extractFirstReplyId(replyResult.getResponse().getContentAsString());
 
 		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "수정된 글")
-				.param("bodyBase64", encode("수정된 본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("수정된 본문")))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.title").value("수정된 글"))
 			.andExpect(jsonPath("$.body").value("수정된 본문"));
 
 		mockMvc.perform(put("/api/v1/posts/replies/{id}", replyId)
+				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
-					  "bodyBase64": "%s",
-					  "password": "reply-secret"
+					  "bodyBase64": "%s"
 					}
 					""".formatted(encode("수정된 답변"))))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.replies[0].body").value("수정된 답변"));
 
 		mockMvc.perform(delete("/api/v1/posts/replies/{id}", replyId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "password": "reply-secret"
-					}
-					"""))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.replies", hasSize(0)));
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isNoContent());
 
 		mockMvc.perform(delete("/api/v1/posts/{id}", postId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "password": "secret"
-					}
-					"""))
+				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isNoContent());
 
 		mockMvc.perform(get("/api/v1/posts/{id}", postId))
@@ -179,9 +175,9 @@ class BoardPostControllerTest {
 
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
 				.file(firstAttachment)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글")
-				.param("bodyBase64", encode("본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("본문")))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.attachment.originalFilename").value("guide.txt"))
 			.andExpect(jsonPath("$.attachment.size").value(firstAttachment.getSize()))
@@ -214,9 +210,9 @@ class BoardPostControllerTest {
 
 		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
 				.file(replacementAttachment)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글 수정")
-				.param("bodyBase64", encode("본문 수정"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("본문 수정")))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.attachment.originalFilename").value("update.txt"))
 			.andExpect(jsonPath("$.body").value("본문 수정"));
@@ -226,9 +222,9 @@ class BoardPostControllerTest {
 			.andExpect(content().bytes("교체 파일".getBytes(StandardCharsets.UTF_8)));
 
 		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글 수정")
 				.param("bodyBase64", encode("본문 수정"))
-				.param("password", "secret")
 				.param("removeAttachment", "true"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.attachment").value(nullValue()));
@@ -250,9 +246,9 @@ class BoardPostControllerTest {
 
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
 				.file(attachment)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "삭제 첨부")
-				.param("bodyBase64", encode("본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("본문")))
 			.andExpect(status().isCreated())
 			.andReturn();
 
@@ -262,12 +258,7 @@ class BoardPostControllerTest {
 		assertThat(Files.exists(attachmentPath)).isTrue();
 
 		mockMvc.perform(delete("/api/v1/posts/{id}", postId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "password": "secret"
-					}
-					"""))
+				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isNoContent());
 
 		assertThat(boardAttachmentRepository.findByPost_Id(postId)).isEmpty();
@@ -277,9 +268,9 @@ class BoardPostControllerTest {
 	@Test
 	void invalidBase64ShouldReturnBadRequest() throws Exception {
 		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "bad")
-				.param("bodyBase64", "%%%bad%%%")
-				.param("password", "secret"))
+				.param("bodyBase64", "%%%bad%%%"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
 	}
@@ -287,21 +278,21 @@ class BoardPostControllerTest {
 	@Test
 	void shouldSearchPostsByTitle() throws Exception {
 		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "스프링 질문")
-				.param("bodyBase64", encode("JPA 페이징이 궁금합니다"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("JPA 페이징이 궁금합니다")))
 			.andExpect(status().isCreated());
 
 		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "리액트 질문")
-				.param("bodyBase64", encode("UI를 만들고 싶어요"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("UI를 만들고 싶어요")))
 			.andExpect(status().isCreated());
 
 		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "잡담")
-				.param("bodyBase64", encode("오늘 날씨가 좋네요"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("오늘 날씨가 좋네요")))
 			.andExpect(status().isCreated());
 
 		mockMvc.perform(get("/api/v1/posts").queryParam("query", "질문"))
@@ -328,10 +319,10 @@ class BoardPostControllerTest {
 		String encodedZip = Base64.getEncoder().encodeToString(zipBytes);
 
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "zip 요청")
 				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", encodedZip)
-				.param("password", "secret"))
+				.param("bodyBase64", encodedZip))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.body").value(encodedZip))
 			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
@@ -346,7 +337,8 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.items[0].mode").value("FILE_CONVERSION_REQUEST"))
 			.andExpect(jsonPath("$.items[0].conversionReady").value(false));
 
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
+				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
 			.andExpect(jsonPath("$.conversionReady").value(true))
@@ -362,7 +354,8 @@ class BoardPostControllerTest {
 			.andExpect(header().string("Content-Disposition", containsString("post-" + postId + ".zip")))
 			.andExpect(content().bytes(zipBytes));
 
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
+				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.conversionReady").value(true));
 	}
@@ -372,10 +365,10 @@ class BoardPostControllerTest {
 		String rawBody = "a".repeat(1_100_000);
 
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "큰 변환 요청")
 				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", rawBody)
-				.param("password", "secret"))
+				.param("bodyBase64", rawBody))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.body").value(rawBody))
 			.andReturn();
@@ -396,10 +389,10 @@ class BoardPostControllerTest {
 
 		mockMvc.perform(multipartPost("/api/v1/posts")
 				.file(attachment)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "zip 요청")
 				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8)))
-				.param("password", "secret"))
+				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8))))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
 	}
@@ -407,15 +400,16 @@ class BoardPostControllerTest {
 	@Test
 	void conversionShouldFailWhenPostModeIsNormal() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "일반 글")
-				.param("bodyBase64", encode("본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("본문")))
 			.andExpect(status().isCreated())
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
 
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
+				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_FILE_CONVERSION_REQUEST"));
 	}
@@ -423,16 +417,17 @@ class BoardPostControllerTest {
 	@Test
 	void invalidRawBase64ShouldFailAtConversionTime() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "잘못된 zip")
 				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", "%%%bad%%%")
-				.param("password", "secret"))
+				.param("bodyBase64", "%%%bad%%%"))
 			.andExpect(status().isCreated())
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
 
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
+				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
 	}
@@ -441,24 +436,25 @@ class BoardPostControllerTest {
 	void convertedFileConversionPostShouldBeLocked() throws Exception {
 		String encodedZip = Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8));
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "잠금 테스트")
 				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", encodedZip)
-				.param("password", "secret"))
+				.param("bodyBase64", encodedZip))
 			.andExpect(status().isCreated())
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
 
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId))
+		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
+				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.conversionReady").value(true));
 
 		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "수정 시도")
 				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", encodedZip)
-				.param("password", "secret"))
+				.param("bodyBase64", encodedZip))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("FILE_CONVERSION_LOCKED"));
 	}
@@ -468,9 +464,9 @@ class BoardPostControllerTest {
 		String originalBody = "  첫 줄\n둘째 줄  \n";
 
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "공백 보존")
-				.param("bodyBase64", encode(originalBody))
-				.param("password", "secret"))
+				.param("bodyBase64", encode(originalBody)))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.body").value(originalBody))
 			.andReturn();
@@ -484,9 +480,9 @@ class BoardPostControllerTest {
 	void bodyLongerThan20000ShouldStillBeAccepted() throws Exception {
 		String largeBody = "a".repeat(30_000);
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "긴 본문")
-				.param("bodyBase64", encode(largeBody))
-				.param("password", "secret"))
+				.param("bodyBase64", encode(largeBody)))
 			.andExpect(status().isCreated())
 			.andReturn();
 
@@ -495,11 +491,11 @@ class BoardPostControllerTest {
 		assertThat(boardPostRepository.findById(postId).orElseThrow().getBody()).hasSize(30_000);
 
 		mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
+				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
-					  "bodyBase64": "%s",
-					  "password": "reply-secret"
+					  "bodyBase64": "%s"
 					}
 					""".formatted(encode(largeBody))))
 			.andExpect(status().isCreated())
@@ -514,9 +510,9 @@ class BoardPostControllerTest {
 		String tooLargeBody = "a".repeat(1_000_001);
 
 		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "너무 긴 본문")
-				.param("bodyBase64", encode(tooLargeBody))
-				.param("password", "secret"))
+				.param("bodyBase64", encode(tooLargeBody)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
 	}
@@ -533,9 +529,9 @@ class BoardPostControllerTest {
 
 		mockMvc.perform(multipartPost("/api/v1/posts")
 				.file(attachment)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "큰 파일")
-				.param("bodyBase64", encode("본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("본문")))
 			.andExpect(status().isPayloadTooLarge())
 			.andExpect(jsonPath("$.code").value("ATTACHMENT_TOO_LARGE"));
 	}
@@ -543,9 +539,9 @@ class BoardPostControllerTest {
 	@Test
 	void removeAttachmentAndUploadTogetherShouldReturnBadRequest() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글")
-				.param("bodyBase64", encode("본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("본문")))
 			.andExpect(status().isCreated())
 			.andReturn();
 
@@ -559,75 +555,12 @@ class BoardPostControllerTest {
 
 		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
 				.file(attachment)
+				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글")
 				.param("bodyBase64", encode("본문"))
-				.param("password", "secret")
 				.param("removeAttachment", "true"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
-	}
-
-	@Test
-	void wrongPasswordShouldReturnForbidden() throws Exception {
-		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
-				.param("title", "pw")
-				.param("bodyBase64", encode("비밀번호 테스트"))
-				.param("password", "right"))
-			.andExpect(status().isCreated())
-			.andReturn();
-
-		long postId = extractId(createResult.getResponse().getContentAsString());
-
-		MvcResult replyResult = mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "bodyBase64": "%s",
-					  "password": "reply-right"
-					}
-					""".formatted(encode("답변 비밀번호 테스트"))))
-			.andExpect(status().isCreated())
-			.andReturn();
-
-		long replyId = extractFirstReplyId(replyResult.getResponse().getContentAsString());
-
-		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
-				.param("title", "수정 시도")
-				.param("bodyBase64", encode("수정 실패 본문"))
-				.param("password", "wrong"))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("INVALID_PASSWORD"));
-
-		mockMvc.perform(delete("/api/v1/posts/{id}", postId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "password": "wrong"
-					}
-					"""))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("INVALID_PASSWORD"));
-
-		mockMvc.perform(put("/api/v1/posts/replies/{id}", replyId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "bodyBase64": "%s",
-					  "password": "wrong"
-					}
-					""".formatted(encode("답변 수정 실패"))))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("INVALID_PASSWORD"));
-
-		mockMvc.perform(delete("/api/v1/posts/replies/{id}", replyId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "password": "wrong"
-					}
-					"""))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("INVALID_PASSWORD"));
 	}
 
 	@Test
@@ -641,7 +574,6 @@ class BoardPostControllerTest {
 				"글 " + i,
 				"본문 " + i,
 				mode,
-				"hash-" + i,
 				baseTime.plusSeconds(i),
 				baseTime.plusSeconds(i)
 			));
@@ -653,9 +585,9 @@ class BoardPostControllerTest {
 			}
 		}
 		boardPostRepository.flush();
-		boardReplyRepository.save(new BoardReply(latestPost, "답변 A", "hash-a", baseTime.plusSeconds(30), baseTime.plusSeconds(30)));
-		boardReplyRepository.save(new BoardReply(latestPost, "답변 B", "hash-b", baseTime.plusSeconds(31), baseTime.plusSeconds(31)));
-		boardReplyRepository.save(new BoardReply(twelfthPost, "답변 C", "hash-c", baseTime.plusSeconds(32), baseTime.plusSeconds(32)));
+		boardReplyRepository.save(new BoardReply(latestPost, "답변 A", baseTime.plusSeconds(30), baseTime.plusSeconds(30)));
+		boardReplyRepository.save(new BoardReply(latestPost, "답변 B", baseTime.plusSeconds(31), baseTime.plusSeconds(31)));
+		boardReplyRepository.save(new BoardReply(twelfthPost, "답변 C", baseTime.plusSeconds(32), baseTime.plusSeconds(32)));
 		boardAttachmentRepository.save(new BoardAttachment(
 			latestPost,
 			"latest.txt",
@@ -715,9 +647,9 @@ class BoardPostControllerTest {
 	@Test
 	void aiReplyShouldBeStoredAndLocked() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "AI 테스트")
-				.param("bodyBase64", encode("AI가 답변할 본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("AI가 답변할 본문")))
 			.andExpect(status().isCreated())
 			.andReturn();
 
@@ -725,6 +657,7 @@ class BoardPostControllerTest {
 		given(aiReplyGenerator.generateReply(eq(AiProvider.GPT), anyString(), anyString())).willReturn("AI 생성 답변");
 
 		MvcResult aiReplyResult = mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
+				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
@@ -741,23 +674,18 @@ class BoardPostControllerTest {
 		long replyId = extractFirstReplyId(aiReplyResult.getResponse().getContentAsString());
 
 		mockMvc.perform(put("/api/v1/posts/replies/{id}", replyId)
+				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
-					  "bodyBase64": "%s",
-					  "password": "any"
+					  "bodyBase64": "%s"
 					}
 					""".formatted(encode("수정 시도"))))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("AI_REPLY_LOCKED"));
 
 		mockMvc.perform(delete("/api/v1/posts/replies/{id}", replyId)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "password": "any"
-					}
-					"""))
+				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("AI_REPLY_LOCKED"));
 	}
@@ -765,15 +693,16 @@ class BoardPostControllerTest {
 	@Test
 	void invalidAiProviderShouldReturnBadRequest() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "AI 공급자 테스트")
-				.param("bodyBase64", encode("본문"))
-				.param("password", "secret"))
+				.param("bodyBase64", encode("본문")))
 			.andExpect(status().isCreated())
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
 
 		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
+				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
@@ -787,16 +716,17 @@ class BoardPostControllerTest {
 	@Test
 	void aiReplyShouldBeRejectedForFileConversionRequestPost() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
 				.param("title", "변환 요청")
 				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8)))
-				.param("password", "secret"))
+				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8))))
 			.andExpect(status().isCreated())
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
 
 		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
+				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
@@ -805,6 +735,75 @@ class BoardPostControllerTest {
 					"""))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("AI_REPLY_NOT_ALLOWED"));
+	}
+
+	@Test
+	void batchDeleteWithTokenShouldDeletePosts() throws Exception {
+		MvcResult result1 = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "배치 삭제 글 1")
+				.param("bodyBase64", encode("본문 1")))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		MvcResult result2 = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "배치 삭제 글 2")
+				.param("bodyBase64", encode("본문 2")))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId1 = extractId(result1.getResponse().getContentAsString());
+		long postId2 = extractId(result2.getResponse().getContentAsString());
+
+		mockMvc.perform(post("/api/v1/posts/batch-delete")
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "ids": [%d, %d]
+					}
+					""".formatted(postId1, postId2)))
+			.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/api/v1/posts"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.totalItems").value(0));
+	}
+
+	@Test
+	void batchDeleteWithoutTokenShouldReturn401() throws Exception {
+		mockMvc.perform(post("/api/v1/posts/batch-delete")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "ids": [1, 2]
+					}
+					"""))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void createPostWithoutTokenShouldReturn401() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.param("title", "무단 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void deletePostWithoutTokenShouldReturn401() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "삭제 대상 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(delete("/api/v1/posts/{id}", postId))
+			.andExpect(status().isUnauthorized());
 	}
 
 	private String encode(String value) {

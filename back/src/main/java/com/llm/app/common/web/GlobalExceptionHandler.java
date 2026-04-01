@@ -1,5 +1,6 @@
 package com.llm.app.common.web;
 
+import com.llm.app.auth.InvalidCredentialsException;
 import com.llm.app.board.exception.AiProviderNotConfiguredException;
 import com.llm.app.board.exception.AiReplyGenerationException;
 import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
@@ -11,7 +12,6 @@ import com.llm.app.board.exception.BoardPostNotFoundException;
 import com.llm.app.board.exception.BoardReplyNotFoundException;
 import com.llm.app.board.exception.FileConversionLockedException;
 import com.llm.app.board.exception.InvalidAttachmentRequestException;
-import com.llm.app.board.exception.InvalidBoardPasswordException;
 import com.llm.app.board.exception.InvalidAiProviderException;
 import com.llm.app.board.exception.InvalidEncodedBodyException;
 import com.llm.app.board.exception.InvalidFileConversionRequestException;
@@ -30,20 +30,20 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+	@ExceptionHandler({ InvalidCredentialsException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidCredentials(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", exception.getMessage(), request);
+	}
+
 	@ExceptionHandler({ InvalidEncodedBodyException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidEncodedBody(
 		RuntimeException exception,
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_ENCODED_BODY", exception.getMessage(), request);
-	}
-
-	@ExceptionHandler({ InvalidBoardPasswordException.class })
-	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidPassword(
-		RuntimeException exception,
-		HttpServletRequest request
-	) {
-		return buildResponse(HttpStatus.FORBIDDEN, "INVALID_PASSWORD", exception.getMessage(), request);
 	}
 
 	@ExceptionHandler({ FileConversionLockedException.class })

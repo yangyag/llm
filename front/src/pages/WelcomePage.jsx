@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  batchDeletePosts,
   convertPostToAttachment,
   createAiReply,
   createPost,
@@ -26,13 +27,11 @@ const POST_MODE_OPTIONS = [
 const EMPTY_POST_FORM = {
   title: "",
   body: "",
-  password: "",
   mode: POST_MODES.NORMAL
 };
 
 const EMPTY_REPLY_FORM = {
-  body: "",
-  password: ""
+  body: ""
 };
 
 const DEFAULT_PAGINATION = {
@@ -43,10 +42,6 @@ const DEFAULT_PAGINATION = {
   hasPrevious: false,
   hasNext: false
 };
-
-function isInvalidPasswordError(error) {
-  return error?.code === "INVALID_PASSWORD" || (error?.status === 403 && !error?.code);
-}
 
 function normalizeSearchQuery(value) {
   return value.trim();
@@ -107,7 +102,7 @@ function formatFileSize(size) {
   return `${(size / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-function WelcomePage() {
+function WelcomePage({ authToken, authUsername, onLogout }) {
   const createPostFormId = "create-post-form";
   const initialListState = getListStateFromLocation();
   const [view, setView] = useState("list");
@@ -128,9 +123,7 @@ function WelcomePage() {
   const [postEditAttachmentFile, setPostEditAttachmentFile] = useState(null);
   const [postEditAttachmentInputKey, setPostEditAttachmentInputKey] = useState(0);
   const [removePostAttachment, setRemovePostAttachment] = useState(false);
-  const [replyEditState, setReplyEditState] = useState({ replyId: null, body: "", password: "" });
-  const [postDeletePassword, setPostDeletePassword] = useState("");
-  const [replyDeleteState, setReplyDeleteState] = useState({ replyId: null, password: "" });
+  const [replyEditState, setReplyEditState] = useState({ replyId: null, body: "" });
   const [postActionError, setPostActionError] = useState("");
   const [replyActionError, setReplyActionError] = useState("");
   const [aiReplyError, setAiReplyError] = useState("");
@@ -140,6 +133,7 @@ function WelcomePage() {
   const [aiSubmitting, setAiSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [selectedPostIds, setSelectedPostIds] = useState(new Set());
 
   useEffect(() => {
     function handlePopState() {
@@ -168,6 +162,7 @@ function WelcomePage() {
 
   async function loadPosts(page = currentPage, query = searchQuery) {
     setLoading(true);
+    setSelectedPostIds(new Set());
     setError("");
 
     try {
@@ -232,7 +227,6 @@ function WelcomePage() {
       setPostEditForm({
         title: payload.title,
         body: payload.body,
-        password: "",
         mode: payload.mode ?? POST_MODES.NORMAL
       });
       setPostEditAttachmentFile(null);
@@ -275,9 +269,7 @@ function WelcomePage() {
     setView("detail");
     setPostActionMode("none");
     setReplyForm(EMPTY_REPLY_FORM);
-    setReplyEditState({ replyId: null, body: "", password: "" });
-    setReplyDeleteState({ replyId: null, password: "" });
-    setPostDeletePassword("");
+    setReplyEditState({ replyId: null, body: "" });
     setPostEditAttachmentFile(null);
     setPostEditAttachmentInputKey((prev) => prev + 1);
     setRemovePostAttachment(false);
@@ -297,28 +289,23 @@ function WelcomePage() {
     setPostEditForm({
       title: selectedPost.title,
       body: selectedPost.body,
-      password: "",
       mode: selectedPost.mode ?? POST_MODES.NORMAL
     });
     setPostEditAttachmentFile(null);
     setPostEditAttachmentInputKey((prev) => prev + 1);
     setRemovePostAttachment(false);
-    setPostDeletePassword("");
     setPostActionError("");
     setPostActionMode("edit");
   }
 
   function openPostDeletePanel() {
-    setPostDeletePassword("");
     setPostActionError("");
     setPostActionMode("delete");
   }
 
   function closePostActionPanel() {
     setPostActionMode("none");
-    setPostDeletePassword("");
     setPostActionError("");
-    setPostEditForm((prev) => ({ ...prev, password: "" }));
     setPostEditAttachmentFile(null);
     setPostEditAttachmentInputKey((prev) => prev + 1);
     setRemovePostAttachment(false);
@@ -326,28 +313,15 @@ function WelcomePage() {
 
   function openReplyEditPanel(reply) {
     setReplyActionError("");
-    setReplyDeleteState({ replyId: null, password: "" });
     setReplyEditState({
       replyId: reply.id,
-      body: reply.body,
-      password: ""
+      body: reply.body
     });
-  }
-
-  function openReplyDeletePanel(replyId) {
-    setReplyActionError("");
-    setReplyEditState({ replyId: null, body: "", password: "" });
-    setReplyDeleteState({ replyId, password: "" });
   }
 
   function closeReplyEditPanel() {
     setReplyActionError("");
-    setReplyEditState({ replyId: null, body: "", password: "" });
-  }
-
-  function closeReplyDeletePanel() {
-    setReplyActionError("");
-    setReplyDeleteState({ replyId: null, password: "" });
+    setReplyEditState({ replyId: null, body: "" });
   }
 
   async function handleCreatePost(event) {
@@ -360,7 +334,7 @@ function WelcomePage() {
       const created = await createPost({
         ...postForm,
         attachment: postAttachmentFile
-      });
+      }, authToken);
       setPostForm(EMPTY_POST_FORM);
       setPostAttachmentFile(null);
       setPostAttachmentInputKey((prev) => prev + 1);
@@ -391,20 +365,17 @@ function WelcomePage() {
         ...postEditForm,
         attachment: postEditAttachmentFile,
         removeAttachment: removePostAttachment
-      });
+      }, authToken);
       setSelectedPost(updated);
       setPostActionMode("none");
       setPostActionError("");
-      setPostEditForm((prev) => ({ ...prev, password: "" }));
       setPostEditAttachmentFile(null);
       setPostEditAttachmentInputKey((prev) => prev + 1);
       setRemovePostAttachment(false);
       await loadPosts(currentPage);
       setMessage("게시글을 수정했습니다.");
     } catch (submitError) {
-      if (isInvalidPasswordError(submitError)) {
-        setPostActionError("비밀번호가 일치하지 않습니다.");
-      } else if (submitError?.code === "FILE_CONVERSION_LOCKED") {
+      if (submitError?.code === "FILE_CONVERSION_LOCKED") {
         setError("변환 완료된 파일 변환 요청 글은 수정할 수 없습니다.");
       } else {
         setError(submitError.message);
@@ -414,30 +385,20 @@ function WelcomePage() {
     }
   }
 
-  async function handleDeletePost(event) {
-    event.preventDefault();
-    if (!selectedPostId) {
-      return;
-    }
+  async function handleDeletePost() {
+    if (!selectedPostId) return;
 
     setSubmitting(true);
     setError("");
     setMessage("");
-    setPostActionError("");
 
     try {
-      await deletePost(selectedPostId, postDeletePassword);
-      setPostDeletePassword("");
-      setPostActionError("");
+      await deletePost(selectedPostId, authToken);
       await loadPosts(currentPage);
       openList();
       setMessage("게시글을 삭제했습니다.");
     } catch (submitError) {
-      if (isInvalidPasswordError(submitError)) {
-        setPostActionError("비밀번호가 일치하지 않습니다.");
-      } else {
-        setError(submitError.message);
-      }
+      setError(submitError.message);
     } finally {
       setSubmitting(false);
     }
@@ -454,7 +415,7 @@ function WelcomePage() {
     setMessage("");
 
     try {
-      const detail = await createReply(selectedPostId, replyForm);
+      const detail = await createReply(selectedPostId, replyForm, authToken);
       setSelectedPost(detail);
       setReplyForm(EMPTY_REPLY_FORM);
       await loadPosts(currentPage);
@@ -479,49 +440,35 @@ function WelcomePage() {
 
     try {
       const detail = await updateReply(replyEditState.replyId, {
-        body: replyEditState.body,
-        password: replyEditState.password
-      });
+        body: replyEditState.body
+      }, authToken);
       setSelectedPost(detail);
       setReplyActionError("");
-      setReplyEditState({ replyId: null, body: "", password: "" });
+      setReplyEditState({ replyId: null, body: "" });
       await loadPosts(currentPage);
       setMessage("답변을 수정했습니다.");
     } catch (submitError) {
-      if (isInvalidPasswordError(submitError)) {
-        setReplyActionError("비밀번호가 일치하지 않습니다.");
-      } else {
-        setError(submitError.message);
-      }
+      setError(submitError.message);
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function handleDeleteReply(event) {
-    event.preventDefault();
-    if (!replyDeleteState.replyId) {
-      return;
-    }
+  async function handleDeleteReply(replyId) {
+    if (!replyId) return;
+    if (!window.confirm("이 답변을 삭제하시겠습니까?")) return;
 
     setSubmitting(true);
     setError("");
     setMessage("");
-    setReplyActionError("");
 
     try {
-      const detail = await deleteReply(replyDeleteState.replyId, replyDeleteState.password);
-      setSelectedPost(detail);
-      setReplyActionError("");
-      setReplyDeleteState({ replyId: null, password: "" });
+      await deleteReply(replyId, authToken);
+      await loadPostDetail(selectedPostId);
       await loadPosts(currentPage);
       setMessage("답변을 삭제했습니다.");
     } catch (submitError) {
-      if (isInvalidPasswordError(submitError)) {
-        setReplyActionError("비밀번호가 일치하지 않습니다.");
-      } else {
-        setError(submitError.message);
-      }
+      setError(submitError.message);
     } finally {
       setSubmitting(false);
     }
@@ -538,7 +485,7 @@ function WelcomePage() {
     setMessage("");
 
     try {
-      const detail = await createAiReply(selectedPostId, selectedAiProvider);
+      const detail = await createAiReply(selectedPostId, selectedAiProvider, authToken);
       setSelectedPost(detail);
       await loadPosts(currentPage);
       setMessage("AI 답변을 등록했습니다.");
@@ -559,12 +506,53 @@ function WelcomePage() {
     setMessage("");
 
     try {
-      const detail = await convertPostToAttachment(selectedPostId);
+      const detail = await convertPostToAttachment(selectedPostId, authToken);
       setSelectedPost(detail);
       await loadPosts(currentPage);
       setMessage("파일 변환을 완료했습니다.");
     } catch (submitError) {
       setError(submitError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function togglePostSelection(postId, event) {
+    event.stopPropagation();
+    setSelectedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) {
+        next.delete(postId);
+      } else {
+        next.add(postId);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedPostIds.size === posts.length) {
+      setSelectedPostIds(new Set());
+    } else {
+      setSelectedPostIds(new Set(posts.map((p) => p.id)));
+    }
+  }
+
+  async function handleBatchDelete() {
+    if (selectedPostIds.size === 0) return;
+    if (!window.confirm(`선택한 ${selectedPostIds.size}개의 게시글을 삭제하시겠습니까?`)) return;
+
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await batchDeletePosts([...selectedPostIds], authToken);
+      setSelectedPostIds(new Set());
+      await loadPosts(currentPage, searchQuery);
+      setMessage(`${selectedPostIds.size}개의 게시글을 삭제했습니다.`);
+    } catch (batchError) {
+      setError(batchError.message);
     } finally {
       setSubmitting(false);
     }
@@ -581,6 +569,14 @@ function WelcomePage() {
             <h1>답변 가능한 게시판</h1>
           </div>
           <div className="board-actions">
+            {authUsername ? (
+              <span className="auth-username">{authUsername}</span>
+            ) : null}
+            {onLogout ? (
+              <button type="button" className="ghost-button" onClick={onLogout}>
+                로그아웃
+              </button>
+            ) : null}
             <button type="button" className="ghost-button" onClick={openList}>
               목록
             </button>
@@ -647,6 +643,28 @@ function WelcomePage() {
                   </button>
                 </div>
               </form>
+              {authUsername && posts.length > 0 && !loading ? (
+                <div className="batch-action-bar">
+                  <label className="checkbox-field batch-select-all">
+                    <input
+                      type="checkbox"
+                      checked={posts.length > 0 && selectedPostIds.size === posts.length}
+                      onChange={toggleSelectAll}
+                    />
+                    <span>전체 선택</span>
+                  </label>
+                  {selectedPostIds.size > 0 ? (
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={handleBatchDelete}
+                      disabled={submitting}
+                    >
+                      {submitting ? "삭제 중..." : `선택 삭제 (${selectedPostIds.size})`}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
               {loading ? (
                 <p className="empty-state">불러오는 중...</p>
               ) : posts.length === 0 ? (
@@ -656,23 +674,32 @@ function WelcomePage() {
               ) : (
                 <div className="post-list">
                   {posts.map((post) => (
-                    <button
-                      key={post.id}
-                      type="button"
-                      className="post-list-item"
-                      onClick={() => openDetail(post.id)}
-                    >
-                      <div className="post-title-row">
-                        <strong>{post.title}</strong>
-                        <span className={`post-mode-badge${isFileConversionMode(post.mode) ? " file" : ""}`}>
-                          {getPostModeLabel(post.mode)}
-                        </span>
-                        {post.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
-                        {post.hasAttachment ? <span className="attachment-badge">첨부</span> : null}
-                      </div>
-                      <span>답변 {post.replyCount}개</span>
-                      <time>{new Date(post.createdAt).toLocaleString()}</time>
-                    </button>
+                    <div key={post.id} className="post-list-item-row">
+                      {authUsername ? (
+                        <input
+                          type="checkbox"
+                          className="post-checkbox"
+                          checked={selectedPostIds.has(post.id)}
+                          onChange={(event) => togglePostSelection(post.id, event)}
+                        />
+                      ) : null}
+                      <button
+                        type="button"
+                        className="post-list-item"
+                        onClick={() => openDetail(post.id)}
+                      >
+                        <div className="post-title-row">
+                          <strong>{post.title}</strong>
+                          <span className={`post-mode-badge${isFileConversionMode(post.mode) ? " file" : ""}`}>
+                            {getPostModeLabel(post.mode)}
+                          </span>
+                          {post.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
+                          {post.hasAttachment ? <span className="attachment-badge">첨부</span> : null}
+                        </div>
+                        <span>답변 {post.replyCount}개</span>
+                        <time>{new Date(post.createdAt).toLocaleString()}</time>
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -785,16 +812,6 @@ function WelcomePage() {
                 />
               </label>
               <p className="section-meta">{getPostBodyHelp(postForm.mode)}</p>
-              <label className="field">
-                <span>비밀번호</span>
-                <input
-                  type="password"
-                  value={postForm.password}
-                  onChange={(event) => setPostForm((prev) => ({ ...prev, password: event.target.value }))}
-                  maxLength={100}
-                  required
-                />
-              </label>
               {isFileConversionMode(postForm.mode) ? (
                 <p className="section-meta">파일 변환 요청 모드에서는 결과 ZIP 파일만 생성되며, 일반 첨부파일은 업로드하지 않습니다.</p>
               ) : (
@@ -952,19 +969,6 @@ function WelcomePage() {
                         />
                       </label>
                       <p className="section-meta">{getPostBodyHelp(postEditForm.mode)}</p>
-                      <label className="field">
-                        <span>비밀번호</span>
-                        <input
-                          type="password"
-                          value={postEditForm.password}
-                          onChange={(event) => {
-                            setPostActionError("");
-                            setPostEditForm((prev) => ({ ...prev, password: event.target.value }));
-                          }}
-                          maxLength={100}
-                          required
-                        />
-                      </label>
                       {selectedPost.attachment ? (
                         <div className="attachment-panel">
                           <span className="attachment-label">현재 첨부파일</span>
@@ -1050,30 +1054,18 @@ function WelcomePage() {
                   ) : null}
 
                   {postActionMode === "delete" ? (
-                    <form className="form-grid compact-form action-panel" onSubmit={handleDeletePost}>
-                      <label className="field">
-                        <span>비밀번호 확인</span>
-                        <input
-                          type="password"
-                          value={postDeletePassword}
-                          onChange={(event) => {
-                            setPostActionError("");
-                            setPostDeletePassword(event.target.value);
-                          }}
-                          maxLength={100}
-                          required
-                        />
-                      </label>
+                    <div className="action-panel">
+                      <p>이 게시글을 삭제하시겠습니까?</p>
                       {postActionError ? <p className="panel-error">{postActionError}</p> : null}
                       <div className="action-form-actions">
-                        <button type="submit" className="danger-button" disabled={submitting}>
+                        <button type="button" className="danger-button" onClick={handleDeletePost} disabled={submitting}>
                           게시글 삭제
                         </button>
                         <button type="button" className="ghost-button" onClick={closePostActionPanel}>
                           취소
                         </button>
                       </div>
-                    </form>
+                    </div>
                   ) : null}
                 </article>
 
@@ -1090,16 +1082,6 @@ function WelcomePage() {
                           value={replyForm.body}
                           onChange={(event) => setReplyForm((prev) => ({ ...prev, body: event.target.value }))}
                           rows={6}
-                          required
-                        />
-                      </label>
-                      <label className="field">
-                        <span>비밀번호</span>
-                        <input
-                          type="password"
-                          value={replyForm.password}
-                          onChange={(event) => setReplyForm((prev) => ({ ...prev, password: event.target.value }))}
-                          maxLength={100}
                           required
                         />
                       </label>
@@ -1171,7 +1153,8 @@ function WelcomePage() {
                               <button
                                 type="button"
                                 className="danger-button"
-                                onClick={() => openReplyDeletePanel(reply.id)}
+                                onClick={() => handleDeleteReply(reply.id)}
+                                disabled={submitting}
                               >
                                 삭제
                               </button>
@@ -1191,52 +1174,12 @@ function WelcomePage() {
                                   required
                                 />
                               </label>
-                              <label className="field">
-                                <span>비밀번호</span>
-                                <input
-                                  type="password"
-                                  value={replyEditState.password}
-                                  onChange={(event) => {
-                                    setReplyActionError("");
-                                    setReplyEditState((prev) => ({ ...prev, password: event.target.value }));
-                                  }}
-                                  maxLength={100}
-                                  required
-                                />
-                              </label>
                               {replyActionError ? <p className="panel-error">{replyActionError}</p> : null}
                               <div className="action-form-actions">
                                 <button type="submit" className="ghost-button" disabled={submitting}>
                                   답변 수정
                                 </button>
                                 <button type="button" className="ghost-button" onClick={closeReplyEditPanel}>
-                                  취소
-                                </button>
-                              </div>
-                            </form>
-                          ) : null}
-
-                          {!reply.ai && replyDeleteState.replyId === reply.id ? (
-                            <form className="form-grid compact-form action-panel" onSubmit={handleDeleteReply}>
-                              <label className="field">
-                                <span>삭제 비밀번호</span>
-                                <input
-                                  type="password"
-                                  value={replyDeleteState.password}
-                                  onChange={(event) => {
-                                    setReplyActionError("");
-                                    setReplyDeleteState((prev) => ({ ...prev, password: event.target.value }));
-                                  }}
-                                  maxLength={100}
-                                  required
-                                />
-                              </label>
-                              {replyActionError ? <p className="panel-error">{replyActionError}</p> : null}
-                              <div className="action-form-actions">
-                                <button type="submit" className="danger-button" disabled={submitting}>
-                                  답변 삭제
-                                </button>
-                                <button type="button" className="ghost-button" onClick={closeReplyDeletePanel}>
                                   취소
                                 </button>
                               </div>

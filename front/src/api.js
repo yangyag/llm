@@ -18,12 +18,11 @@ function encodeBodyBase64(value) {
   return fromUint8Array(new TextEncoder().encode(value));
 }
 
-function buildPostFormData({ title, body, password, attachment, removeAttachment = false, mode = "NORMAL" }) {
+function buildPostFormData({ title, body, attachment, removeAttachment = false, mode = "NORMAL" }) {
   const formData = new FormData();
   formData.append("title", title);
   formData.append("mode", mode);
   formData.append("bodyBase64", mode === "FILE_CONVERSION_REQUEST" ? body : encodeBodyBase64(body));
-  formData.append("password", password);
 
   if (attachment && mode !== "FILE_CONVERSION_REQUEST") {
     formData.append("attachment", attachment);
@@ -38,13 +37,14 @@ function buildPostFormData({ title, body, password, attachment, removeAttachment
 
 async function requestJson(path, options = {}) {
   const isFormData = options.body instanceof FormData;
+  const { headers: optionHeaders, ...restOptions } = options;
   const response = await fetch(withApiBase(path), {
     headers: {
       Accept: "application/json",
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...(options.headers ?? {})
+      ...(optionHeaders ?? {})
     },
-    ...options
+    ...restOptions
   });
 
   if (!response.ok) {
@@ -75,58 +75,61 @@ export function getPost(postId) {
   return requestJson(`/api/v1/posts/${postId}`);
 }
 
-export function createPost({ title, body, password, attachment, mode = "NORMAL" }) {
+export function createPost({ title, body, attachment, mode = "NORMAL" }, token) {
   return requestJson("/api/v1/posts", {
     method: "POST",
-    body: buildPostFormData({ title, body, password, attachment, mode })
+    headers: { Authorization: `Bearer ${token}` },
+    body: buildPostFormData({ title, body, attachment, mode })
   });
 }
 
-export function updatePost(postId, { title, body, password, attachment, removeAttachment = false, mode = "NORMAL" }) {
+export function updatePost(postId, { title, body, attachment, removeAttachment = false, mode = "NORMAL" }, token) {
   return requestJson(`/api/v1/posts/${postId}`, {
     method: "PUT",
-    body: buildPostFormData({ title, body, password, attachment, removeAttachment, mode })
+    headers: { Authorization: `Bearer ${token}` },
+    body: buildPostFormData({ title, body, attachment, removeAttachment, mode })
   });
 }
 
-export function deletePost(postId, password) {
+export function deletePost(postId, token) {
   return requestJson(`/api/v1/posts/${postId}`, {
     method: "DELETE",
-    body: JSON.stringify({ password })
+    headers: { Authorization: `Bearer ${token}` }
   });
 }
 
-export function createReply(postId, { body, password }) {
+export function createReply(postId, { body }, token) {
   return requestJson(`/api/v1/posts/${postId}/replies`, {
     method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({
-      bodyBase64: encodeBodyBase64(body),
-      password
+      bodyBase64: encodeBodyBase64(body)
     })
   });
 }
 
-export function createAiReply(postId, provider) {
+export function createAiReply(postId, provider, token) {
   return requestJson(`/api/v1/posts/${postId}/ai-replies`, {
     method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({ provider })
   });
 }
 
-export function updateReply(replyId, { body, password }) {
+export function updateReply(replyId, { body }, token) {
   return requestJson(`/api/v1/posts/replies/${replyId}`, {
     method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({
-      bodyBase64: encodeBodyBase64(body),
-      password
+      bodyBase64: encodeBodyBase64(body)
     })
   });
 }
 
-export function deleteReply(replyId, password) {
+export function deleteReply(replyId, token) {
   return requestJson(`/api/v1/posts/replies/${replyId}`, {
     method: "DELETE",
-    body: JSON.stringify({ password })
+    headers: { Authorization: `Bearer ${token}` }
   });
 }
 
@@ -134,8 +137,30 @@ export function getApiUrl(path) {
   return withApiBase(path);
 }
 
-export function convertPostToAttachment(postId) {
+export function convertPostToAttachment(postId, token) {
   return requestJson(`/api/v1/posts/${postId}/conversion`, {
-    method: "POST"
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+export function login(username, password) {
+  return requestJson("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password })
+  });
+}
+
+export function getMe(token) {
+  return requestJson("/api/v1/auth/me", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+export function batchDeletePosts(ids, token) {
+  return requestJson("/api/v1/posts/batch-delete", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ ids })
   });
 }

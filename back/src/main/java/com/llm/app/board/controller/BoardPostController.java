@@ -1,6 +1,8 @@
 package com.llm.app.board.controller;
 
-import com.llm.app.board.dto.BoardPasswordRequest;
+import com.llm.app.auth.InvalidCredentialsException;
+import com.llm.app.auth.JwtProvider;
+import com.llm.app.board.dto.BatchDeleteRequest;
 import com.llm.app.board.dto.BoardPostDetailResponse;
 import com.llm.app.board.dto.BoardPostListResponse;
 import com.llm.app.board.dto.CreateAiReplyRequest;
@@ -27,14 +29,24 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 @RestController
 @RequestMapping("/api/v1/posts")
 public class BoardPostController {
 	private final BoardService boardService;
+	private final JwtProvider jwtProvider;
 
-	public BoardPostController(BoardService boardService) {
+	public BoardPostController(BoardService boardService, JwtProvider jwtProvider) {
 		this.boardService = boardService;
+		this.jwtProvider = jwtProvider;
+	}
+
+	private void requireAuth(String authHeader) {
+		if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+			throw new InvalidCredentialsException("Authentication required");
+		}
+		jwtProvider.validateAndGetUsername(authHeader.substring(7));
 	}
 
 	@GetMapping
@@ -52,44 +64,72 @@ public class BoardPostController {
 
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@ResponseStatus(HttpStatus.CREATED)
-	public BoardPostDetailResponse createPost(@Valid @ModelAttribute CreateBoardPostRequest request) {
+	public BoardPostDetailResponse createPost(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
+		@Valid @ModelAttribute CreateBoardPostRequest request
+	) {
+		requireAuth(authHeader);
 		return boardService.createPost(request);
 	}
 
 	@PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public BoardPostDetailResponse updatePost(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long id,
 		@Valid @ModelAttribute UpdateBoardPostRequest request
 	) {
+		requireAuth(authHeader);
 		return boardService.updatePost(id, request);
 	}
 
 	@DeleteMapping("/{id}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void deletePost(@PathVariable Long id, @Valid @RequestBody BoardPasswordRequest request) {
-		boardService.deletePost(id, request);
+	public void deletePost(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
+		@PathVariable Long id
+	) {
+		requireAuth(authHeader);
+		boardService.deletePost(id);
+	}
+
+	@PostMapping("/batch-delete")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void batchDeletePosts(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
+		@Valid @RequestBody BatchDeleteRequest request
+	) {
+		requireAuth(authHeader);
+		boardService.batchDeletePosts(request.ids());
 	}
 
 	@PostMapping("/{id}/replies")
 	@ResponseStatus(HttpStatus.CREATED)
 	public BoardPostDetailResponse createReply(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long id,
 		@Valid @RequestBody CreateBoardReplyRequest request
 	) {
+		requireAuth(authHeader);
 		return boardService.createReply(id, request);
 	}
 
 	@PostMapping("/{id}/ai-replies")
 	@ResponseStatus(HttpStatus.CREATED)
 	public BoardPostDetailResponse createAiReply(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long id,
 		@Valid @RequestBody CreateAiReplyRequest request
 	) {
+		requireAuth(authHeader);
 		return boardService.createAiReply(id, request);
 	}
 
 	@PostMapping("/{id}/conversion")
-	public BoardPostDetailResponse convertPostToAttachment(@PathVariable Long id) {
+	public BoardPostDetailResponse convertPostToAttachment(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
+		@PathVariable Long id
+	) {
+		requireAuth(authHeader);
 		return boardService.convertPostToAttachment(id);
 	}
 
@@ -115,17 +155,21 @@ public class BoardPostController {
 
 	@PutMapping("/replies/{replyId}")
 	public BoardPostDetailResponse updateReply(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long replyId,
 		@Valid @RequestBody UpdateBoardReplyRequest request
 	) {
+		requireAuth(authHeader);
 		return boardService.updateReply(replyId, request);
 	}
 
 	@DeleteMapping("/replies/{replyId}")
-	public BoardPostDetailResponse deleteReply(
-		@PathVariable Long replyId,
-		@Valid @RequestBody BoardPasswordRequest request
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteReply(
+		@RequestHeader(value = "Authorization", required = false) String authHeader,
+		@PathVariable Long replyId
 	) {
-		return boardService.deleteReply(replyId, request);
+		requireAuth(authHeader);
+		boardService.deleteReply(replyId);
 	}
 }

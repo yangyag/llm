@@ -15,10 +15,6 @@ public class CreateBoardPostRequest {
 
 	private BoardPostMode mode = BoardPostMode.NORMAL;
 
-	@NotBlank(message = "password is required")
-	@Size(max = 100, message = "password must be 100 characters or less")
-	private String password;
-
 	private MultipartFile attachment;
 
 	public String getTitle() {
@@ -45,14 +41,6 @@ public class CreateBoardPostRequest {
 		if (mode != null) {
 			this.mode = mode;
 		}
-	}
-
-	public String getPassword() {
-		return password;
-	}
-
-	public void setPassword(String password) {
-		this.password = password;
 	}
 
 	public MultipartFile getAttachment() {

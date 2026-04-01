@@ -31,9 +31,6 @@ public class BoardReply {
 	@Column(name = "ai_provider", length = 32)
 	private String aiProvider;
 
-	@Column(name = "password_hash", nullable = false, length = 120)
-	private String passwordHash;
-
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -43,14 +40,13 @@ public class BoardReply {
 	protected BoardReply() {
 	}
 
-	public BoardReply(BoardPost post, String body, String passwordHash, Instant createdAt, Instant updatedAt) {
-		this(post, body, passwordHash, createdAt, updatedAt, false, null);
+	public BoardReply(BoardPost post, String body, Instant createdAt, Instant updatedAt) {
+		this(post, body, createdAt, updatedAt, false, null);
 	}
 
 	public BoardReply(
 		BoardPost post,
 		String body,
-		String passwordHash,
 		Instant createdAt,
 		Instant updatedAt,
 		boolean ai,
@@ -60,7 +56,6 @@ public class BoardReply {
 		this.body = body;
 		this.ai = ai;
 		this.aiProvider = aiProvider;
-		this.passwordHash = passwordHash;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
 	}
@@ -75,10 +70,6 @@ public class BoardReply {
 
 	public String getBody() {
 		return body;
-	}
-
-	public String getPasswordHash() {
-		return passwordHash;
 	}
 
 	public boolean isAi() {

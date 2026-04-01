@@ -89,6 +89,7 @@ docker run -d --name llm-front --network llm-net -p 8083:80 yangyag2/llm-front:l
 - EC2 배포용 compose와 `docker run` 모두 front/back/db를 같은 Docker 네트워크에 올리고, 백엔드는 내부 `llm-db:5432`로만 접속합니다.
 
 ## 현재 범위
+- 관리자 로그인 ID는 영문만 허용합니다.
 - 익명 게시글 작성, 목록 조회, 상세 조회
 - 게시글 첨부파일 1개 업로드/교체/삭제/다운로드
 - 파일 변환 요청 게시글 작성 및 ZIP 다운로드

@@ -2,7 +2,7 @@ package com.llm.app.board.service;
 
 import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
-import com.llm.app.board.dto.BoardPasswordRequest;
+import java.util.List;
 import com.llm.app.board.dto.BoardPostDetailResponse;
 import com.llm.app.board.dto.BoardPostListResponse;
 import com.llm.app.board.dto.CreateAiReplyRequest;
@@ -17,7 +17,6 @@ import com.llm.app.board.exception.BoardReplyNotFoundException;
 import com.llm.app.board.exception.BoardAttachmentNotFoundException;
 import com.llm.app.board.exception.FileConversionLockedException;
 import com.llm.app.board.exception.InvalidAttachmentRequestException;
-import com.llm.app.board.exception.InvalidBoardPasswordException;
 import com.llm.app.board.exception.InvalidFileConversionRequestException;
 import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
@@ -30,10 +29,8 @@ import com.llm.app.board.repository.BoardPostSummaryProjection;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -49,7 +46,6 @@ public class BoardService {
 	private final BoardAttachmentRepository boardAttachmentRepository;
 	private final BoardContentCodec boardContentCodec;
 	private final BoardMapper boardMapper;
-	private final PasswordEncoder passwordEncoder;
 	private final AiReplyGenerator aiReplyGenerator;
 	private final AttachmentStorageService attachmentStorageService;
 
@@ -59,7 +55,6 @@ public class BoardService {
 		BoardAttachmentRepository boardAttachmentRepository,
 		BoardContentCodec boardContentCodec,
 		BoardMapper boardMapper,
-		PasswordEncoder passwordEncoder,
 		AiReplyGenerator aiReplyGenerator,
 		AttachmentStorageService attachmentStorageService
 	) {
@@ -68,7 +63,6 @@ public class BoardService {
 		this.boardAttachmentRepository = boardAttachmentRepository;
 		this.boardContentCodec = boardContentCodec;
 		this.boardMapper = boardMapper;
-		this.passwordEncoder = passwordEncoder;
 		this.aiReplyGenerator = aiReplyGenerator;
 		this.attachmentStorageService = attachmentStorageService;
 	}
@@ -97,7 +91,6 @@ public class BoardService {
 			request.getTitle().trim(),
 			resolvePostBody(mode, request.getBodyBase64()),
 			mode,
-			passwordEncoder.encode(request.getPassword()),
 			now,
 			now
 		));
@@ -108,7 +101,6 @@ public class BoardService {
 	public BoardPostDetailResponse updatePost(Long id, UpdateBoardPostRequest request) {
 		BoardPost post = findPostWithReplies(id);
 		ensurePostIsEditable(post);
-		verifyPassword(request.getPassword(), post.getPasswordHash());
 		BoardPostMode mode = request.getMode();
 		validateAttachmentRules(mode, request.getAttachment(), request.isRemoveAttachment(), findAttachment(post.getId()));
 		post.update(
@@ -121,11 +113,20 @@ public class BoardService {
 		return toDetailResponse(post);
 	}
 
-	public void deletePost(Long id, BoardPasswordRequest request) {
+	public void deletePost(Long id) {
 		BoardPost post = findPostWithReplies(id);
-		verifyPassword(request.password(), post.getPasswordHash());
 		findAttachment(post.getId()).ifPresent(this::deleteAttachment);
 		boardPostRepository.delete(post);
+	}
+
+	public void batchDeletePosts(List<Long> ids) {
+		for (Long id : ids) {
+			boardPostRepository.findById(id).ifPresent(post -> {
+				boardAttachmentRepository.findByPost_Id(post.getId())
+					.ifPresent(this::deleteAttachment);
+				boardPostRepository.delete(post);
+			});
+		}
 	}
 
 	public BoardPostDetailResponse createReply(Long postId, CreateBoardReplyRequest request) {
@@ -134,7 +135,6 @@ public class BoardService {
 		BoardReply reply = new BoardReply(
 			post,
 			boardContentCodec.decodeBody(request.bodyBase64()),
-			passwordEncoder.encode(request.password()),
 			now,
 			now
 		);
@@ -183,7 +183,6 @@ public class BoardService {
 		BoardReply reply = new BoardReply(
 			post,
 			generatedReply,
-			passwordEncoder.encode(UUID.randomUUID().toString()),
 			now,
 			now,
 			true,
@@ -197,20 +196,16 @@ public class BoardService {
 	public BoardPostDetailResponse updateReply(Long replyId, UpdateBoardReplyRequest request) {
 		BoardReply reply = findReply(replyId);
 		ensureReplyIsEditable(reply);
-		verifyPassword(request.password(), reply.getPasswordHash());
 		reply.update(boardContentCodec.decodeBody(request.bodyBase64()), Instant.now());
 		return toDetailResponse(findPostWithReplies(reply.getPost().getId()));
 	}
 
-	public BoardPostDetailResponse deleteReply(Long replyId, BoardPasswordRequest request) {
+	public void deleteReply(Long replyId) {
 		BoardReply reply = findReply(replyId);
 		ensureReplyIsEditable(reply);
-		verifyPassword(request.password(), reply.getPasswordHash());
-		Long postId = reply.getPost().getId();
 		reply.getPost().getReplies().remove(reply);
 		boardReplyRepository.delete(reply);
 		boardReplyRepository.flush();
-		return toDetailResponse(findPostWithReplies(postId));
 	}
 
 	@Transactional(readOnly = true)
@@ -234,12 +229,6 @@ public class BoardService {
 	private BoardReply findReply(Long id) {
 		return boardReplyRepository.findById(id)
 			.orElseThrow(() -> new BoardReplyNotFoundException(id));
-	}
-
-	private void verifyPassword(String rawPassword, String passwordHash) {
-		if (!passwordEncoder.matches(rawPassword, passwordHash)) {
-			throw new InvalidBoardPasswordException();
-		}
 	}
 
 	private void ensureReplyIsEditable(BoardReply reply) {
