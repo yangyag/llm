@@ -15,6 +15,9 @@ import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidAiProviderException;
 import com.llm.app.board.exception.InvalidEncodedBodyException;
 import com.llm.app.board.exception.InvalidFileConversionRequestException;
+import com.llm.app.board.exception.InvalidUploadSessionRequestException;
+import com.llm.app.board.exception.UploadSessionNotFoundException;
+import com.llm.app.board.exception.UploadSessionStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
@@ -94,6 +97,22 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_FILE_CONVERSION_REQUEST", exception.getMessage(), request);
 	}
 
+	@ExceptionHandler({ InvalidUploadSessionRequestException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidUploadSessionRequest(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_UPLOAD_SESSION_REQUEST", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ UploadSessionStateException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleUploadSessionState(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.CONFLICT, "UPLOAD_SESSION_STATE_ERROR", exception.getMessage(), request);
+	}
+
 	@ExceptionHandler({ AiProviderNotConfiguredException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiProviderNotConfigured(
 		RuntimeException exception,
@@ -110,7 +129,12 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.BAD_GATEWAY, "AI_REPLY_GENERATION_FAILED", exception.getMessage(), request);
 	}
 
-	@ExceptionHandler({ BoardPostNotFoundException.class, BoardReplyNotFoundException.class, BoardAttachmentNotFoundException.class })
+	@ExceptionHandler({
+		BoardPostNotFoundException.class,
+		BoardReplyNotFoundException.class,
+		BoardAttachmentNotFoundException.class,
+		UploadSessionNotFoundException.class
+	})
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleBoardNotFound(
 		RuntimeException exception,
 		HttpServletRequest request

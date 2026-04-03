@@ -17,3 +17,5 @@ back/frontend-local-artifacts/
 
 # Local utility scripts
 etc/*.py
+/upload_zip_post.py
+/__pycache__/

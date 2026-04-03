@@ -16,8 +16,8 @@ import com.llm.app.board.exception.BoardPostNotFoundException;
 import com.llm.app.board.exception.BoardReplyNotFoundException;
 import com.llm.app.board.exception.BoardAttachmentNotFoundException;
 import com.llm.app.board.exception.FileConversionLockedException;
-import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidFileConversionRequestException;
+import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardPostMode;
@@ -86,7 +86,7 @@ public class BoardService {
 	public BoardPostDetailResponse createPost(CreateBoardPostRequest request) {
 		Instant now = Instant.now();
 		BoardPostMode mode = request.getMode();
-		validateAttachmentRules(mode, request.getAttachment(), false, Optional.empty());
+		validateAttachmentRules(mode);
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
 			resolvePostBody(mode, request.getBodyBase64()),
@@ -102,7 +102,7 @@ public class BoardService {
 		BoardPost post = findPostWithReplies(id);
 		ensurePostIsEditable(post);
 		BoardPostMode mode = request.getMode();
-		validateAttachmentRules(mode, request.getAttachment(), request.isRemoveAttachment(), findAttachment(post.getId()));
+		validateAttachmentRules(mode);
 		post.update(
 			request.getTitle().trim(),
 			resolvePostBody(mode, request.getBodyBase64()),
@@ -141,35 +141,6 @@ public class BoardService {
 		post.getReplies().add(reply);
 		boardReplyRepository.saveAndFlush(reply);
 		return toDetailResponse(findPostWithReplies(postId));
-	}
-
-	public BoardPostDetailResponse convertPostToAttachment(Long postId) {
-		BoardPost post = findPostWithReplies(postId);
-		if (post.getMode() != BoardPostMode.FILE_CONVERSION_REQUEST) {
-			throw new InvalidFileConversionRequestException("conversion is only allowed for file conversion request posts");
-		}
-
-		Optional<BoardAttachment> existingAttachment = findAttachment(postId);
-		if (existingAttachment.isPresent()) {
-			return toDetailResponse(post);
-		}
-
-		byte[] zipBytes = boardContentCodec.decodeBinary(post.getBody());
-		AttachmentStorageService.StoredAttachment storedAttachment = attachmentStorageService.store(
-			"post-" + postId + ".zip",
-			"application/zip",
-			zipBytes
-		);
-		boardAttachmentRepository.saveAndFlush(new BoardAttachment(
-			post,
-			storedAttachment.originalFilename(),
-			storedAttachment.storedFilename(),
-			storedAttachment.storagePath(),
-			storedAttachment.contentType(),
-			storedAttachment.size(),
-			Instant.now()
-		));
-		return toDetailResponse(post);
 	}
 
 	public BoardPostDetailResponse createAiReply(Long postId, CreateAiReplyRequest request) {
@@ -260,29 +231,18 @@ public class BoardService {
 	}
 
 	private String resolvePostBody(BoardPostMode mode, String bodyBase64) {
-		if (mode == BoardPostMode.FILE_CONVERSION_REQUEST) {
-			return bodyBase64;
-		}
+		ensureManualPostMode(mode);
 		return boardContentCodec.decodeBody(bodyBase64);
 	}
 
-	private void validateAttachmentRules(
-		BoardPostMode mode,
-		MultipartFile attachment,
-		boolean removeAttachment,
-		Optional<BoardAttachment> existingAttachment
-	) {
-		if (mode != BoardPostMode.FILE_CONVERSION_REQUEST) {
-			return;
-		}
+	private void validateAttachmentRules(BoardPostMode mode) {
+		ensureManualPostMode(mode);
+	}
 
-		boolean hasNewAttachment = hasAttachmentUpload(attachment);
-		if (hasNewAttachment) {
-			throw new InvalidAttachmentRequestException("attachment is not allowed for file conversion request posts");
-		}
-		if (existingAttachment.isPresent() && !removeAttachment) {
-			throw new InvalidAttachmentRequestException(
-				"existing attachment must be removed before changing to file conversion request mode"
+	private void ensureManualPostMode(BoardPostMode mode) {
+		if (mode == BoardPostMode.FILE_CONVERSION_REQUEST) {
+			throw new InvalidFileConversionRequestException(
+				"manual file conversion request posts are not supported; use the upload session API"
 			);
 		}
 	}

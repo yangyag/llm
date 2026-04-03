@@ -22,6 +22,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.llm.app.auth.JwtProvider;
 import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
+import com.llm.app.board.dto.CreateUploadSessionRequest;
+import com.llm.app.board.dto.UploadSessionStatusResponse;
 import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardPostMode;
@@ -29,6 +31,8 @@ import com.llm.app.board.model.BoardReply;
 import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
+import com.llm.app.board.service.UploadSessionStatusSnapshot;
+import com.llm.app.board.service.UploadSessionWireCodec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,6 +40,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,11 +59,18 @@ import org.springframework.transaction.annotation.Transactional;
 @AutoConfigureMockMvc
 @Transactional
 class BoardPostControllerTest {
+	private static final byte[] ZIP_BYTES = "PK\u0003demo-zip".getBytes(StandardCharsets.UTF_8);
+	private static final String ZIP_SHA256 = "24d7a4ddff14fdb4675b6fc404a184b4cbbfb82e2bc5cad4c15b1e17de1a97f6";
+	private static final int CHUNK_SIZE_BASE64_CHARS = 8;
+
 	@Autowired
 	private MockMvc mockMvc;
 
 	@Autowired
 	private ObjectMapper objectMapper;
+
+	@Autowired
+	private UploadSessionWireCodec uploadSessionWireCodec;
 
 	@Autowired
 	private BoardPostRepository boardPostRepository;
@@ -314,72 +326,7 @@ class BoardPostControllerTest {
 	}
 
 	@Test
-	void fileConversionRequestLifecycleShouldWork() throws Exception {
-		byte[] zipBytes = "PK\u0003\u0004demo-zip".getBytes(StandardCharsets.UTF_8);
-		String encodedZip = Base64.getEncoder().encodeToString(zipBytes);
-
-		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
-				.header("Authorization", "Bearer " + token)
-				.param("title", "zip 요청")
-				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", encodedZip))
-			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.body").value(encodedZip))
-			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
-			.andExpect(jsonPath("$.conversionReady").value(false))
-			.andExpect(jsonPath("$.attachment").value(nullValue()))
-			.andReturn();
-
-		long postId = extractId(createResult.getResponse().getContentAsString());
-
-		mockMvc.perform(get("/api/v1/posts"))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.items[0].mode").value("FILE_CONVERSION_REQUEST"))
-			.andExpect(jsonPath("$.items[0].conversionReady").value(false));
-
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
-				.header("Authorization", "Bearer " + token))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
-			.andExpect(jsonPath("$.conversionReady").value(true))
-			.andExpect(jsonPath("$.attachment.originalFilename").value("post-" + postId + ".zip"));
-
-		mockMvc.perform(get("/api/v1/posts"))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.items[0].mode").value("FILE_CONVERSION_REQUEST"))
-			.andExpect(jsonPath("$.items[0].conversionReady").value(true));
-
-		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
-			.andExpect(status().isOk())
-			.andExpect(header().string("Content-Disposition", containsString("post-" + postId + ".zip")))
-			.andExpect(content().bytes(zipBytes));
-
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
-				.header("Authorization", "Bearer " + token))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.conversionReady").value(true));
-	}
-
-	@Test
-	void fileConversionRequestShouldAcceptLargeRawBodyWithoutDecodeLengthCheck() throws Exception {
-		String rawBody = "a".repeat(1_100_000);
-
-		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
-				.header("Authorization", "Bearer " + token)
-				.param("title", "큰 변환 요청")
-				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", rawBody))
-			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.body").value(rawBody))
-			.andReturn();
-
-		long postId = extractId(createResult.getResponse().getContentAsString());
-		assertThat(boardPostRepository.findById(postId)).isPresent();
-		assertThat(boardPostRepository.findById(postId).orElseThrow().getBody()).hasSize(rawBody.length());
-	}
-
-	@Test
-	void fileConversionRequestShouldRejectAttachmentUpload() throws Exception {
+	void manualFileConversionRequestShouldBeRejectedOnCreate() throws Exception {
 		MockMultipartFile attachment = new MockMultipartFile(
 			"attachment",
 			"source.zip",
@@ -394,11 +341,11 @@ class BoardPostControllerTest {
 				.param("mode", "FILE_CONVERSION_REQUEST")
 				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8))))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+			.andExpect(jsonPath("$.code").value("INVALID_FILE_CONVERSION_REQUEST"));
 	}
 
 	@Test
-	void conversionShouldFailWhenPostModeIsNormal() throws Exception {
+	void manualFileConversionRequestShouldBeRejectedOnUpdate() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
 				.header("Authorization", "Bearer " + token)
 				.param("title", "일반 글")
@@ -408,55 +355,103 @@ class BoardPostControllerTest {
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
 
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
-				.header("Authorization", "Bearer " + token))
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "변경 시도")
+				.param("mode", "FILE_CONVERSION_REQUEST")
+				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8))))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_FILE_CONVERSION_REQUEST"));
 	}
 
 	@Test
-	void invalidRawBase64ShouldFailAtConversionTime() throws Exception {
-		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+	void createUploadSessionShouldSucceed() throws Exception {
+		MvcResult result = mockMvc.perform(post("/api/v1/upload-sessions")
 				.header("Authorization", "Bearer " + token)
-				.param("title", "잘못된 zip")
-				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", "%%%bad%%%"))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(createUploadSessionRequest("bundle.zip", 11, 8, 2, ZIP_SHA256)))
 			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.A6", notNullValue()))
+			.andExpect(jsonPath("$.archiveName").doesNotExist())
 			.andReturn();
-
-		long postId = extractId(createResult.getResponse().getContentAsString());
-
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
-				.header("Authorization", "Bearer " + token))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
+		UploadSessionStatusSnapshot snapshot = readUploadSessionStatus(result);
+		assertThat(snapshot.archiveName()).isEqualTo("bundle.zip");
+		assertThat(snapshot.fileSizeBytes()).isEqualTo(11);
+		assertThat(snapshot.chunkSizeBase64Chars()).isEqualTo(8);
+		assertThat(snapshot.totalChunks()).isEqualTo(2);
+		assertThat(snapshot.uploadedChunks()).isEmpty();
+		assertThat(snapshot.complete()).isFalse();
 	}
 
 	@Test
-	void convertedFileConversionPostShouldBeLocked() throws Exception {
-		String encodedZip = Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8));
-		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+	void uploadSessionPartShouldSucceed() throws Exception {
+		String encoded = encode(ZIP_BYTES);
+		UUID sessionId = createUploadSession("parts.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
 				.header("Authorization", "Bearer " + token)
-				.param("title", "잠금 테스트")
-				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", encodedZip))
-			.andExpect(status().isCreated())
-			.andReturn();
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(uploadSessionChunkRequest(1, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.A6").exists())
+			.andExpect(jsonPath("$.sessionId").doesNotExist());
+	}
 
-		long postId = extractId(createResult.getResponse().getContentAsString());
+	@Test
+	void finalizeUploadSessionShouldCreateFileConversionRequestPostAndAttachment() throws Exception {
+		String encoded = encode(ZIP_BYTES);
+		UUID sessionId = createUploadSession("bundle.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
 
-		mockMvc.perform(post("/api/v1/posts/{id}/conversion", postId)
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(uploadSessionChunkRequest(1, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(uploadSessionChunkRequest(2, encoded.substring(CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+
+		MvcResult finalizeResult = mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
 				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.conversionReady").value(true));
+			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
+			.andExpect(jsonPath("$.conversionReady").value(true))
+			.andExpect(jsonPath("$.attachment.originalFilename").value("bundle.zip"))
+			.andExpect(jsonPath("$.body").value(containsString("원본 파일명: bundle.zip")))
+			.andReturn();
 
-		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+		long postId = extractId(finalizeResult.getResponse().getContentAsString());
+
+		mockMvc.perform(get("/api/v1/posts"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[0].mode").value("FILE_CONVERSION_REQUEST"))
+			.andExpect(jsonPath("$.items[0].conversionReady").value(true))
+			.andExpect(jsonPath("$.items[0].hasAttachment").value(true));
+
+		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Disposition", containsString("bundle.zip")))
+			.andExpect(content().bytes(ZIP_BYTES));
+	}
+
+	@Test
+	void finalizeUploadSessionShouldFailWhenPartsAreMissing() throws Exception {
+		String encoded = encode(ZIP_BYTES);
+		UUID sessionId = createUploadSession("missing.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
 				.header("Authorization", "Bearer " + token)
-				.param("title", "수정 시도")
-				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", encodedZip))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.code").value("FILE_CONVERSION_LOCKED"));
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(uploadSessionChunkRequest(1, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_UPLOAD_SESSION_REQUEST"));
 	}
 
 	@Test
@@ -715,17 +710,26 @@ class BoardPostControllerTest {
 
 	@Test
 	void aiReplyShouldBeRejectedForFileConversionRequestPost() throws Exception {
-		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
-				.header("Authorization", "Bearer " + token)
-				.param("title", "변환 요청")
-				.param("mode", "FILE_CONVERSION_REQUEST")
-				.param("bodyBase64", Base64.getEncoder().encodeToString("zip".getBytes(StandardCharsets.UTF_8))))
-			.andExpect(status().isCreated())
-			.andReturn();
+		Instant now = Instant.parse("2026-03-11T00:00:00Z");
+		BoardPost post = boardPostRepository.save(new BoardPost(
+			"변환 요청",
+			"자동 업로드 생성 게시글입니다.",
+			BoardPostMode.FILE_CONVERSION_REQUEST,
+			now,
+			now
+		));
+		boardAttachmentRepository.save(new BoardAttachment(
+			post,
+			"post.zip",
+			"stored-post.zip",
+			"stored-post.zip",
+			"application/zip",
+			128,
+			now
+		));
+		boardAttachmentRepository.flush();
 
-		long postId = extractId(createResult.getResponse().getContentAsString());
-
-		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
+		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", post.getId())
 				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
@@ -810,12 +814,40 @@ class BoardPostControllerTest {
 		return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
 	}
 
+	private String encode(byte[] bytes) {
+		return Base64.getEncoder().encodeToString(bytes);
+	}
+
 	private long extractId(String responseBody) {
 		try {
 			return objectMapper.readTree(responseBody).path("id").asLong();
 		} catch (Exception exception) {
 			throw new IllegalStateException("Failed to extract post id", exception);
 		}
+	}
+
+	private UUID createUploadSession(String archiveName, int fileSizeBytes, int chunkSizeBase64Chars, int totalChunks, String fileSha256) throws Exception {
+		MvcResult result = mockMvc.perform(post("/api/v1/upload-sessions")
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(createUploadSessionRequest(archiveName, fileSizeBytes, chunkSizeBase64Chars, totalChunks, fileSha256)))
+			.andExpect(status().isCreated())
+			.andReturn();
+		return readUploadSessionStatus(result).sessionId();
+	}
+
+	private String uploadSessionChunkRequest(int chunkNumber, String chunkDataBase64) {
+		try {
+			return objectMapper.writeValueAsString(uploadSessionWireCodec.encodeChunkRequest(chunkNumber, chunkDataBase64));
+		} catch (Exception exception) {
+			throw new IllegalStateException("Failed to write upload-session chunk request", exception);
+		}
+	}
+
+	private byte[] slice(byte[] bytes, int startInclusive, int endExclusive) {
+		byte[] slice = new byte[endExclusive - startInclusive];
+		System.arraycopy(bytes, startInclusive, slice, 0, slice.length);
+		return slice;
 	}
 
 	private long extractFirstReplyId(String responseBody) {
@@ -854,5 +886,19 @@ class BoardPostControllerTest {
 					}
 				});
 		}
+	}
+
+	private String createUploadSessionRequest(String archiveName, int fileSizeBytes, int chunkSizeBase64Chars, int totalChunks, String fileSha256) throws Exception {
+		return objectMapper.writeValueAsString(uploadSessionWireCodec.encodeCreateRequest(
+			new CreateUploadSessionRequest(archiveName, fileSizeBytes, chunkSizeBase64Chars, totalChunks, fileSha256)
+		));
+	}
+
+	private UploadSessionStatusSnapshot readUploadSessionStatus(MvcResult result) throws Exception {
+		UploadSessionStatusResponse response = objectMapper.readValue(
+			result.getResponse().getContentAsString(),
+			UploadSessionStatusResponse.class
+		);
+		return uploadSessionWireCodec.decodeStatus(response);
 	}
 }

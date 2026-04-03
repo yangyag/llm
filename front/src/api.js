@@ -18,13 +18,12 @@ function encodeBodyBase64(value) {
   return fromUint8Array(new TextEncoder().encode(value));
 }
 
-function buildPostFormData({ title, body, attachment, removeAttachment = false, mode = "NORMAL" }) {
+function buildPostFormData({ title, body, attachment, removeAttachment = false }) {
   const formData = new FormData();
   formData.append("title", title);
-  formData.append("mode", mode);
-  formData.append("bodyBase64", mode === "FILE_CONVERSION_REQUEST" ? body : encodeBodyBase64(body));
+  formData.append("bodyBase64", encodeBodyBase64(body));
 
-  if (attachment && mode !== "FILE_CONVERSION_REQUEST") {
+  if (attachment) {
     formData.append("attachment", attachment);
   }
 
@@ -75,19 +74,19 @@ export function getPost(postId) {
   return requestJson(`/api/v1/posts/${postId}`);
 }
 
-export function createPost({ title, body, attachment, mode = "NORMAL" }, token) {
+export function createPost({ title, body, attachment }, token) {
   return requestJson("/api/v1/posts", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-    body: buildPostFormData({ title, body, attachment, mode })
+    body: buildPostFormData({ title, body, attachment })
   });
 }
 
-export function updatePost(postId, { title, body, attachment, removeAttachment = false, mode = "NORMAL" }, token) {
+export function updatePost(postId, { title, body, attachment, removeAttachment = false }, token) {
   return requestJson(`/api/v1/posts/${postId}`, {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}` },
-    body: buildPostFormData({ title, body, attachment, removeAttachment, mode })
+    body: buildPostFormData({ title, body, attachment, removeAttachment })
   });
 }
 
@@ -135,13 +134,6 @@ export function deleteReply(replyId, token) {
 
 export function getApiUrl(path) {
   return withApiBase(path);
-}
-
-export function convertPostToAttachment(postId, token) {
-  return requestJson(`/api/v1/posts/${postId}/conversion`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` }
-  });
 }
 
 export function login(username, password) {

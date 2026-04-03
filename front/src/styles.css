@@ -39,22 +39,6 @@ body {
   gap: 20px;
 }
 
-.download-link-row {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.download-link {
-  color: #8fb7ff;
-  font-size: 0.95rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.download-link:hover {
-  text-decoration: underline;
-}
-
 .board-header,
 .section-heading,
 .detail-top,
@@ -256,6 +240,13 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.action-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .danger-button {
   background: rgba(255, 91, 91, 0.16);
   color: #ffd7d7;
@@ -296,34 +287,6 @@ body {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 8px;
-}
-
-.conversion-summary-card {
-  display: grid;
-  gap: 12px;
-  margin-top: 18px;
-  padding: 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.conversion-summary-header,
-.conversion-summary-stats {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.conversion-summary-header strong {
-  color: #eef5ff;
-}
-
-.conversion-summary-stats {
-  color: #c5cfde;
-  font-size: 0.92rem;
 }
 
 .attachment-panel {
@@ -409,12 +372,6 @@ body {
   flex-wrap: wrap;
 }
 
-.post-mode-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(220px, 1fr));
-  gap: 12px;
-}
-
 .provider-option {
   display: inline-flex;
   align-items: center;
@@ -426,26 +383,15 @@ body {
   cursor: pointer;
 }
 
-.post-mode-options .provider-option {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+.readonly-post-mode {
+  display: flex;
   align-items: center;
-  column-gap: 14px;
-  width: 100%;
-  min-height: 72px;
-  padding: 14px 18px;
-  text-align: left;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.post-mode-options .provider-option input {
+.readonly-post-mode .section-meta {
   margin: 0;
-}
-
-.post-mode-options .provider-option span {
-  display: block;
-  text-align: left;
-  line-height: 1.35;
-  white-space: normal;
 }
 
 .provider-option input {
