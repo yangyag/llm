@@ -126,7 +126,10 @@ cp /home/yangyag/llm/aws/llm.ec2.env.example /home/ubuntu/llm.env
 기본 흐름:
 
 ```bash
-docker compose --env-file /home/ubuntu/llm.env -f aws/docker-compose.ec2.yml up -d
+cd /home/yangyag/llm/aws
+docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml pull
+docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml up -d
+docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml ps
 ```
 
 운영 메모:

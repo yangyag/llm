@@ -136,7 +136,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     if (view === "list") {
       loadPosts(currentPage, searchQuery);
     }
-  }, [view, currentPage, searchQuery]);
+  }, [currentPage, searchQuery]);
 
   useEffect(() => {
     if (view === "detail" && selectedPostId != null) {
@@ -222,7 +222,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     }
   }
 
-  function openList() {
+  function resetListViewState() {
     setView("list");
     setSelectedPostId(null);
     setSelectedPost(null);
@@ -232,6 +232,11 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     setAiReplyError("");
     setMessage("");
     setError("");
+  }
+
+  async function refreshListView() {
+    resetListViewState();
+    await loadPosts(currentPage, searchQuery);
   }
 
   function openWrite() {
@@ -377,7 +382,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     try {
       await deletePost(selectedPostId, authToken);
       await loadPosts(currentPage);
-      openList();
+      resetListViewState();
       setMessage("게시글을 삭제했습니다.");
     } catch (submitError) {
       setError(submitError.message);
@@ -530,13 +535,6 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
             <h1>답변 가능한 게시판</h1>
           </div>
           <div className="board-actions">
-            <a
-              className="ghost-button action-link-button"
-              href="/upload_zip_post.zip"
-              download="upload_zip_post.zip"
-            >
-              ZIP 다운로드
-            </a>
             {authUsername ? (
               <span className="auth-username">{authUsername}</span>
             ) : null}
@@ -545,7 +543,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                 로그아웃
               </button>
             ) : null}
-            <button type="button" className="ghost-button" onClick={openList}>
+            <button type="button" className="ghost-button" onClick={refreshListView}>
               목록
             </button>
             <button
@@ -568,10 +566,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
             <div className="download-link-row">
               <a
                 className="download-link"
-                href={getApiUrl("/encode_zip_to_base64.zip")}
-                download="encode_zip_to_base64.zip"
+                href={getApiUrl("/upload_zip_post.zip")}
+                download="upload_zip_post.zip"
               >
-                * 파일 변환기 다운로드
+                * 파일 업로드 프로그램
               </a>
             </div>
 
@@ -584,7 +582,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                     {pagination.totalPages > 0 ? ` / ${pagination.totalPages}` : ""}
                   </p>
                 </div>
-                <button type="button" className="ghost-button" onClick={() => loadPosts(currentPage, searchQuery)}>
+                <button type="button" className="ghost-button" onClick={refreshListView}>
                   새로고침
                 </button>
               </div>
