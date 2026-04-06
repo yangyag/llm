@@ -118,6 +118,17 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [selectedPostIds, setSelectedPostIds] = useState(new Set());
+  const [postLinkCopied, setPostLinkCopied] = useState(false);
+
+  useEffect(() => {
+    if (!postLinkCopied) {
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setPostLinkCopied(false);
+    }, 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [postLinkCopied]);
 
   useEffect(() => {
     function handlePopState() {
@@ -526,6 +537,20 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
 
   const pageNumbers = Array.from({ length: pagination.totalPages }, (_, index) => index + 1);
 
+  async function handleCopyPostLink() {
+    if (!selectedPost?.id) {
+      return;
+    }
+    const postUrl = `${window.location.origin}/posts/${selectedPost.id}`;
+    try {
+      await window.navigator.clipboard.writeText(postUrl);
+      setPostLinkCopied(true);
+    } catch {
+      setError("게시글 링크를 클립보드에 복사하지 못했습니다.");
+    }
+  }
+
+
   return (
     <main className="board-page">
       <section className="board-shell">
@@ -793,6 +818,9 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                       <time>{new Date(selectedPost.createdAt).toLocaleString()}</time>
                     </div>
                     <div className="inline-actions">
+                      <button type="button" className="ghost-button" onClick={handleCopyPostLink}>
+                        {postLinkCopied ? "복사됨!" : "링크 복사"}
+                      </button>
                       {!selectedPost.conversionReady ? (
                         <button type="button" className="ghost-button" onClick={openPostEditPanel}>
                           수정

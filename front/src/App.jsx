@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { getMe } from "./api";
 import LoginPage from "./pages/LoginPage";
+import PublicPostPage from "./pages/PublicPostPage";
 import WelcomePage from "./pages/WelcomePage";
 
 function App() {
   const [auth, setAuth] = useState({ token: null, username: null, checked: false });
+  const publicPostMatch = window.location.pathname.match(/^\/posts\/(\d+)$/);
 
   useEffect(() => {
     const token = localStorage.getItem("auth_token");
@@ -30,6 +32,10 @@ function App() {
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_username");
     setAuth({ token: null, username: null, checked: true });
+  }
+
+  if (publicPostMatch) {
+    return <PublicPostPage postId={Number.parseInt(publicPostMatch[1], 10)} />;
   }
 
   if (!auth.checked) {
