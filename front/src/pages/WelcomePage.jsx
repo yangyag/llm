@@ -13,15 +13,9 @@ import {
   updateReply
 } from "../api";
 
-const POST_MODES = {
-  NORMAL: "NORMAL",
-  FILE_CONVERSION_REQUEST: "FILE_CONVERSION_REQUEST"
-};
-
 const EMPTY_POST_FORM = {
   title: "",
-  body: "",
-  mode: POST_MODES.NORMAL
+  body: ""
 };
 
 const EMPTY_REPLY_FORM = {
@@ -65,11 +59,11 @@ function updateListStateInUrl(page, query, { replace = false } = {}) {
 }
 
 function isFileConversionMode(mode) {
-  return mode === POST_MODES.FILE_CONVERSION_REQUEST;
+  return mode === "FILE_CONVERSION_REQUEST";
 }
 
 function getPostModeLabel(mode) {
-  return isFileConversionMode(mode) ? "ZIP 결과" : "일반";
+  return isFileConversionMode(mode) ? "파일 변환 요청" : "일반";
 }
 
 function getPostBodyLabel() {
@@ -77,7 +71,7 @@ function getPostBodyLabel() {
 }
 
 function getPostBodyHelp() {
-  return "일반 게시글 본문을 작성합니다. 첨부파일은 일반 게시글에만 업로드할 수 있습니다.";
+  return "일반 게시글 본문을 작성합니다. 첨부파일은 최대 100MB까지 업로드할 수 있습니다.";
 }
 
 function formatFileSize(size) {
@@ -94,7 +88,6 @@ function formatFileSize(size) {
 
 function WelcomePage({ authToken, authUsername, onLogout }) {
   const createPostFormId = "create-post-form";
-  const sampleZipDownloadPath = "/upload_zip_post.zip";
   const initialListState = getListStateFromLocation();
   const [view, setView] = useState("list");
   const [posts, setPosts] = useState([]);
@@ -217,8 +210,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       setSelectedPost(payload);
       setPostEditForm({
         title: payload.title,
-        body: payload.body,
-        mode: payload.mode ?? POST_MODES.NORMAL
+        body: payload.body
       });
       setPostEditAttachmentFile(null);
       setPostEditAttachmentInputKey((prev) => prev + 1);
@@ -279,8 +271,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
 
     setPostEditForm({
       title: selectedPost.title,
-      body: selectedPost.body,
-      mode: selectedPost.mode ?? POST_MODES.NORMAL
+      body: selectedPost.body
     });
     setPostEditAttachmentFile(null);
     setPostEditAttachmentInputKey((prev) => prev + 1);
@@ -323,8 +314,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
 
     try {
       const created = await createPost({
-        title: postForm.title,
-        body: postForm.body,
+        ...postForm,
         attachment: postAttachmentFile
       }, authToken);
       setPostForm(EMPTY_POST_FORM);
@@ -354,8 +344,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
 
     try {
       const updated = await updatePost(selectedPostId, {
-        title: postEditForm.title,
-        body: postEditForm.body,
+        ...postEditForm,
         attachment: postEditAttachmentFile,
         removeAttachment: removePostAttachment
       }, authToken);
@@ -369,7 +358,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       setMessage("게시글을 수정했습니다.");
     } catch (submitError) {
       if (submitError?.code === "FILE_CONVERSION_LOCKED") {
-        setError("파일 생성 결과 게시글은 수정할 수 없습니다.");
+        setError("변환 완료된 파일 변환 요청 글은 수정할 수 없습니다.");
       } else {
         setError(submitError.message);
       }
@@ -538,13 +527,12 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
         <header className="board-header">
           <div>
             <p className="eyebrow">Anonymous Board</p>
-            <h1>결과 파일 게시판</h1>
-            <p className="section-meta">단일 ZIP 업로드 처리로 생성된 결과 게시글을 조회하고 다운로드합니다.</p>
+            <h1>답변 가능한 게시판</h1>
           </div>
           <div className="board-actions">
             <a
               className="ghost-button action-link-button"
-              href={sampleZipDownloadPath}
+              href="/upload_zip_post.zip"
               download="upload_zip_post.zip"
             >
               ZIP 다운로드
@@ -560,6 +548,15 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
             <button type="button" className="ghost-button" onClick={openList}>
               목록
             </button>
+            <button
+              type={view === "write" ? "submit" : "button"}
+              form={view === "write" ? createPostFormId : undefined}
+              className={view === "write" ? "submit-button" : "primary-button"}
+              onClick={view === "write" ? undefined : openWrite}
+              disabled={view === "write" && submitting}
+            >
+              {view === "write" ? (submitting ? "등록 중..." : "등록") : "글쓰기"}
+            </button>
           </div>
         </header>
 
@@ -568,6 +565,16 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
 
         {view === "list" ? (
           <>
+            <div className="download-link-row">
+              <a
+                className="download-link"
+                href={getApiUrl("/encode_zip_to_base64.zip")}
+                download="encode_zip_to_base64.zip"
+              >
+                * 파일 변환기 다운로드
+              </a>
+            </div>
+
             <section className="card">
               <div className="section-heading">
                 <div>
@@ -604,16 +611,46 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                   </button>
                 </div>
               </form>
+              {authUsername && posts.length > 0 && !loading ? (
+                <div className="batch-action-bar">
+                  <label className="checkbox-field batch-select-all">
+                    <input
+                      type="checkbox"
+                      checked={posts.length > 0 && selectedPostIds.size === posts.length}
+                      onChange={toggleSelectAll}
+                    />
+                    <span>전체 선택</span>
+                  </label>
+                  {selectedPostIds.size > 0 ? (
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={handleBatchDelete}
+                      disabled={submitting}
+                    >
+                      {submitting ? "삭제 중..." : `선택 삭제 (${selectedPostIds.size})`}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
               {loading ? (
                 <p className="empty-state">불러오는 중...</p>
               ) : posts.length === 0 ? (
                 <p className="empty-state">
-                  {searchQuery ? "검색 결과가 없습니다. 다른 검색어로 다시 시도해 보세요." : "표시할 결과 게시글이 없습니다."}
+                  {searchQuery ? "검색 결과가 없습니다. 다른 검색어로 다시 시도해 보세요." : "아직 게시글이 없습니다. 첫 글을 작성해 보세요."}
                 </p>
               ) : (
                 <div className="post-list">
                   {posts.map((post) => (
                     <div key={post.id} className="post-list-item-row">
+                      {authUsername ? (
+                        <input
+                          type="checkbox"
+                          className="post-checkbox"
+                          checked={selectedPostIds.has(post.id)}
+                          onChange={(event) => togglePostSelection(post.id, event)}
+                        />
+                      ) : null}
                       <button
                         type="button"
                         className="post-list-item"
@@ -624,14 +661,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                           <span className={`post-mode-badge${isFileConversionMode(post.mode) ? " file" : ""}`}>
                             {getPostModeLabel(post.mode)}
                           </span>
-                          {post.conversionReady ? <span className="post-mode-badge success">파일 준비 완료</span> : null}
+                          {post.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
                           {post.hasAttachment ? <span className="attachment-badge">첨부</span> : null}
                         </div>
-                        <span>
-                          {isFileConversionMode(post.mode)
-                            ? (post.conversionReady ? "다운로드 가능" : "결과 파일 준비 중")
-                            : `답변 ${post.replyCount}개`}
-                        </span>
+                        <span>답변 {post.replyCount}개</span>
                         <time>{new Date(post.createdAt).toLocaleString()}</time>
                       </button>
                     </div>
@@ -695,17 +728,54 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
           </>
         ) : null}
 
+        {view === "write" ? (
+          <section className="card">
+            <div className="section-heading">
+              <h2>새 글 작성</h2>
+            </div>
+            <form id={createPostFormId} className="form-grid" onSubmit={handleCreatePost}>
+              <label className="field">
+                <span>제목</span>
+                <input
+                  value={postForm.title}
+                  onChange={(event) => setPostForm((prev) => ({ ...prev, title: event.target.value }))}
+                  maxLength={200}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>{getPostBodyLabel()}</span>
+                <textarea
+                  value={postForm.body}
+                  onChange={(event) => setPostForm((prev) => ({ ...prev, body: event.target.value }))}
+                  rows={12}
+                  required
+                />
+              </label>
+              <p className="section-meta">{getPostBodyHelp()}</p>
+              <>
+                <label className="field">
+                  <span>첨부파일</span>
+                  <input
+                    key={postAttachmentInputKey}
+                    type="file"
+                    onChange={(event) => setPostAttachmentFile(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <p className="section-meta">
+                  첨부파일은 1개만 업로드할 수 있으며 최대 100MB까지 허용됩니다.
+                  {postAttachmentFile ? ` 현재 선택: ${postAttachmentFile.name} (${formatFileSize(postAttachmentFile.size)})` : ""}
+                </p>
+              </>
+            </form>
+          </section>
+        ) : null}
+
         {view === "detail" ? (
           <section className="card">
             <div className="section-heading">
               <h2>게시글 상세</h2>
-              {selectedPost ? (
-                <span>
-                  {isFileConversionMode(selectedPost.mode)
-                    ? (selectedPost.conversionReady ? "다운로드 가능" : "결과 파일 준비 중")
-                    : `답변 ${selectedPost.replies.length}개`}
-                </span>
-              ) : null}
+              {selectedPost ? <span>답변 {selectedPost.replies.length}개</span> : null}
             </div>
 
             {detailLoading || !selectedPost ? (
@@ -720,23 +790,39 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                         <span className={`post-mode-badge${isFileConversionMode(selectedPost.mode) ? " file" : ""}`}>
                           {getPostModeLabel(selectedPost.mode)}
                         </span>
-                        {selectedPost.conversionReady ? <span className="post-mode-badge success">파일 준비 완료</span> : null}
+                        {selectedPost.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
                       </div>
                       <time>{new Date(selectedPost.createdAt).toLocaleString()}</time>
                     </div>
+                    <div className="inline-actions">
+                      {!selectedPost.conversionReady ? (
+                        <button type="button" className="ghost-button" onClick={openPostEditPanel}>
+                          수정
+                        </button>
+                      ) : null}
+                      <button type="button" className="danger-button" onClick={openPostDeletePanel}>
+                        삭제
+                      </button>
+                    </div>
                   </div>
                   {isFileConversionMode(selectedPost.mode) ? (
-                    <div className="attachment-panel">
-                      <span className="attachment-label">처리 상태</span>
-                      <div className="attachment-card">
-                        <div>
-                          <strong>{selectedPost.conversionReady ? "결과 파일 준비 완료" : "결과 파일 준비 중"}</strong>
-                          <p className="section-meta">
-                            {selectedPost.conversionReady
-                              ? "단일 ZIP 업로드 처리로 생성된 결과 파일을 아래에서 다운로드할 수 있습니다."
-                              : "단일 ZIP 업로드 처리 중이며, 원본 데이터 본문은 웹 UI에 표시하지 않습니다."}
-                          </p>
-                        </div>
+                    <div className="conversion-summary-card">
+                      <div className="conversion-summary-header">
+                        <strong>Base64 본문 숨김</strong>
+                        <span className={`post-mode-badge${selectedPost.conversionReady ? " success" : " file"}`}>
+                          {selectedPost.conversionReady ? "변환 완료" : "변환 대기"}
+                        </span>
+                      </div>
+                      <p className="section-meta">
+                        파일 변환 요청 글의 raw Base64 본문은 상세 화면에서 숨겨집니다.
+                      </p>
+                      <div className="conversion-summary-stats">
+                        <span>본문 길이 {selectedPost.body.length.toLocaleString()}자</span>
+                        <span>
+                          {selectedPost.conversionReady
+                            ? "ZIP 파일이 생성되어 다운로드할 수 있습니다."
+                            : "파일 변환 버튼을 누르면 ZIP 파일을 생성할 수 있습니다."}
+                        </span>
                       </div>
                     </div>
                   ) : (
@@ -744,7 +830,9 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                   )}
                   {selectedPost.attachment ? (
                     <div className="attachment-panel">
-                      <span className="attachment-label">{isFileConversionMode(selectedPost.mode) ? "생성된 결과 파일" : "첨부파일"}</span>
+                      <span className="attachment-label">
+                        {isFileConversionMode(selectedPost.mode) ? "변환된 파일" : "첨부파일"}
+                      </span>
                       <div className="attachment-card">
                         <div>
                           <strong>{selectedPost.attachment.originalFilename}</strong>
@@ -763,13 +851,173 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                       </div>
                     </div>
                   ) : null}
+                  {postActionMode === "edit" ? (
+                    <form className="form-grid compact-form action-panel" onSubmit={handleUpdatePost}>
+                      <label className="field">
+                        <span>제목</span>
+                        <input
+                          value={postEditForm.title}
+                          onChange={(event) => setPostEditForm((prev) => ({ ...prev, title: event.target.value }))}
+                          maxLength={200}
+                          required
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{getPostBodyLabel()}</span>
+                        <textarea
+                          value={postEditForm.body}
+                          onChange={(event) => setPostEditForm((prev) => ({ ...prev, body: event.target.value }))}
+                          rows={8}
+                          required
+                        />
+                      </label>
+                      <p className="section-meta">{getPostBodyHelp()}</p>
+                      {selectedPost.attachment ? (
+                        <div className="attachment-panel">
+                          <span className="attachment-label">현재 첨부파일</span>
+                          <div className="attachment-card">
+                            <div>
+                              <strong>{selectedPost.attachment.originalFilename}</strong>
+                              <p className="section-meta">{formatFileSize(selectedPost.attachment.size)}</p>
+                            </div>
+                            <a
+                              className="ghost-button attachment-link"
+                              href={getApiUrl(selectedPost.attachment.downloadUrl)}
+                              download={selectedPost.attachment.originalFilename}
+                            >
+                              다운로드
+                            </a>
+                          </div>
+                        </div>
+                      ) : null}
+                      <>
+                        <label className="field">
+                          <span>{selectedPost.attachment ? "새 첨부파일로 교체" : "첨부파일 추가"}</span>
+                          <input
+                            key={postEditAttachmentInputKey}
+                            type="file"
+                            onChange={(event) => {
+                              const nextFile = event.target.files?.[0] ?? null;
+                              setPostActionError("");
+                              setPostEditAttachmentFile(nextFile);
+                              if (nextFile) {
+                                setRemovePostAttachment(false);
+                              }
+                            }}
+                          />
+                        </label>
+                        {postEditAttachmentFile ? (
+                          <p className="section-meta">
+                            새 파일 선택: {postEditAttachmentFile.name} ({formatFileSize(postEditAttachmentFile.size)})
+                          </p>
+                        ) : null}
+                      </>
+                      {selectedPost.attachment ? (
+                        <label className="checkbox-field">
+                          <input
+                            type="checkbox"
+                            checked={removePostAttachment}
+                            disabled={postEditAttachmentFile != null}
+                            onChange={(event) => {
+                              setPostActionError("");
+                              setRemovePostAttachment(event.target.checked);
+                            }}
+                          />
+                          <span>현재 첨부파일 삭제</span>
+                        </label>
+                      ) : null}
+                      {postActionError ? <p className="panel-error">{postActionError}</p> : null}
+                      <div className="action-form-actions">
+                        <button
+                          type="submit"
+                          className="ghost-button"
+                          disabled={submitting}
+                        >
+                          게시글 수정
+                        </button>
+                        <button type="button" className="ghost-button" onClick={closePostActionPanel}>
+                          취소
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+
+                  {postActionMode === "delete" ? (
+                    <div className="action-panel">
+                      <p>이 게시글을 삭제하시겠습니까?</p>
+                      {postActionError ? <p className="panel-error">{postActionError}</p> : null}
+                      <div className="action-form-actions">
+                        <button type="button" className="danger-button" onClick={handleDeletePost} disabled={submitting}>
+                          게시글 삭제
+                        </button>
+                        <button type="button" className="ghost-button" onClick={closePostActionPanel}>
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </article>
 
-                {selectedPost.replies.length > 0 ? (
-                  <section className="reply-section">
-                    <div className="section-heading">
-                      <h3>답변</h3>
-                    </div>
+                <section className="reply-section">
+                  <div className="section-heading">
+                    <h3>답변</h3>
+                  </div>
+
+                  <div className="split-layout">
+                    <form className="card inset-card form-grid" onSubmit={handleCreateReply}>
+                      <label className="field">
+                        <span>답변 본문</span>
+                        <textarea
+                          value={replyForm.body}
+                          onChange={(event) => setReplyForm((prev) => ({ ...prev, body: event.target.value }))}
+                          rows={6}
+                          required
+                        />
+                      </label>
+                      <button type="submit" className="primary-button wide-button" disabled={submitting || aiSubmitting}>
+                        답변 등록
+                      </button>
+                    </form>
+
+                    {!isFileConversionMode(selectedPost.mode) ? (
+                      <div className="card inset-card form-grid ai-reply-card">
+                        <div className="section-heading">
+                          <h3>AI가 답변달기</h3>
+                        </div>
+                        <p className="section-meta">현재 게시글 본문을 기준으로 AI 답변을 생성합니다.</p>
+                        <div className="provider-options" role="radiogroup" aria-label="AI provider">
+                          {["GPT", "Claude", "Grok"].map((provider) => (
+                            <label key={provider} className="provider-option">
+                              <input
+                                type="radio"
+                                name="ai-provider"
+                                value={provider}
+                                checked={selectedAiProvider === provider}
+                                onChange={(event) => {
+                                  setAiReplyError("");
+                                  setSelectedAiProvider(event.target.value);
+                                }}
+                              />
+                              <span>{provider}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {aiReplyError ? <p className="panel-error">{aiReplyError}</p> : null}
+                        <button
+                          type="button"
+                          className="ghost-button wide-button"
+                          onClick={handleCreateAiReply}
+                          disabled={aiSubmitting || submitting}
+                        >
+                          {aiSubmitting ? "AI 답변 생성 중..." : "AI가 답변달기"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {selectedPost.replies.length === 0 ? (
+                    <p className="empty-state">아직 답변이 없습니다.</p>
+                  ) : (
                     <div className="reply-list">
                       {selectedPost.replies.map((reply) => (
                         <article key={reply.id} className="card inset-card reply-card">
@@ -781,11 +1029,56 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                             <time>{new Date(reply.createdAt).toLocaleString()}</time>
                           </div>
                           <p className="detail-body">{reply.body}</p>
+
+                          {!reply.ai ? (
+                            <div className="inline-actions">
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => openReplyEditPanel(reply)}
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                className="danger-button"
+                                onClick={() => handleDeleteReply(reply.id)}
+                                disabled={submitting}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          ) : null}
+
+                          {!reply.ai && replyEditState.replyId === reply.id ? (
+                            <form className="form-grid compact-form action-panel" onSubmit={handleUpdateReply}>
+                              <label className="field">
+                                <span>수정 본문</span>
+                                <textarea
+                                  value={replyEditState.body}
+                                  onChange={(event) =>
+                                    setReplyEditState((prev) => ({ ...prev, body: event.target.value }))
+                                  }
+                                  rows={4}
+                                  required
+                                />
+                              </label>
+                              {replyActionError ? <p className="panel-error">{replyActionError}</p> : null}
+                              <div className="action-form-actions">
+                                <button type="submit" className="ghost-button" disabled={submitting}>
+                                  답변 수정
+                                </button>
+                                <button type="button" className="ghost-button" onClick={closeReplyEditPanel}>
+                                  취소
+                                </button>
+                              </div>
+                            </form>
+                          ) : null}
                         </article>
                       ))}
                     </div>
-                  </section>
-                ) : null}
+                  )}
+                </section>
               </>
             )}
           </section>
