@@ -296,11 +296,6 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     setPostActionMode("edit");
   }
 
-  function openPostDeletePanel() {
-    setPostActionError("");
-    setPostActionMode("delete");
-  }
-
   function closePostActionPanel() {
     setPostActionMode("none");
     setPostActionError("");
@@ -826,7 +821,14 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                           수정
                         </button>
                       ) : null}
-                      <button type="button" className="danger-button" onClick={openPostDeletePanel}>
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={async () => {
+                          if (!window.confirm('이 게시글을 삭제하시겠습니까?')) return;
+                          await handleDeletePost();
+                        }}
+                      >
                         삭제
                       </button>
                     </div>
@@ -966,21 +968,6 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                         </button>
                       </div>
                     </form>
-                  ) : null}
-
-                  {postActionMode === "delete" ? (
-                    <div className="action-panel">
-                      <p>이 게시글을 삭제하시겠습니까?</p>
-                      {postActionError ? <p className="panel-error">{postActionError}</p> : null}
-                      <div className="action-form-actions">
-                        <button type="button" className="danger-button" onClick={handleDeletePost} disabled={submitting}>
-                          게시글 삭제
-                        </button>
-                        <button type="button" className="ghost-button" onClick={closePostActionPanel}>
-                          취소
-                        </button>
-                      </div>
-                    </div>
                   ) : null}
                 </article>
 

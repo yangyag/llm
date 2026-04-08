@@ -87,7 +87,18 @@ docker compose up -d --build
 
 # 환경 변수
 cp llm.env.example llm.env
+
+# Docker Hub 푸시 (계정: yangyag2)
+docker tag llm-front yangyag2/llm-front:latest
+docker tag llm-back yangyag2/llm-back:latest
+docker push yangyag2/llm-front:latest
+docker push yangyag2/llm-back:latest
 ```
+
+## Docker Hub
+- 계정: `yangyag2`
+- 프론트 이미지: `yangyag2/llm-front:latest`
+- 백엔드 이미지: `yangyag2/llm-back:latest`
 
 ## 품질 게이트
 - 백엔드 변경 시 `./gradlew clean test` 필수 통과
