@@ -30,6 +30,7 @@ Evaluator ── 코드 리뷰 + QA 통합 판정
 
 ### Planner — 메인 세션 (PM 통합)
 
+- **모델**: `claude-sonnet-4-6`
 - **역할**:
   1. 사용자 요청 해석 및 기능 명세 작성
   2. 작업을 독립 실행 가능한 단위로 분해 (front/back/DB/테스트 등)
@@ -62,6 +63,7 @@ Evaluator ── 코드 리뷰 + QA 통합 판정
 
 ### Evaluator — 리뷰 + QA 통합
 
+- **모델**: `claude-opus-4-6`
 - **역할**:
   1. Generator 산출물 전체를 대상으로 코드 리뷰 수행
   2. Planner가 정의한 완료 기준 충족 여부 점검

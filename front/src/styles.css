@@ -238,6 +238,7 @@ body {
 .ghost-button,
 .danger-button {
   padding: 12px 16px;
+  white-space: nowrap;
 }
 
 .primary-button {
@@ -569,10 +570,14 @@ button:disabled {
   }
 
   .board-header,
-  .section-heading,
   .detail-top {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .section-heading {
+    align-items: center;
+    flex-wrap: wrap;
   }
 
   .board-actions,
@@ -581,15 +586,14 @@ button:disabled {
     width: 100%;
   }
 
-  .search-bar,
-  .pagination {
+  .search-bar {
+    align-items: stretch;
     flex-direction: column;
   }
 
   .board-actions > *,
   .inline-actions > *,
   .search-actions > *,
-  .pagination > *,
   .pagination-numbers > * {
     flex: 1;
   }
