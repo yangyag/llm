@@ -6,14 +6,35 @@ aws/llm.env
 .gradle/
 
 # Frontend artifacts
+front/.env
 front/node_modules/
 front/dist/
 
 # Backend artifacts
+back/HELP.md
 back/.gradle/
 back/build/
 back/build-local/
 back/frontend-local-artifacts/
+back/.idea/
+back/.vscode/
+back/.apt_generated
+back/.classpath
+back/.factorypath
+back/.project
+back/.settings/
+back/.springBeans
+back/.sts4-cache/
+back/bin/
+back/out/
+back/nbproject/private/
+back/nbbuild/
+back/dist/
+back/nbdist/
+back/.nb-gradle/
+*.iws
+*.iml
+*.ipr
 
 # Local utility scripts
 etc/*.py

@@ -1,3 +1,6 @@
 /gradlew text eol=lf
+back/gradlew text eol=lf
 *.bat text eol=crlf
+back/gradlew.bat text eol=crlf
 *.jar binary
+back/gradle/wrapper/gradle-wrapper.jar binary
