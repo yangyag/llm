@@ -128,8 +128,17 @@ cp /home/yangyag/llm/aws/llm.ec2.env.example /home/ubuntu/llm.env
 ```bash
 cd /home/yangyag/llm/aws
 docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml pull
-docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml up -d
+docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml up -d --wait --wait-timeout 180
 docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml ps
+```
+
+스크립트로 순차 배포:
+
+```bash
+cd /home/yangyag/llm/aws
+chmod +x deploy-ec2.sh
+./deploy-ec2.sh
+# 옵션 예시: ./deploy-ec2.sh --env-file /home/ubuntu/llm.env --wait-timeout 180
 ```
 
 운영 메모:

@@ -63,7 +63,7 @@ function isFileConversionMode(mode) {
 }
 
 function getPostModeLabel(mode) {
-  return isFileConversionMode(mode) ? "파일 변환 요청" : "일반";
+  return isFileConversionMode(mode) ? "암호화 업로드" : "일반";
 }
 
 function getPostBodyLabel() {
@@ -369,7 +369,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       setMessage("게시글을 수정했습니다.");
     } catch (submitError) {
       if (submitError?.code === "FILE_CONVERSION_LOCKED") {
-        setError("변환 완료된 파일 변환 요청 글은 수정할 수 없습니다.");
+        setError("암호화 업로드 완료된 글은 수정할 수 없습니다.");
       } else {
         setError(submitError.message);
       }
@@ -676,10 +676,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                       >
                         <div className="post-title-row">
                           <strong>{post.title}</strong>
-                          <span className={`post-mode-badge${isFileConversionMode(post.mode) ? " file" : ""}`}>
-                            {getPostModeLabel(post.mode)}
-                          </span>
-                          {post.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
+                          {!isFileConversionMode(post.mode) ? (
+                            <span className="post-mode-badge">{getPostModeLabel(post.mode)}</span>
+                          ) : null}
+                          {post.conversionReady ? <span className="post-mode-badge success">암호화 업로드 완료</span> : null}
                           {post.hasAttachment ? <span className="attachment-badge">첨부</span> : null}
                         </div>
                         <span>답변 {post.replyCount}개</span>
@@ -808,7 +808,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                         <span className={`post-mode-badge${isFileConversionMode(selectedPost.mode) ? " file" : ""}`}>
                           {getPostModeLabel(selectedPost.mode)}
                         </span>
-                        {selectedPost.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
+                        {selectedPost.conversionReady ? <span className="post-mode-badge success">암호화 업로드 완료</span> : null}
                       </div>
                       <time>{new Date(selectedPost.createdAt).toLocaleString()}</time>
                     </div>
@@ -838,18 +838,18 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                       <div className="conversion-summary-header">
                         <strong>Base64 본문 숨김</strong>
                         <span className={`post-mode-badge${selectedPost.conversionReady ? " success" : " file"}`}>
-                          {selectedPost.conversionReady ? "변환 완료" : "변환 대기"}
+                          {selectedPost.conversionReady ? "암호화 업로드 완료" : "업로드 대기"}
                         </span>
                       </div>
                       <p className="section-meta">
-                        파일 변환 요청 글의 raw Base64 본문은 상세 화면에서 숨겨집니다.
+                        암호화 업로드 글의 raw Base64 본문은 상세 화면에서 숨겨집니다.
                       </p>
                       <div className="conversion-summary-stats">
                         <span>본문 길이 {selectedPost.body.length.toLocaleString()}자</span>
                         <span>
                           {selectedPost.conversionReady
-                            ? "ZIP 파일이 생성되어 다운로드할 수 있습니다."
-                            : "파일 변환 버튼을 누르면 ZIP 파일을 생성할 수 있습니다."}
+                            ? "암호화 업로드가 완료되어 복원 파일을 다운로드할 수 있습니다."
+                            : "암호화 업로드가 완료되면 복원 파일을 다운로드할 수 있습니다."}
                         </span>
                       </div>
                     </div>
@@ -859,7 +859,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                   {selectedPost.attachment ? (
                     <div className="attachment-panel">
                       <span className="attachment-label">
-                        {isFileConversionMode(selectedPost.mode) ? "변환된 파일" : "첨부파일"}
+                        {isFileConversionMode(selectedPost.mode) ? "복원 파일" : "첨부파일"}
                       </span>
                       <div className="attachment-card">
                         <div>

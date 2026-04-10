@@ -90,6 +90,8 @@
 - `git commit` 메시지는 한글로 작성한다.
 
 ## 배포 규칙
+- 기본 Docker Hub 네임스페이스는 `yangyag2`를 사용한다.
+- 기본 push 대상 이미지는 `yangyag2/llm-front:latest`, `yangyag2/llm-back:latest`다.
 - Docker Hub 이미지 push는 기본적으로 `latest` 태그만 사용한다.
 - 타임스탬프 등 추가 태그는 사용하지 않으며, 예외는 사용자가 명시적으로 요청한 경우만 허용한다.
 

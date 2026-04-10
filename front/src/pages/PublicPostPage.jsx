@@ -6,7 +6,7 @@ function isFileConversionMode(mode) {
 }
 
 function getPostModeLabel(mode) {
-  return isFileConversionMode(mode) ? "파일 변환 요청" : "일반";
+  return isFileConversionMode(mode) ? "암호화 업로드" : "일반";
 }
 
 function formatFileSize(size) {
@@ -111,14 +111,14 @@ function PublicPostPage({ postId }) {
                       <span className={`post-mode-badge${isFileConversionMode(post.mode) ? " file" : ""}`}>
                         {getPostModeLabel(post.mode)}
                       </span>
-                      {post.conversionReady ? <span className="post-mode-badge success">변환 완료</span> : null}
+                      {post.conversionReady ? <span className="post-mode-badge success">암호화 업로드 완료</span> : null}
                     </div>
                     <time>{new Date(post.createdAt).toLocaleString()}</time>
                   </div>
                 </div>
 
                 {isFileConversionMode(post.mode) ? (
-                  <p className="detail-body">파일 변환 요청 글입니다. 본문은 공개 상세 화면에서 표시되지 않습니다.</p>
+                  <p className="detail-body">암호화 업로드 글입니다. 본문은 공개 상세 화면에서 표시되지 않습니다.</p>
                 ) : (
                   <p className="detail-body">{post.body}</p>
                 )}
@@ -126,7 +126,7 @@ function PublicPostPage({ postId }) {
                 {post.attachment ? (
                   <div className="attachment-panel">
                     <span className="attachment-label">
-                      {isFileConversionMode(post.mode) ? "변환된 파일" : "첨부파일"}
+                      {isFileConversionMode(post.mode) ? "복원 파일" : "첨부파일"}
                     </span>
                     <div className="attachment-card">
                       <div>
