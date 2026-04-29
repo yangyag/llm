@@ -319,6 +319,11 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
 
   async function handleCreatePost(event) {
     event.preventDefault();
+
+    if (postAttachmentFile && !window.confirm("첨부파일을 추가해도 되는 환경입니까?")) {
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     setMessage("");
