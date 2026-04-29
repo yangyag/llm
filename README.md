@@ -153,6 +153,29 @@ chmod +x deploy-ec2.sh
   - `APP_UPLOAD_SESSIONS_SECRET`는 backend와 `upload_zip_post.py`가 같은 값을 쓰도록 맞춰야 하며, `LLM_UPLOAD_SESSIONS_SECRET`를 바꾸면 스크립트도 같은 값을 사용해야 합니다.
 - 백엔드는 내부 `db:5432`로만 접속합니다.
 
+## 프로젝트 규칙
+
+### 디렉터리
+- `front/`: UI, 라우팅, 상태관리, 프론트 Docker 빌드
+- `back/`: API, 도메인, 테스트, 정적 자산, 백엔드 Docker 빌드
+- 루트: 통합 실행/문서(`docker-compose.yml`, `llm.env.example`, `README.md`)
+
+### Git
+- `git commit` 메시지는 한글로 작성합니다.
+
+### 배포
+- 기본 Docker Hub 네임스페이스는 `yangyag2`를 사용합니다.
+- 기본 push 대상 이미지는 `yangyag2/llm-front:latest`, `yangyag2/llm-back:latest`입니다.
+- Docker Hub 이미지 push는 기본적으로 `latest` 태그만 사용합니다.
+- 타임스탬프 등 추가 태그는 사용하지 않으며, 예외는 사용자가 명시적으로 요청한 경우만 허용합니다.
+
+### 품질 게이트
+- 테스트 원칙: 백엔드 API JUnit(`MockMvc`) 중심
+- 백엔드 기능 변경 시 `back` 테스트를 반드시 통과시킵니다.
+- 프론트 변경 시 `front` 빌드를 반드시 통과시킵니다.
+- 통합 영향이 있으면 루트 기준 컨테이너 실행과 헬스 체크를 확인합니다.
+- 최소 검증 명령은 위 [검증](#검증) 섹션을 따릅니다.
+
 ## 현재 기능 범위
 
 - 관리자 로그인
