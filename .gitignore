@@ -1,6 +1,8 @@
 .env
+.env.*
+!.env.example
 llm.env
-aws/llm.env
+llm.env.*
 
 # Root tooling
 .gradle/

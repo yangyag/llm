@@ -8,7 +8,7 @@
 [Browser]
   -> Frontend (:8083)
       -> /api/v1/*
-         -> Backend (:8082, container 8080)
+         -> Backend (container 8080)
              -> PostgreSQL (:5432)
 ```
 
@@ -19,12 +19,13 @@
 ## 빠른 시작
 
 ```bash
-cp llm.env.example llm.env
-docker compose --env-file llm.env up -d --build
+cp .env.example .env
+docker compose pull
+docker compose up -d --wait
 ```
 
 - Frontend: `http://localhost:8083`
-- Backend health: `http://localhost:8082/api/v1/health`
+- Backend health: `http://localhost:8083/api/v1/health`
 
 중지:
 
@@ -34,9 +35,11 @@ docker compose down
 
 ## 환경 변수
 
-로컬 루트 compose는 `llm.env.example`을 복사해 만든 `llm.env`에서 관리합니다. EC2는 별도 예시 파일을 사용합니다.
+공통 compose는 `.env`에서 환경별 값을 읽습니다. 로컬과 EC2는 각각 자기 머신의 `.env`만 다르게 두고, 실제 `.env` 파일은 `.gitignore`로 관리 대상에서 제외합니다.
 
-- `VITE_API_BASE_URL`: 프론트에서 사용할 API base URL
+- `VITE_API_BASE_URL`: 프론트 이미지를 빌드할 때 사용할 API base URL
+- `LLM_BACK_IMAGE`, `LLM_FRONT_IMAGE`: compose가 실행할 Docker 이미지
+- `LLM_FRONT_PORT`: 프론트 컨테이너를 호스트에 공개할 포트
 - `APP_CORS_ALLOWED_ORIGINS`: 허용 Origin 목록
 - `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SCHEMA`: 백엔드 DB 연결
 - `APP_ATTACHMENTS_ROOT_PATH`: 첨부파일 저장 경로
@@ -55,7 +58,7 @@ docker compose down
 
 주의:
 - `APP_JWT_SECRET`은 코드상 fallback이 있어도 운영에서는 반드시 설정하세요.
-- 기본 DB 값과 첨부파일 경로는 `llm.env.example`을 기준으로 맞춰 두면 됩니다.
+- 기본 DB 값과 첨부파일 경로는 `.env.example`을 기준으로 맞춰 두면 됩니다.
 
 ## 개별 개발
 
@@ -76,7 +79,7 @@ cd back
 APP_DB_HOST=localhost ./gradlew bootRun
 ```
 
-- Health: `http://localhost:8082/api/v1/health`
+- Health: `http://localhost:8080/api/v1/health`
 
 ### 단일 ZIP 청크 업로드
 
@@ -104,12 +107,19 @@ cd front && npm run build
 통합 확인:
 
 ```bash
-docker compose --env-file llm.env up -d --build
+docker compose up -d --wait
+```
+
+로컬 소스 기준으로 이미지를 다시 만들 때:
+
+```bash
+docker compose --profile build build back-build front-build
+docker compose up -d --wait
 ```
 
 ## EC2 배포
 
-EC2 배포는 [`aws/docker-compose.ec2.yml`](/home/yangyag/llm/aws/docker-compose.ec2.yml)와 `/home/ubuntu/llm.env`를 기준으로 동작합니다. 시작점은 `/home/yangyag/llm/aws/llm.ec2.env.example`입니다.
+EC2 배포도 루트 [`docker-compose.yml`](/home/yangyag/llm/docker-compose.yml) 하나를 사용합니다. 운영 파일은 EC2의 `/home/ubuntu/llm` 아래에서 관리하고, 환경값은 `/home/ubuntu/llm/.env`에 둡니다. 시작점은 `/home/yangyag/llm/.env.example`입니다.
 
 사용 이미지:
 - `yangyag2/llm-front:latest`
@@ -117,32 +127,30 @@ EC2 배포는 [`aws/docker-compose.ec2.yml`](/home/yangyag/llm/aws/docker-compos
 
 준비 절차:
 
-```bash
-cp /home/yangyag/llm/aws/llm.ec2.env.example /home/ubuntu/llm.env
-```
+EC2에서 `/home/ubuntu/llm/.env`를 `.env.example` 형식으로 작성하고 운영값으로 바꿉니다.
 
 기본 흐름:
 
 ```bash
-cd /home/yangyag/llm/aws
-docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml pull
-docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml up -d --wait --wait-timeout 180 --remove-orphans
-docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml ps
+cd /home/ubuntu/llm
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
 
 스크립트로 순차 배포:
 
 ```bash
-cd /home/yangyag/llm/aws
+cd /home/ubuntu/llm
 chmod +x deploy-ec2.sh
 ./deploy-ec2.sh
-# 옵션 예시: ./deploy-ec2.sh --env-file /home/ubuntu/llm.env --wait-timeout 180
+# 옵션 예시: ./deploy-ec2.sh --compose-file /home/ubuntu/llm/docker-compose.yml --env-file /home/ubuntu/llm/.env --project-name ubuntu --wait-timeout 180
 ```
 
 운영 메모:
 - 외부 HTTPS는 ALB 또는 리버스 프록시에서 종료하고, front/back 컨테이너는 내부 HTTP로만 통신합니다.
 - 외부 공개는 front/public proxy 포트만 허용하고, backend/DB 포트는 사설망 또는 방화벽으로만 접근되게 유지합니다.
-- EC2에서는 `/home/ubuntu/llm.env` 하나만 관리하면 됩니다.
+- EC2에서는 `/home/ubuntu/llm/.env` 하나만 관리하면 됩니다.
 - EC2 운영 시 기대값은 다음과 같습니다.
   - `APP_DB_HOST=auto-postgres`
   - `APP_DB_SCHEMA=llm`
@@ -158,7 +166,7 @@ chmod +x deploy-ec2.sh
 ### 디렉터리
 - `front/`: UI, 라우팅, 상태관리, 프론트 Docker 빌드
 - `back/`: API, 도메인, 테스트, 정적 자산, 백엔드 Docker 빌드
-- 루트: 통합 실행/문서(`docker-compose.yml`, `llm.env.example`, `README.md`)
+- 루트: 통합 실행/문서(`docker-compose.yml`, `.env.example`, `README.md`)
 
 ### Git
 - `git commit` 메시지는 한글로 작성합니다.
