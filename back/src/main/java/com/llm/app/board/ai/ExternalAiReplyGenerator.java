@@ -33,13 +33,13 @@ public class ExternalAiReplyGenerator implements AiReplyGenerator {
 
 	public ExternalAiReplyGenerator(
 		@Value("${OPENAI_API_KEY:}") String openAiApiKey,
-		@Value("${OPENAI_MODEL:gpt-5.2}") String openAiModel,
+		@Value("${OPENAI_MODEL:gpt-5.4}") String openAiModel,
 		@Value("${OPENAI_API_BASE_URL:https://api.openai.com/v1}") String openAiBaseUrl,
 		@Value("${ANTHROPIC_API_KEY:}") String anthropicApiKey,
-		@Value("${ANTHROPIC_MODEL:claude-opus-4-1-20250805}") String anthropicModel,
+		@Value("${ANTHROPIC_MODEL:claude-sonnet-4-6}") String anthropicModel,
 		@Value("${ANTHROPIC_API_BASE_URL:https://api.anthropic.com/v1}") String anthropicBaseUrl,
 		@Value("${XAI_API_KEY:}") String xAiApiKey,
-		@Value("${XAI_MODEL:grok-4-1-fast-reasoning}") String xAiModel,
+		@Value("${XAI_MODEL:grok-4.20-0309-reasoning}") String xAiModel,
 		@Value("${XAI_API_BASE_URL:https://api.x.ai/v1}") String xAiBaseUrl
 	) {
 		this.restClient = RestClient.builder().build();

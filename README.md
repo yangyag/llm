@@ -38,7 +38,7 @@ docker compose down
 
 - `VITE_API_BASE_URL`: 프론트에서 사용할 API base URL
 - `APP_CORS_ALLOWED_ORIGINS`: 허용 Origin 목록
-- `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER`, `APP_DB_PASSWORD`: 백엔드 DB 연결
+- `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SCHEMA`: 백엔드 DB 연결
 - `APP_ATTACHMENTS_ROOT_PATH`: 첨부파일 저장 경로
 - `APP_ATTACHMENTS_MAX_FILE_SIZE`, `APP_ATTACHMENTS_MAX_REQUEST_SIZE`: 업로드 제한
 - `APP_ATTACHMENTS_MAX_GENERATED_FILE_SIZE`: 청크 업로드 후 복원되는 최종 ZIP의 최대 크기
@@ -52,7 +52,6 @@ docker compose down
 - `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_API_BASE_URL`
 - `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_API_BASE_URL`
 - `XAI_API_KEY`, `XAI_MODEL`, `XAI_API_BASE_URL`
-- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`: EC2 DB 컨테이너용
 
 주의:
 - `APP_JWT_SECRET`은 코드상 fallback이 있어도 운영에서는 반드시 설정하세요.
@@ -115,7 +114,6 @@ EC2 배포는 [`aws/docker-compose.ec2.yml`](/home/yangyag/llm/aws/docker-compos
 사용 이미지:
 - `yangyag2/llm-front:latest`
 - `yangyag2/llm-back:latest`
-- `yangyag2/llm-db:18`
 
 준비 절차:
 
@@ -128,7 +126,7 @@ cp /home/yangyag/llm/aws/llm.ec2.env.example /home/ubuntu/llm.env
 ```bash
 cd /home/yangyag/llm/aws
 docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml pull
-docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml up -d --wait --wait-timeout 180
+docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml up -d --wait --wait-timeout 180 --remove-orphans
 docker compose --env-file /home/ubuntu/llm.env -f docker-compose.ec2.yml ps
 ```
 
@@ -146,12 +144,14 @@ chmod +x deploy-ec2.sh
 - 외부 공개는 front/public proxy 포트만 허용하고, backend/DB 포트는 사설망 또는 방화벽으로만 접근되게 유지합니다.
 - EC2에서는 `/home/ubuntu/llm.env` 하나만 관리하면 됩니다.
 - EC2 운영 시 기대값은 다음과 같습니다.
-  - `APP_DB_HOST=db`
+  - `APP_DB_HOST=auto-postgres`
+  - `APP_DB_SCHEMA=llm`
   - `APP_CORS_ALLOWED_ORIGINS=https://<your-domain>`
   - `LLM_API_BASE_URL=https://<your-domain>`
   - `APP_JWT_SECRET`와 `APP_UPLOAD_SESSIONS_SECRET`는 배포 전에 반드시 설정해야 합니다.
   - `APP_UPLOAD_SESSIONS_SECRET`는 backend와 `upload_zip_post.py`가 같은 값을 쓰도록 맞춰야 하며, `LLM_UPLOAD_SESSIONS_SECRET`를 바꾸면 스크립트도 같은 값을 사용해야 합니다.
-- 백엔드는 내부 `db:5432`로만 접속합니다.
+- EC2 운영 DB는 `auto-postgres` 컨테이너의 `auto` DB 안에 있는 `llm` schema를 사용합니다.
+- `auto-postgres`는 compose 외부 컨테이너이므로 LLM compose 네트워크에 연결되어 있어야 합니다.
 
 ## 프로젝트 규칙
 

@@ -31,6 +31,8 @@ const DEFAULT_PAGINATION = {
   hasNext: false
 };
 
+const ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE = "첨부파일을 올려도 되는 환경입니까?";
+
 function normalizeSearchQuery(value) {
   return value.trim();
 }
@@ -100,11 +102,13 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
   const [postActionMode, setPostActionMode] = useState("none");
   const [postForm, setPostForm] = useState(EMPTY_POST_FORM);
   const [postAttachmentFile, setPostAttachmentFile] = useState(null);
+  const [postAttachmentConfirmed, setPostAttachmentConfirmed] = useState(false);
   const [postAttachmentInputKey, setPostAttachmentInputKey] = useState(0);
   const [replyForm, setReplyForm] = useState(EMPTY_REPLY_FORM);
   const [selectedAiProvider, setSelectedAiProvider] = useState("GPT");
   const [postEditForm, setPostEditForm] = useState(EMPTY_POST_FORM);
   const [postEditAttachmentFile, setPostEditAttachmentFile] = useState(null);
+  const [postEditAttachmentConfirmed, setPostEditAttachmentConfirmed] = useState(false);
   const [postEditAttachmentInputKey, setPostEditAttachmentInputKey] = useState(0);
   const [removePostAttachment, setRemovePostAttachment] = useState(false);
   const [replyEditState, setReplyEditState] = useState({ replyId: null, body: "" });
@@ -224,6 +228,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
         body: payload.body
       });
       setPostEditAttachmentFile(null);
+      setPostEditAttachmentConfirmed(false);
       setPostEditAttachmentInputKey((prev) => prev + 1);
       setRemovePostAttachment(false);
     } catch (loadError) {
@@ -254,6 +259,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     setView("write");
     setPostForm(EMPTY_POST_FORM);
     setPostAttachmentFile(null);
+    setPostAttachmentConfirmed(false);
     setPostAttachmentInputKey((prev) => prev + 1);
     setPostActionMode("none");
     setPostActionError("");
@@ -270,6 +276,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     setReplyForm(EMPTY_REPLY_FORM);
     setReplyEditState({ replyId: null, body: "" });
     setPostEditAttachmentFile(null);
+    setPostEditAttachmentConfirmed(false);
     setPostEditAttachmentInputKey((prev) => prev + 1);
     setRemovePostAttachment(false);
     setPostActionError("");
@@ -290,6 +297,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       body: selectedPost.body
     });
     setPostEditAttachmentFile(null);
+    setPostEditAttachmentConfirmed(false);
     setPostEditAttachmentInputKey((prev) => prev + 1);
     setRemovePostAttachment(false);
     setPostActionError("");
@@ -300,7 +308,52 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     setPostActionMode("none");
     setPostActionError("");
     setPostEditAttachmentFile(null);
+    setPostEditAttachmentConfirmed(false);
     setPostEditAttachmentInputKey((prev) => prev + 1);
+    setRemovePostAttachment(false);
+  }
+
+  function confirmAttachmentUploadEnvironment() {
+    return window.confirm(ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE);
+  }
+
+  function handleCreateAttachmentChange(event) {
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      setPostAttachmentFile(null);
+      setPostAttachmentConfirmed(false);
+      return;
+    }
+
+    if (!confirmAttachmentUploadEnvironment()) {
+      event.target.value = "";
+      setPostAttachmentFile(null);
+      setPostAttachmentConfirmed(false);
+      return;
+    }
+
+    setPostAttachmentFile(nextFile);
+    setPostAttachmentConfirmed(true);
+  }
+
+  function handleEditAttachmentChange(event) {
+    const nextFile = event.target.files?.[0] ?? null;
+    setPostActionError("");
+    if (!nextFile) {
+      setPostEditAttachmentFile(null);
+      setPostEditAttachmentConfirmed(false);
+      return;
+    }
+
+    if (!confirmAttachmentUploadEnvironment()) {
+      event.target.value = "";
+      setPostEditAttachmentFile(null);
+      setPostEditAttachmentConfirmed(false);
+      return;
+    }
+
+    setPostEditAttachmentFile(nextFile);
+    setPostEditAttachmentConfirmed(true);
     setRemovePostAttachment(false);
   }
 
@@ -320,7 +373,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
   async function handleCreatePost(event) {
     event.preventDefault();
 
-    if (postAttachmentFile && !window.confirm("첨부파일을 추가해도 되는 환경입니까?")) {
+    if (postAttachmentFile && !postAttachmentConfirmed && !confirmAttachmentUploadEnvironment()) {
       return;
     }
 
@@ -335,6 +388,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       }, authToken);
       setPostForm(EMPTY_POST_FORM);
       setPostAttachmentFile(null);
+      setPostAttachmentConfirmed(false);
       setPostAttachmentInputKey((prev) => prev + 1);
       navigateToList(1, searchQuery, { replace: true });
       await loadPosts(1);
@@ -353,6 +407,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       return;
     }
 
+    if (postEditAttachmentFile && !postEditAttachmentConfirmed && !confirmAttachmentUploadEnvironment()) {
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     setMessage("");
@@ -368,6 +426,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       setPostActionMode("none");
       setPostActionError("");
       setPostEditAttachmentFile(null);
+      setPostEditAttachmentConfirmed(false);
       setPostEditAttachmentInputKey((prev) => prev + 1);
       setRemovePostAttachment(false);
       await loadPosts(currentPage);
@@ -782,7 +841,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                   <input
                     key={postAttachmentInputKey}
                     type="file"
-                    onChange={(event) => setPostAttachmentFile(event.target.files?.[0] ?? null)}
+                    onChange={handleCreateAttachmentChange}
                   />
                 </label>
                 <p className="section-meta">
@@ -929,14 +988,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                           <input
                             key={postEditAttachmentInputKey}
                             type="file"
-                            onChange={(event) => {
-                              const nextFile = event.target.files?.[0] ?? null;
-                              setPostActionError("");
-                              setPostEditAttachmentFile(nextFile);
-                              if (nextFile) {
-                                setRemovePostAttachment(false);
-                              }
-                            }}
+                            onChange={handleEditAttachmentChange}
                           />
                         </label>
                         {postEditAttachmentFile ? (

@@ -72,8 +72,8 @@ echo "[INFO] Wait timeout: ${WAIT_TIMEOUT}s"
 echo "[STEP 1/3] docker compose pull"
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" pull
 
-echo "[STEP 2/3] docker compose up -d --wait --wait-timeout ${WAIT_TIMEOUT}"
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --wait --wait-timeout "${WAIT_TIMEOUT}"
+echo "[STEP 2/3] docker compose up -d --wait --wait-timeout ${WAIT_TIMEOUT} --remove-orphans"
+docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --wait --wait-timeout "${WAIT_TIMEOUT}" --remove-orphans
 
 echo "[STEP 3/3] docker compose ps"
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" ps
