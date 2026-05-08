@@ -4,8 +4,9 @@ services:
     container_name: llm-back
     env_file:
       - ${LLM_ENV_FILE:-./.env}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - auto_default
     volumes:
       - llm-back-attachments:/var/lib/llm/attachments
       - llm-back-upload-sessions:/var/lib/llm/upload-sessions
@@ -60,3 +61,7 @@ services:
 volumes:
   llm-back-attachments:
   llm-back-upload-sessions:
+
+networks:
+  auto_default:
+    external: true
