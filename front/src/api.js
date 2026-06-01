@@ -47,6 +47,12 @@ async function requestJson(path, options = {}) {
   });
 
   if (!response.ok) {
+    // 인증 요청(Authorization 헤더 포함)이 401이면 세션 만료로 보고 전역 로그아웃 신호를 보낸다.
+    // 로그인 요청은 Authorization 헤더가 없으므로(잘못된 자격증명 401) 여기서 제외된다.
+    const sentAuthHeader = Boolean(optionHeaders && (optionHeaders.Authorization ?? optionHeaders.authorization));
+    if (response.status === 401 && sentAuthHeader && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+    }
     const payload = await response.json().catch(() => null);
     const error = new Error(payload?.message ?? `Request failed: ${response.status}`);
     error.code = payload?.code ?? null;
