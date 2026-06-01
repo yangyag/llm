@@ -80,7 +80,7 @@ jdbc:postgresql://${APP_DB_HOST}:${APP_DB_PORT}/${APP_DB_NAME}?currentSchema=${A
 | 변수 | 기본/예시 | 설명 |
 | --- | --- | --- |
 | `APP_JWT_SECRET` | secret | JWT HS256 서명 secret. 운영 필수 |
-| `APP_JWT_EXPIRATION_MS` | `3600000` | JWT 만료 시간 |
+| `APP_JWT_EXPIRATION_MS` | `3600000` | JWT 만료 시간. 프론트의 유휴 자동 로그아웃(1시간)은 이 값과 무관한 `front/src/App.jsx`의 하드코딩 상수 `IDLE_TIMEOUT_MS`로, 환경 변수로 조정되지 않습니다(양쪽 변경 시 함께 맞춰야 함) |
 | `LLM_JWT_TOKEN` | 선택 | 업로드 스크립트가 직접 사용할 JWT |
 | `LLM_USERNAME` | 선택 | 업로드 스크립트 로그인 계정 |
 | `LLM_PASSWORD` | 선택 | 업로드 스크립트 로그인 비밀번호 |
