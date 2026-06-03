@@ -81,9 +81,10 @@ cd /home/ubuntu/llm
 
 스크립트가 수행하는 일:
 
-1. `docker compose pull`
-2. `docker compose up -d --wait --wait-timeout 180 --remove-orphans`
-3. `docker compose ps`
+1. Docker 데몬 접근과 외부 네트워크 `auto_default` 존재를 사전 확인 (없으면 명확한 오류로 중단)
+2. `docker compose pull`
+3. `docker compose up -d --wait --wait-timeout 180 --remove-orphans`
+4. `docker compose ps`
 
 옵션 예시:
 
@@ -154,5 +155,7 @@ ubuntu_llm-back-upload-sessions -> /var/lib/llm/upload-sessions
 ```
 
 첨부파일은 EC2 컨테이너 env에 `APP_ATTACHMENTS_ROOT_PATH=/var/lib/llm/attachments`가 있어 위 volume을 사용합니다. 반면 2026-05-31 KST 확인 시 EC2 `.env`와 `llm-back` 컨테이너 env에는 `APP_UPLOAD_SESSIONS_ROOT_PATH`가 없었습니다. 이 값이 없으면 백엔드는 `${java.io.tmpdir}/llm-upload-sessions` fallback을 사용하므로, upload-session volume mount가 있어도 실제 임시 청크 저장 경로가 아닐 수 있습니다.
+
+> **조치 필요:** 운영 `.env`에 `APP_UPLOAD_SESSIONS_ROOT_PATH=/var/lib/llm/upload-sessions`(= compose volume mount 경로)를 추가하고 `llm-back`을 재기동해야 ZIP finalize 청크가 named volume에 저장됩니다. 적용 여부는 `docker exec llm-back printenv APP_UPLOAD_SESSIONS_ROOT_PATH`로 확인합니다.
 
 운영 데이터가 들어 있는 volume은 임의 삭제하지 않습니다. 업로드 세션 장애 조사 시에는 먼저 컨테이너 env와 실제 저장 경로를 확인합니다.

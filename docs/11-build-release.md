@@ -35,6 +35,8 @@ cd /home/yangyag/llm
 docker compose --profile build build back-build front-build
 ```
 
+> `VITE_API_BASE_URL`은 front 이미지 **빌드 시점**에 정적 번들로 굳어집니다(런타임 변경 불가). 운영은 상대경로 `/api`를 쓰도록 `.env`에서 비워 둔 채 빌드하고, API base URL을 바꾸려면 front 이미지를 다시 빌드·push해야 합니다.
+
 ## Dockerfile 요약
 
 Backend:
@@ -80,12 +82,15 @@ Frontend:
    docker compose --profile build build back-build front-build
    ```
 
-5. 통합 실행
+5. 통합 실행 (외부 네트워크 `auto_default`가 없으면 health 단계에서 실패)
 
    ```bash
-   docker compose up -d --wait
+   docker network inspect auto_default >/dev/null 2>&1 || docker network create auto_default
+   docker compose --env-file .env up -d --wait
    curl -fsS http://localhost:8083/api/v1/health
    ```
+
+   > EC2 운영에서는 `--project-name ubuntu`까지 포함한 전체 호출 또는 `./deploy-ec2.sh`를 사용합니다(docs/12 참조). 단, **EC2에서는 `auto_default`를 직접 생성하지 마세요** — 이 네트워크는 auto-postgres 스택 소유이고, 빈 네트워크를 만들면 DB 누락을 가립니다(`deploy-ec2.sh`는 의도적으로 자동 생성하지 않고 fail-fast). 자세한 구분은 docs/15 참조.
 
 ## 이미지 push
 

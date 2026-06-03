@@ -20,6 +20,7 @@
 
 ```bash
 cp .env.example .env
+docker network inspect auto_default >/dev/null 2>&1 || docker network create auto_default
 docker compose pull
 docker compose up -d --wait
 ```
@@ -37,7 +38,7 @@ docker compose down
 
 공통 compose는 `.env`에서 환경별 값을 읽습니다. 로컬과 EC2는 각각 자기 머신의 `.env`만 다르게 두고, 실제 `.env` 파일은 `.gitignore`로 관리 대상에서 제외합니다.
 
-- `VITE_API_BASE_URL`: 프론트 이미지를 빌드할 때 사용할 API base URL
+- `VITE_API_BASE_URL`: 프론트 이미지를 빌드할 때 사용할 API base URL (빌드 타임에 번들로 고정되어 런타임 변경 불가, 변경 시 front 이미지 재빌드 필요)
 - `LLM_BACK_IMAGE`, `LLM_FRONT_IMAGE`: compose가 실행할 Docker 이미지
 - `LLM_FRONT_PORT`: 프론트 컨테이너를 호스트에 공개할 포트
 - `APP_CORS_ALLOWED_ORIGINS`: 허용 Origin 목록
@@ -104,9 +105,10 @@ cd back && ./gradlew clean test
 cd front && npm run build
 ```
 
-통합 확인:
+통합 확인 (외부 네트워크 `auto_default` 필요):
 
 ```bash
+docker network inspect auto_default >/dev/null 2>&1 || docker network create auto_default
 docker compose up -d --wait
 ```
 
@@ -157,9 +159,10 @@ chmod +x deploy-ec2.sh
   - `APP_CORS_ALLOWED_ORIGINS=https://<your-domain>`
   - `LLM_API_BASE_URL=https://<your-domain>`
   - `APP_JWT_SECRET`와 `APP_UPLOAD_SESSIONS_SECRET`는 배포 전에 반드시 설정해야 합니다.
+  - `APP_UPLOAD_SESSIONS_ROOT_PATH=/var/lib/llm/upload-sessions`를 반드시 설정합니다. 없으면 백엔드가 `${java.io.tmpdir}/llm-upload-sessions`로 fallback해 upload-session volume이 무시되고 ZIP finalize 청크가 유실될 수 있습니다.
   - `APP_UPLOAD_SESSIONS_SECRET`는 backend와 `upload_zip_post.py`가 같은 값을 쓰도록 맞춰야 하며, `LLM_UPLOAD_SESSIONS_SECRET`를 바꾸면 스크립트도 같은 값을 사용해야 합니다.
 - EC2 운영 DB는 `auto-postgres` 컨테이너의 `auto` DB 안에 있는 `llm` schema를 사용합니다.
-- `auto-postgres`는 compose 외부 컨테이너이므로 LLM compose 네트워크에 연결되어 있어야 합니다.
+- `auto-postgres`는 compose 외부 컨테이너이므로 LLM compose 네트워크에 연결되어 있어야 합니다. EC2에서는 `auto_default`를 수동 생성하지 마세요 — 이 네트워크는 auto-postgres 스택 소유이며, 빈 네트워크를 만들면 DB 누락을 가립니다(`deploy-ec2.sh`는 없으면 fail-fast).
 
 ## 프로젝트 규칙
 

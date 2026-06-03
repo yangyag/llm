@@ -16,7 +16,7 @@
 
 | 변수 | 설명 |
 | --- | --- |
-| `VITE_API_BASE_URL` | 프론트 빌드 시 API base URL. 비어 있으면 상대 경로 `/api/...`를 사용 |
+| `VITE_API_BASE_URL` | 프론트 빌드 시 API base URL. 비어 있으면 상대 경로 `/api/...`를 사용. **빌드 타임에 번들로 굳어져 런타임 변경이 불가**하므로, 값을 바꾸려면 front 이미지를 재빌드해야 합니다 |
 | `LLM_API_BASE_URL` | `upload_zip_post.py`가 사용할 API base URL. 없으면 도구가 `VITE_API_BASE_URL`을 fallback으로 사용할 수 있음 |
 
 Vite dev server는 `front/vite.config.js`에서 `/api`를 `http://localhost:8082`로 proxy합니다.
@@ -59,6 +59,8 @@ jdbc:postgresql://${APP_DB_HOST}:${APP_DB_PORT}/${APP_DB_NAME}?currentSchema=${A
 
 `APP_ATTACHMENTS_ROOT_PATH`가 없으면 백엔드 fallback은 `${java.io.tmpdir}/llm-attachments`입니다.
 
+`APP_ATTACHMENTS_MAX_REQUEST_SIZE`와 front `nginx.conf`의 `client_max_body_size`(현재 `100M`)는 함께 맞춰야 합니다. 둘 중 작은 값이 실효 상한이며, 8083(front proxy) 경유 요청은 nginx 한도를 먼저 거칩니다. nginx 값은 정적 설정이라 키우려면 front 이미지를 다시 빌드해야 합니다.
+
 ## Upload sessions
 
 | 변수 | 기본/예시 | 설명 |
@@ -66,7 +68,7 @@ jdbc:postgresql://${APP_DB_HOST}:${APP_DB_PORT}/${APP_DB_NAME}?currentSchema=${A
 | `APP_UPLOAD_SESSIONS_ROOT_PATH` | `.env.example`/Compose 예시: `/var/lib/llm/upload-sessions` | 청크 임시 저장 루트 |
 | `APP_UPLOAD_SESSIONS_EXPIRATION_MS` | `86400000` | 세션 만료 시간 |
 | `APP_UPLOAD_SESSIONS_CLEANUP_FIXED_DELAY_MS` | `3600000` | 만료 세션 정리 주기 |
-| `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE` | `100MB` | 청크 1개의 decode 후 최대 크기. `.env.example`에는 없지만 백엔드가 지원 |
+| `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE` | `100MB` | 청크 1개의 decode 후 최대 크기. `.env.example`에 포함되며 백엔드 default도 `100MB` |
 | `APP_UPLOAD_SESSIONS_SECRET` | secret | 백엔드 AES-GCM wire codec secret |
 | `LLM_UPLOAD_SESSIONS_SECRET` | secret | 업로드 스크립트 전용 override. 없으면 `APP_UPLOAD_SESSIONS_SECRET` 사용 |
 | `LLM_UPLOAD_CHUNK_SIZE_BASE64_CHARS` | `1398104` | 업로드 스크립트 기본 base64 청크 길이 |
