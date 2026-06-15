@@ -111,7 +111,7 @@ docker logs --tail 100 llm-back
 
 ## 게시글 body가 깨짐
 
-일반 게시글/댓글 쓰기 API는 `bodyBase64`를 기대합니다. UTF-8 문자열을 Base64로 인코딩해야 합니다.
+일반 게시글은 본문을 비워둘 수 있습니다. 게시글/댓글 쓰기 API에서 본문을 보낼 때는 `bodyBase64`에 UTF-8 문자열을 Base64로 인코딩해 전달해야 합니다.
 
 프론트는 `js-base64`의 `fromUint8Array(new TextEncoder().encode(value))` 방식을 사용합니다.
 

@@ -31,6 +31,9 @@ public class BoardReply {
 	@Column(name = "ai_provider", length = 32)
 	private String aiProvider;
 
+	@Column(name = "ai_model", length = 64)
+	private String aiModel;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -41,7 +44,7 @@ public class BoardReply {
 	}
 
 	public BoardReply(BoardPost post, String body, Instant createdAt, Instant updatedAt) {
-		this(post, body, createdAt, updatedAt, false, null);
+		this(post, body, createdAt, updatedAt, false, null, null);
 	}
 
 	public BoardReply(
@@ -50,12 +53,14 @@ public class BoardReply {
 		Instant createdAt,
 		Instant updatedAt,
 		boolean ai,
-		String aiProvider
+		String aiProvider,
+		String aiModel
 	) {
 		this.post = post;
 		this.body = body;
 		this.ai = ai;
 		this.aiProvider = aiProvider;
+		this.aiModel = aiModel;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
 	}
@@ -78,6 +83,10 @@ public class BoardReply {
 
 	public String getAiProvider() {
 		return aiProvider;
+	}
+
+	public String getAiModel() {
+		return aiModel;
 	}
 
 	public Instant getCreatedAt() {

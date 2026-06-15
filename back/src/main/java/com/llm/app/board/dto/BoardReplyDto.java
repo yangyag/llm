@@ -7,6 +7,7 @@ public record BoardReplyDto(
 	String body,
 	boolean ai,
 	String aiProvider,
+	String aiModel,
 	Instant createdAt,
 	Instant updatedAt
 ) {

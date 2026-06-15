@@ -288,6 +288,48 @@ class BoardPostControllerTest {
 	}
 
 	@Test
+	void createPostShouldAcceptMissingBody() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "본문 없는 글"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.title").value("본문 없는 글"))
+			.andExpect(jsonPath("$.body").value(""))
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		assertThat(boardPostRepository.findById(postId)).isPresent();
+		assertThat(boardPostRepository.findById(postId).orElseThrow().getBody()).isEmpty();
+
+		mockMvc.perform(get("/api/v1/posts/{id}", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.body").value(""));
+	}
+
+	@Test
+	void updatePostShouldAcceptEmptyBody() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "본문 있는 글")
+				.param("bodyBase64", encode("기존 본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "본문 지운 글")
+				.param("bodyBase64", ""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.title").value("본문 지운 글"))
+			.andExpect(jsonPath("$.body").value(""));
+
+		assertThat(boardPostRepository.findById(postId)).isPresent();
+		assertThat(boardPostRepository.findById(postId).orElseThrow().getBody()).isEmpty();
+	}
+
+	@Test
 	void shouldSearchPostsByTitle() throws Exception {
 		mockMvc.perform(multipartPost("/api/v1/posts")
 				.header("Authorization", "Bearer " + token)
@@ -649,7 +691,8 @@ class BoardPostControllerTest {
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
-		given(aiReplyGenerator.generateReply(eq(AiProvider.GPT), anyString(), anyString())).willReturn("AI 생성 답변");
+		given(aiReplyGenerator.generateReply(eq(AiProvider.GPT), anyString(), anyString()))
+			.willReturn(new AiReplyGenerator.AiReplyResult("AI 생성 답변", "gpt-5.5"));
 
 		MvcResult aiReplyResult = mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
 				.header("Authorization", "Bearer " + token)

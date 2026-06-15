@@ -73,7 +73,7 @@ function getPostBodyLabel() {
 }
 
 function getPostBodyHelp() {
-  return "일반 게시글 본문을 작성합니다. 첨부파일은 최대 100MB까지 업로드할 수 있습니다.";
+  return "본문은 비워둘 수 있습니다. 첨부파일은 최대 100MB까지 업로드할 수 있습니다.";
 }
 
 function formatFileSize(size) {
@@ -630,15 +630,17 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
             <button type="button" className="ghost-button" onClick={refreshListView}>
               목록
             </button>
-            <button
-              type={view === "write" ? "submit" : "button"}
-              form={view === "write" ? createPostFormId : undefined}
-              className={view === "write" ? "submit-button" : "primary-button"}
-              onClick={view === "write" ? undefined : openWrite}
-              disabled={view === "write" && submitting}
-            >
-              {view === "write" ? (submitting ? "등록 중..." : "등록") : "글쓰기"}
-            </button>
+            {view !== "detail" ? (
+              <button
+                type={view === "write" ? "submit" : "button"}
+                form={view === "write" ? createPostFormId : undefined}
+                className={view === "write" ? "submit-button" : "primary-button"}
+                onClick={view === "write" ? undefined : openWrite}
+                disabled={view === "write" && submitting}
+              >
+                {view === "write" ? (submitting ? "등록 중..." : "등록") : "글쓰기"}
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -831,7 +833,6 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                   value={postForm.body}
                   onChange={(event) => setPostForm((prev) => ({ ...prev, body: event.target.value }))}
                   rows={12}
-                  required
                 />
               </label>
               <p className="section-meta">{getPostBodyHelp()}</p>
@@ -960,7 +961,6 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                           value={postEditForm.body}
                           onChange={(event) => setPostEditForm((prev) => ({ ...prev, body: event.target.value }))}
                           rows={8}
-                          required
                         />
                       </label>
                       <p className="section-meta">{getPostBodyHelp()}</p>
@@ -1056,19 +1056,23 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                         </div>
                         <p className="section-meta">현재 게시글 본문을 기준으로 AI 답변을 생성합니다.</p>
                         <div className="provider-options" role="radiogroup" aria-label="AI provider">
-                          {["GPT", "Claude", "Grok"].map((provider) => (
-                            <label key={provider} className="provider-option">
+                          {[
+                            { id: "GPT", label: "GPT (gpt-5.5)" },
+                            { id: "Claude", label: "Claude (claude-opus-4-7)" },
+                            { id: "Grok", label: "Grok (grok-4.3)" }
+                          ].map(({ id, label }) => (
+                            <label key={id} className="provider-option">
                               <input
                                 type="radio"
                                 name="ai-provider"
-                                value={provider}
-                                checked={selectedAiProvider === provider}
+                                value={id}
+                                checked={selectedAiProvider === id}
                                 onChange={(event) => {
                                   setAiReplyError("");
                                   setSelectedAiProvider(event.target.value);
                                 }}
                               />
-                              <span>{provider}</span>
+                              <span>{label}</span>
                             </label>
                           ))}
                         </div>

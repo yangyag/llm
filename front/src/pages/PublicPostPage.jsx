@@ -163,7 +163,7 @@ function PublicPostPage({ postId }) {
                       <div className="reply-top">
                         <div className="reply-heading">
                           <strong>댓글 #{reply.id}</strong>
-                          {reply.ai ? <span className="ai-badge">AI · {reply.aiProvider}</span> : null}
+                          {reply.ai ? <span className="ai-badge">AI · {reply.aiProvider} ({reply.aiModel})</span> : null}
                         </div>
                         <time>{new Date(reply.createdAt).toLocaleString()}</time>
                       </div>

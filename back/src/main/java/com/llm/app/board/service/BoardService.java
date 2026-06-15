@@ -149,15 +149,16 @@ public class BoardService {
 			throw new AiReplyNotAllowedException();
 		}
 		AiProvider provider = AiProvider.from(request.provider());
-		String generatedReply = aiReplyGenerator.generateReply(provider, post.getTitle(), post.getBody());
+		AiReplyGenerator.AiReplyResult result = aiReplyGenerator.generateReply(provider, post.getTitle(), post.getBody());
 		Instant now = Instant.now();
 		BoardReply reply = new BoardReply(
 			post,
-			generatedReply,
+			result.content(),
 			now,
 			now,
 			true,
-			provider.label()
+			provider.label(),
+			result.model()
 		);
 		post.getReplies().add(reply);
 		boardReplyRepository.saveAndFlush(reply);
@@ -232,7 +233,7 @@ public class BoardService {
 
 	private String resolvePostBody(BoardPostMode mode, String bodyBase64) {
 		ensureManualPostMode(mode);
-		return boardContentCodec.decodeBody(bodyBase64);
+		return boardContentCodec.decodeOptionalBody(bodyBase64);
 	}
 
 	private void validateAttachmentRules(BoardPostMode mode) {

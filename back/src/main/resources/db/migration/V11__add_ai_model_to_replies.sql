@@ -1,0 +1,1 @@
+ALTER TABLE post_replies ADD COLUMN IF NOT EXISTS ai_model VARCHAR(64);

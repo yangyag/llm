@@ -75,6 +75,7 @@ public class BoardMapper {
 			reply.getBody(),
 			reply.isAi(),
 			reply.getAiProvider(),
+			reply.getAiModel(),
 			reply.getCreatedAt(),
 			reply.getUpdatedAt()
 		);

@@ -154,7 +154,7 @@ Content-Type: `multipart/form-data`
 | 필드 | 필수 | 설명 |
 | --- | --- | --- |
 | `title` | 예 | 200자 이하 |
-| `bodyBase64` | 예 | UTF-8 body를 Base64로 인코딩한 값 |
+| `bodyBase64` | 아니오 | UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
 | `mode` | 아니오 | 기본 `NORMAL`. 수동 `FILE_CONVERSION_REQUEST` 생성은 거부 |
 | `attachment` | 아니오 | 첨부파일 |
 
@@ -171,7 +171,7 @@ Content-Type: `multipart/form-data`
 | 필드 | 필수 | 설명 |
 | --- | --- | --- |
 | `title` | 예 | 200자 이하 |
-| `bodyBase64` | 예 | UTF-8 body를 Base64로 인코딩한 값 |
+| `bodyBase64` | 아니오 | UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
 | `mode` | 아니오 | 기본 `NORMAL` |
 | `attachment` | 아니오 | 새 첨부파일 |
 | `removeAttachment` | 아니오 | `true`면 기존 첨부파일 삭제 |

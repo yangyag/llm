@@ -21,6 +21,18 @@ public class BoardContentCodec {
 		return decoded;
 	}
 
+	public String decodeOptionalBody(String bodyBase64) {
+		if (bodyBase64 == null || bodyBase64.isEmpty()) {
+			return "";
+		}
+		byte[] decodedBytes = decodeBinary(bodyBase64);
+		String decoded = new String(decodedBytes, StandardCharsets.UTF_8);
+		if (decoded.length() > MAX_BODY_LENGTH) {
+			throw new InvalidEncodedBodyException("decoded body must be 1000000 characters or less");
+		}
+		return decoded;
+	}
+
 	public byte[] decodeBinary(String bodyBase64) {
 		try {
 			return Base64.getDecoder().decode(bodyBase64);

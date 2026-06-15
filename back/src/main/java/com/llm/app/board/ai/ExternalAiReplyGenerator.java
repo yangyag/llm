@@ -17,8 +17,10 @@ import org.springframework.web.client.RestClientResponseException;
 public class ExternalAiReplyGenerator implements AiReplyGenerator {
 	private static final String ANTHROPIC_VERSION = "2023-06-01";
 	private static final String SYSTEM_PROMPT =
-		"당신은 익명 게시판의 답변 작성 도우미입니다. 게시글을 읽고 한국어로 간결하고 도움이 되는 답변을 작성하세요. "
-			+ "불필요한 인사말이나 마크다운 제목은 쓰지 말고, 본문만 평문으로 답하세요.";
+		"너는 익명 게시판의 AI 답변자다. 게시글을 읽고 그 내용을 직접 수행하거나 답해라. "
+			+ "예를 들어 '자기 소개'라는 글이면 네가 직접 자기소개를 하고, 질문이면 답을 주고, 요청이면 실행해라. "
+			+ "절대 '어떻게 하라'는 식의 조언이나 충고를 하지 마라. "
+			+ "한국어로 간결하게 답하고, 인사말이나 마크다운 제목 없이 본문만 평문으로 작성해라.";
 
 	private final RestClient restClient;
 	private final String openAiApiKey;
@@ -55,7 +57,7 @@ public class ExternalAiReplyGenerator implements AiReplyGenerator {
 	}
 
 	@Override
-	public String generateReply(AiProvider provider, String title, String body) {
+	public AiReplyResult generateReply(AiProvider provider, String title, String body) {
 		String prompt = """
 			게시글 제목:
 			%s
@@ -65,9 +67,9 @@ public class ExternalAiReplyGenerator implements AiReplyGenerator {
 			""".formatted(title, body);
 
 		return switch (provider) {
-			case GPT -> requestOpenAi(prompt);
-			case CLAUDE -> requestAnthropic(prompt);
-			case GROK -> requestXAi(prompt);
+			case GPT -> new AiReplyResult(requestOpenAi(prompt), openAiModel);
+			case CLAUDE -> new AiReplyResult(requestAnthropic(prompt), anthropicModel);
+			case GROK -> new AiReplyResult(requestXAi(prompt), xAiModel);
 		};
 	}
 

@@ -10,7 +10,6 @@ public class UpdateBoardPostRequest {
 	@Size(max = 200, message = "title must be 200 characters or less")
 	private String title;
 
-	@NotBlank(message = "bodyBase64 is required")
 	private String bodyBase64;
 
 	private BoardPostMode mode = BoardPostMode.NORMAL;
