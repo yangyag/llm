@@ -67,23 +67,23 @@ public class ExternalAiReplyGenerator implements AiReplyGenerator {
 			""".formatted(title, body);
 
 		return switch (provider) {
-			case GPT -> new AiReplyResult(requestOpenAi(prompt), openAiModel);
+			case GPT -> new AiReplyResult(requestOpenAiCompatible("GPT", openAiBaseUrl, openAiApiKey, openAiModel, prompt), openAiModel);
 			case CLAUDE -> new AiReplyResult(requestAnthropic(prompt), anthropicModel);
-			case GROK -> new AiReplyResult(requestXAi(prompt), xAiModel);
+			case GROK -> new AiReplyResult(requestOpenAiCompatible("Grok", xAiBaseUrl, xAiApiKey, xAiModel, prompt), xAiModel);
 		};
 	}
 
-	private String requestOpenAi(String prompt) {
-		requireKey("GPT", openAiApiKey);
+	private String requestOpenAiCompatible(String label, String baseUrl, String apiKey, String model, String prompt) {
+		requireKey(label, apiKey);
 
 		try {
 			JsonNode response = restClient.post()
-				.uri(openAiBaseUrl + "/chat/completions")
-				.header(HttpHeaders.AUTHORIZATION, "Bearer " + openAiApiKey)
+				.uri(baseUrl + "/chat/completions")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
 				.contentType(MediaType.APPLICATION_JSON)
 				.accept(MediaType.APPLICATION_JSON)
 				.body(Map.of(
-					"model", openAiModel,
+					"model", model,
 					"messages", List.of(
 						Map.of("role", "system", "content", SYSTEM_PROMPT),
 						Map.of("role", "user", "content", prompt)
@@ -91,11 +91,11 @@ public class ExternalAiReplyGenerator implements AiReplyGenerator {
 				))
 				.retrieve()
 				.body(JsonNode.class);
-			return extractOpenAiContent(response, "GPT");
+			return extractOpenAiContent(response, label);
 		} catch (RestClientResponseException exception) {
-			throw new AiReplyGenerationException("GPT reply generation failed: " + exception.getStatusCode().value());
+			throw new AiReplyGenerationException(label + " reply generation failed: " + exception.getStatusCode().value());
 		} catch (Exception exception) {
-			throw new AiReplyGenerationException("GPT reply generation failed");
+			throw new AiReplyGenerationException(label + " reply generation failed");
 		}
 	}
 
@@ -122,32 +122,6 @@ public class ExternalAiReplyGenerator implements AiReplyGenerator {
 			throw new AiReplyGenerationException("Claude reply generation failed: " + exception.getStatusCode().value());
 		} catch (Exception exception) {
 			throw new AiReplyGenerationException("Claude reply generation failed");
-		}
-	}
-
-	private String requestXAi(String prompt) {
-		requireKey("Grok", xAiApiKey);
-
-		try {
-			JsonNode response = restClient.post()
-				.uri(xAiBaseUrl + "/chat/completions")
-				.header(HttpHeaders.AUTHORIZATION, "Bearer " + xAiApiKey)
-				.contentType(MediaType.APPLICATION_JSON)
-				.accept(MediaType.APPLICATION_JSON)
-				.body(Map.of(
-					"model", xAiModel,
-					"messages", List.of(
-						Map.of("role", "system", "content", SYSTEM_PROMPT),
-						Map.of("role", "user", "content", prompt)
-					)
-				))
-				.retrieve()
-				.body(JsonNode.class);
-			return extractOpenAiContent(response, "Grok");
-		} catch (RestClientResponseException exception) {
-			throw new AiReplyGenerationException("Grok reply generation failed: " + exception.getStatusCode().value());
-		} catch (Exception exception) {
-			throw new AiReplyGenerationException("Grok reply generation failed");
 		}
 	}
 

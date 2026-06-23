@@ -4,7 +4,7 @@ import com.llm.app.auth.InvalidCredentialsException;
 import com.llm.app.board.dto.BoardPostDetailResponse;
 import com.llm.app.board.dto.CreateUploadSessionRequest;
 import com.llm.app.board.exception.InvalidUploadSessionRequestException;
-import com.llm.app.board.exception.UploadSessionNotFoundException;
+import com.llm.app.board.exception.NotFoundException;
 import com.llm.app.board.exception.UploadSessionStateException;
 import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
@@ -92,6 +92,7 @@ public class UploadSessionService {
 		return toStatusSnapshot(session, List.of());
 	}
 
+	@Transactional(readOnly = true)
 	public UploadSessionStatusSnapshot getSession(String username, UUID sessionId) {
 		UploadSession session = findActiveSession(sessionId, username);
 		return toStatusSnapshot(session, uploadedChunkNumbers(sessionId));
@@ -219,7 +220,7 @@ public class UploadSessionService {
 
 	private UploadSession findActiveSession(UUID sessionId, String username) {
 		UploadSession session = uploadSessionRepository.findById(sessionId)
-			.orElseThrow(() -> new UploadSessionNotFoundException(sessionId));
+			.orElseThrow(() -> NotFoundException.uploadSession(sessionId));
 		if (!session.getCreatedBy().equals(username)) {
 			throw new InvalidCredentialsException("upload session access denied");
 		}

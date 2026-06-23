@@ -73,10 +73,6 @@ public class BoardAttachment {
 		return originalFilename;
 	}
 
-	public String getStoredFilename() {
-		return storedFilename;
-	}
-
 	public String getStoragePath() {
 		return storagePath;
 	}

@@ -5,7 +5,6 @@ import com.llm.app.board.exception.AttachmentTooLargeException;
 import com.llm.app.board.model.BoardAttachment;
 import java.io.IOException;
 import java.net.MalformedURLException;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -59,32 +58,6 @@ public class AttachmentStorageService {
 			storagePath,
 			contentType,
 			attachment.getSize()
-		);
-	}
-
-	public StoredAttachment store(String originalFilename, String contentType, byte[] bytes) {
-		if (bytes.length > maxGeneratedFileSizeBytes) {
-			throw new AttachmentTooLargeException(maxGeneratedFileSizeBytes);
-		}
-
-		String extension = extractExtension(originalFilename);
-		String storedFilename = UUID.randomUUID() + extension;
-		String storagePath = storedFilename;
-		Path targetPath = resolve(storagePath);
-
-		try {
-			Files.createDirectories(this.rootPath);
-			Files.write(targetPath, bytes, StandardOpenOption.CREATE_NEW);
-		} catch (IOException exception) {
-			throw new AttachmentStorageException("Failed to store attachment", exception);
-		}
-
-		return new StoredAttachment(
-			originalFilename,
-			storedFilename,
-			storagePath,
-			contentType,
-			bytes.length
 		);
 	}
 

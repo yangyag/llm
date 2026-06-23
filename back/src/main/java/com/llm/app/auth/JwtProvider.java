@@ -1,11 +1,9 @@
 package com.llm.app.auth;
 
+import com.llm.app.common.SecretKeyDerivation;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,24 +19,15 @@ public class JwtProvider {
         @Value("${app.jwt.secret}") String secret,
         @Value("${app.jwt.expiration-ms:3600000}") long expirationMs
     ) {
-        this.secretKey = buildKey(secret);
+        this.secretKey = Keys.hmacShaKeyFor(SecretKeyDerivation.derive32Bytes(secret));
         this.expirationMs = expirationMs;
     }
 
-    private static SecretKey buildKey(String secret) {
-        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
-        // Ensure the key is at least 256 bits (32 bytes) for HMAC-SHA256
-        if (bytes.length < 32) {
-            try {
-                bytes = MessageDigest.getInstance("SHA-256").digest(bytes);
-            } catch (NoSuchAlgorithmException e) {
-                throw new IllegalStateException("SHA-256 not available", e);
-            }
+    public String authenticate(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new InvalidCredentialsException("Authentication required");
         }
-        // Use exactly 32 bytes (256 bits) for HS256
-        byte[] keyBytes = new byte[32];
-        System.arraycopy(bytes, 0, keyBytes, 0, Math.min(bytes.length, 32));
-        return Keys.hmacShaKeyFor(keyBytes);
+        return validateAndGetUsername(authHeader.substring(7));
     }
 
     public String generateToken(String username) {

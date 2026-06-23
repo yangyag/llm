@@ -12,10 +12,8 @@ import com.llm.app.board.dto.UpdateBoardPostRequest;
 import com.llm.app.board.dto.UpdateBoardReplyRequest;
 import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
 import com.llm.app.board.exception.AiReplyNotAllowedException;
-import com.llm.app.board.exception.BoardPostNotFoundException;
-import com.llm.app.board.exception.BoardReplyNotFoundException;
-import com.llm.app.board.exception.BoardAttachmentNotFoundException;
 import com.llm.app.board.exception.FileConversionLockedException;
+import com.llm.app.board.exception.NotFoundException;
 import com.llm.app.board.exception.InvalidFileConversionRequestException;
 import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.model.BoardAttachment;
@@ -93,7 +91,6 @@ public class BoardService {
 	public BoardPostDetailResponse createPost(CreateBoardPostRequest request) {
 		Instant now = Instant.now();
 		BoardPostMode mode = request.getMode();
-		validateAttachmentRules(mode);
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
 			resolvePostBody(mode, request.getBodyBase64()),
@@ -109,7 +106,6 @@ public class BoardService {
 		BoardPost post = findPostWithReplies(id);
 		ensurePostIsEditable(post);
 		BoardPostMode mode = request.getMode();
-		validateAttachmentRules(mode);
 		post.update(
 			request.getTitle().trim(),
 			resolvePostBody(mode, request.getBodyBase64()),
@@ -121,18 +117,16 @@ public class BoardService {
 	}
 
 	public void deletePost(Long id) {
-		BoardPost post = findPostWithReplies(id);
-		findAttachments(post.getId()).forEach(this::deleteAttachment);
-		boardPostRepository.delete(post);
+		deletePostEntity(findPostWithReplies(id));
 	}
 
 	public void batchDeletePosts(List<Long> ids) {
-		for (Long id : ids) {
-			boardPostRepository.findById(id).ifPresent(post -> {
-				findAttachments(post.getId()).forEach(this::deleteAttachment);
-				boardPostRepository.delete(post);
-			});
-		}
+		boardPostRepository.findAllById(ids).forEach(this::deletePostEntity);
+	}
+
+	private void deletePostEntity(BoardPost post) {
+		findAttachments(post.getId()).forEach(this::deleteAttachment);
+		boardPostRepository.delete(post);
 	}
 
 	public BoardPostDetailResponse createReply(Long postId, CreateBoardReplyRequest request) {
@@ -190,7 +184,7 @@ public class BoardService {
 	public BoardAttachmentDownload downloadAttachment(Long postId, Long attachmentId) {
 		BoardPost post = findPostWithReplies(postId);
 		BoardAttachment attachment = boardAttachmentRepository.findByIdAndPost_Id(attachmentId, post.getId())
-			.orElseThrow(() -> new BoardAttachmentNotFoundException(postId));
+			.orElseThrow(() -> NotFoundException.attachment(postId));
 		return new BoardAttachmentDownload(
 			attachmentStorageService.loadAsResource(attachment),
 			attachment.getOriginalFilename(),
@@ -201,12 +195,12 @@ public class BoardService {
 
 	private BoardPost findPostWithReplies(Long id) {
 		return boardPostRepository.findWithRepliesById(id)
-			.orElseThrow(() -> new BoardPostNotFoundException(id));
+			.orElseThrow(() -> NotFoundException.post(id));
 	}
 
 	private BoardReply findReply(Long id) {
 		return boardReplyRepository.findById(id)
-			.orElseThrow(() -> new BoardReplyNotFoundException(id));
+			.orElseThrow(() -> NotFoundException.reply(id));
 	}
 
 	private void ensureReplyIsEditable(BoardReply reply) {
@@ -240,10 +234,6 @@ public class BoardService {
 	private String resolvePostBody(BoardPostMode mode, String bodyBase64) {
 		ensureManualPostMode(mode);
 		return boardContentCodec.decodeOptionalBody(bodyBase64);
-	}
-
-	private void validateAttachmentRules(BoardPostMode mode) {
-		ensureManualPostMode(mode);
 	}
 
 	private void ensureManualPostMode(BoardPostMode mode) {

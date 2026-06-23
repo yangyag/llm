@@ -7,16 +7,13 @@ import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
 import com.llm.app.board.exception.AiReplyNotAllowedException;
 import com.llm.app.board.exception.AttachmentStorageException;
 import com.llm.app.board.exception.AttachmentTooLargeException;
-import com.llm.app.board.exception.BoardAttachmentNotFoundException;
-import com.llm.app.board.exception.BoardPostNotFoundException;
-import com.llm.app.board.exception.BoardReplyNotFoundException;
 import com.llm.app.board.exception.FileConversionLockedException;
 import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidAiProviderException;
 import com.llm.app.board.exception.InvalidEncodedBodyException;
 import com.llm.app.board.exception.InvalidFileConversionRequestException;
 import com.llm.app.board.exception.InvalidUploadSessionRequestException;
-import com.llm.app.board.exception.UploadSessionNotFoundException;
+import com.llm.app.board.exception.NotFoundException;
 import com.llm.app.board.exception.UploadSessionStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -129,12 +126,7 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.BAD_GATEWAY, "AI_REPLY_GENERATION_FAILED", exception.getMessage(), request);
 	}
 
-	@ExceptionHandler({
-		BoardPostNotFoundException.class,
-		BoardReplyNotFoundException.class,
-		BoardAttachmentNotFoundException.class,
-		UploadSessionNotFoundException.class
-	})
+	@ExceptionHandler({ NotFoundException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleBoardNotFound(
 		RuntimeException exception,
 		HttpServletRequest request
@@ -142,17 +134,9 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", exception.getMessage(), request);
 	}
 
-	@ExceptionHandler(MaxUploadSizeExceededException.class)
+	@ExceptionHandler({ MaxUploadSizeExceededException.class, AttachmentTooLargeException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleAttachmentTooLarge(
-		MaxUploadSizeExceededException exception,
-		HttpServletRequest request
-	) {
-		return buildResponse(HttpStatus.PAYLOAD_TOO_LARGE, "ATTACHMENT_TOO_LARGE", exception.getMessage(), request);
-	}
-
-	@ExceptionHandler(AttachmentTooLargeException.class)
-	public org.springframework.http.ResponseEntity<ErrorResponse> handleAttachmentTooLarge(
-		AttachmentTooLargeException exception,
+		Exception exception,
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.PAYLOAD_TOO_LARGE, "ATTACHMENT_TOO_LARGE", exception.getMessage(), request);

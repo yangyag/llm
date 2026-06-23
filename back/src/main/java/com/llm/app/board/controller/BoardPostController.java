@@ -1,6 +1,5 @@
 package com.llm.app.board.controller;
 
-import com.llm.app.auth.InvalidCredentialsException;
 import com.llm.app.auth.JwtProvider;
 import com.llm.app.board.dto.BatchDeleteRequest;
 import com.llm.app.board.dto.BoardPostDetailResponse;
@@ -42,13 +41,6 @@ public class BoardPostController {
 		this.jwtProvider = jwtProvider;
 	}
 
-	private void requireAuth(String authHeader) {
-		if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-			throw new InvalidCredentialsException("Authentication required");
-		}
-		jwtProvider.validateAndGetUsername(authHeader.substring(7));
-	}
-
 	@GetMapping
 	public BoardPostListResponse getPosts(
 		@RequestParam(defaultValue = "1") int page,
@@ -68,7 +60,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@Valid @ModelAttribute CreateBoardPostRequest request
 	) {
-		requireAuth(authHeader);
+		jwtProvider.authenticate(authHeader);
 		return boardService.createPost(request);
 	}
 
@@ -78,7 +70,7 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @ModelAttribute UpdateBoardPostRequest request
 	) {
-		requireAuth(authHeader);
+		jwtProvider.authenticate(authHeader);
 		return boardService.updatePost(id, request);
 	}
 
@@ -88,7 +80,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long id
 	) {
-		requireAuth(authHeader);
+		jwtProvider.authenticate(authHeader);
 		boardService.deletePost(id);
 	}
 
@@ -98,7 +90,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@Valid @RequestBody BatchDeleteRequest request
 	) {
-		requireAuth(authHeader);
+		jwtProvider.authenticate(authHeader);
 		boardService.batchDeletePosts(request.ids());
 	}
 
@@ -109,7 +101,7 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @RequestBody CreateBoardReplyRequest request
 	) {
-		requireAuth(authHeader);
+		jwtProvider.authenticate(authHeader);
 		return boardService.createReply(id, request);
 	}
 
@@ -120,7 +112,7 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @RequestBody CreateAiReplyRequest request
 	) {
-		requireAuth(authHeader);
+		jwtProvider.authenticate(authHeader);
 		return boardService.createAiReply(id, request);
 	}
 
@@ -153,7 +145,7 @@ public class BoardPostController {
 		@PathVariable Long replyId,
 		@Valid @RequestBody UpdateBoardReplyRequest request
 	) {
-		requireAuth(authHeader);
+		jwtProvider.authenticate(authHeader);
 		return boardService.updateReply(replyId, request);
 	}
 
@@ -163,7 +155,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long replyId
 	) {
-		requireAuth(authHeader);
+		jwtProvider.authenticate(authHeader);
 		boardService.deleteReply(replyId);
 	}
 }

@@ -1,6 +1,6 @@
 package com.llm.app.board.service;
 
-import com.llm.app.board.exception.UploadSessionNotFoundException;
+import com.llm.app.board.exception.NotFoundException;
 import com.llm.app.board.model.UploadSession;
 import com.llm.app.board.repository.UploadSessionRepository;
 import java.time.Instant;
@@ -20,7 +20,7 @@ public class UploadSessionFailureService {
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void markFailed(UUID sessionId, Instant now) {
 		UploadSession session = uploadSessionRepository.findById(sessionId)
-			.orElseThrow(() -> new UploadSessionNotFoundException(sessionId));
+			.orElseThrow(() -> NotFoundException.uploadSession(sessionId));
 		session.markFailed(now);
 	}
 }

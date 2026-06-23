@@ -1,6 +1,5 @@
 package com.llm.app.board.controller;
 
-import com.llm.app.auth.InvalidCredentialsException;
 import com.llm.app.auth.JwtProvider;
 import com.llm.app.board.dto.BoardPostDetailResponse;
 import com.llm.app.board.dto.EncryptedUploadSessionChunkUploadRequest;
@@ -46,7 +45,7 @@ public class UploadSessionController {
 	) {
 		return uploadSessionWireCodec.encodeStatus(
 			uploadSessionService.createSession(
-				requireAuth(authHeader),
+				jwtProvider.authenticate(authHeader),
 				uploadSessionWireCodec.decodeCreateRequest(request)
 			)
 		);
@@ -57,7 +56,7 @@ public class UploadSessionController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable UUID sessionId
 	) {
-		return uploadSessionWireCodec.encodeStatus(uploadSessionService.getSession(requireAuth(authHeader), sessionId));
+		return uploadSessionWireCodec.encodeStatus(uploadSessionService.getSession(jwtProvider.authenticate(authHeader), sessionId));
 	}
 
 	@PostMapping(value = "/{sessionId}/chunks", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -69,7 +68,7 @@ public class UploadSessionController {
 		var chunkRequest = uploadSessionWireCodec.decodeChunkRequest(request);
 		return uploadSessionWireCodec.encodeStatus(
 			uploadSessionService.uploadChunk(
-				requireAuth(authHeader),
+				jwtProvider.authenticate(authHeader),
 				sessionId,
 				chunkRequest.chunkNumber(),
 				chunkRequest.chunkDataBase64()
@@ -82,13 +81,6 @@ public class UploadSessionController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable UUID sessionId
 	) {
-		return uploadSessionService.finalizeSession(requireAuth(authHeader), sessionId);
-	}
-
-	private String requireAuth(String authHeader) {
-		if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-			throw new InvalidCredentialsException("Authentication required");
-		}
-		return jwtProvider.validateAndGetUsername(authHeader.substring(7));
+		return uploadSessionService.finalizeSession(jwtProvider.authenticate(authHeader), sessionId);
 	}
 }

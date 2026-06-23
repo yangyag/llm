@@ -12,7 +12,8 @@ public interface UploadSessionPartRepository extends JpaRepository<UploadSession
 
 	Optional<UploadSessionPart> findBySession_IdAndChunkNumber(UUID sessionId, int chunkNumber);
 
-	long countBySession_Id(UUID sessionId);
-
+	// ponytail: derived delete (loads + removes managed rows) — required, not a bulk @Modifying delete:
+	// finalizeSession holds the chunk entities as managed, so a bulk delete leaves them dangling and
+	// Hibernate throws TransientObjectException at flush. Keep this unless finalize stops pre-loading parts.
 	void deleteBySession(UploadSession session);
 }

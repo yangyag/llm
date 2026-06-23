@@ -1,22 +1,22 @@
 package com.llm.app.board.service;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.llm.app.board.dto.CreateUploadSessionRequest;
 import com.llm.app.board.dto.EncryptedUploadSessionChunkUploadRequest;
 import com.llm.app.board.dto.EncryptedUploadSessionCreateRequest;
 import com.llm.app.board.dto.UploadSessionStatusResponse;
 import com.llm.app.board.exception.InvalidUploadSessionRequestException;
+import com.llm.app.common.SecretKeyDerivation;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
@@ -42,8 +42,8 @@ public class UploadSessionWireCodec {
 	private static final int NONCE_LENGTH_BYTES = 12;
 	private static final int GCM_TAG_LENGTH_BITS = 128;
 	private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-	private static final JavaType LIST_OF_INTEGER_TYPE = new ObjectMapper().getTypeFactory()
-		.constructCollectionType(List.class, Integer.class);
+	private static final TypeReference<List<Integer>> LIST_OF_INTEGER = new TypeReference<>() {
+	};
 
 	private final ObjectMapper objectMapper;
 	private final SecretKey secretKey;
@@ -53,7 +53,7 @@ public class UploadSessionWireCodec {
 		@Value("${app.upload-sessions.secret:defaultUploadSessionsSecretForDevelopmentOnlyMustBeAtLeast256Bits!!}") String secret
 	) {
 		this.objectMapper = objectMapper;
-		this.secretKey = new SecretKeySpec(deriveKeyBytes(secret), "AES");
+		this.secretKey = new SecretKeySpec(SecretKeyDerivation.derive32Bytes(secret), "AES");
 	}
 
 	public CreateUploadSessionRequest decodeCreateRequest(EncryptedUploadSessionCreateRequest request) {
@@ -93,7 +93,7 @@ public class UploadSessionWireCodec {
 			decryptValue(A2, response.fileSizeBytes(), Long.class),
 			decryptValue(A3, response.chunkSizeBase64Chars(), Long.class),
 			decryptValue(A4, response.totalChunks(), Integer.class),
-			decryptValue(A7, response.uploadedChunks(), LIST_OF_INTEGER_TYPE),
+			decryptValue(A7, response.uploadedChunks(), LIST_OF_INTEGER),
 			decryptValue(A8, response.complete(), Boolean.class),
 			decryptValue(A9, response.expiresAt(), java.time.Instant.class)
 		);
@@ -117,18 +117,16 @@ public class UploadSessionWireCodec {
 	}
 
 	public <T> T decryptValue(String alias, String encryptedValue, Class<T> type) {
-		try {
-			return objectMapper.readValue(decrypt(alias, encryptedValue), type);
-		} catch (InvalidUploadSessionRequestException exception) {
-			throw exception;
-		} catch (Exception exception) {
-			throw new InvalidUploadSessionRequestException("failed to decode encrypted upload-session payload");
-		}
+		return decode(() -> objectMapper.readValue(decrypt(alias, encryptedValue), type));
 	}
 
-	public <T> T decryptValue(String alias, String encryptedValue, JavaType type) {
+	public <T> T decryptValue(String alias, String encryptedValue, TypeReference<T> type) {
+		return decode(() -> objectMapper.readValue(decrypt(alias, encryptedValue), type));
+	}
+
+	private <T> T decode(Callable<T> reader) {
 		try {
-			return objectMapper.readValue(decrypt(alias, encryptedValue), type);
+			return reader.call();
 		} catch (InvalidUploadSessionRequestException exception) {
 			throw exception;
 		} catch (Exception exception) {
@@ -190,20 +188,6 @@ public class UploadSessionWireCodec {
 		Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
 		cipher.init(mode, secretKey, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, nonce));
 		return cipher;
-	}
-
-	private byte[] deriveKeyBytes(String secret) {
-		byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
-		if (bytes.length < 32) {
-			try {
-				bytes = MessageDigest.getInstance("SHA-256").digest(bytes);
-			} catch (NoSuchAlgorithmException exception) {
-				throw new IllegalStateException("SHA-256 not available", exception);
-			}
-		}
-		byte[] keyBytes = new byte[32];
-		System.arraycopy(bytes, 0, keyBytes, 0, Math.min(bytes.length, 32));
-		return keyBytes;
 	}
 
 	public record ChunkUploadCommand(int chunkNumber, String chunkDataBase64) {
