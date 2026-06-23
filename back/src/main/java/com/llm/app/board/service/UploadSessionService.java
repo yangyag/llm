@@ -16,6 +16,8 @@ import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.UploadSessionPartRepository;
 import com.llm.app.board.repository.UploadSessionRepository;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -26,6 +28,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Base64;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -47,6 +50,7 @@ public class UploadSessionService {
 	private final BoardAttachmentRepository boardAttachmentRepository;
 	private final BoardMapper boardMapper;
 	private final UploadSessionFailureService uploadSessionFailureService;
+	private final Validator validator;
 	private final long expirationMs;
 
 	public UploadSessionService(
@@ -58,6 +62,7 @@ public class UploadSessionService {
 		BoardAttachmentRepository boardAttachmentRepository,
 		BoardMapper boardMapper,
 		UploadSessionFailureService uploadSessionFailureService,
+		Validator validator,
 		@org.springframework.beans.factory.annotation.Value("${app.upload-sessions.expiration-ms:86400000}") long expirationMs
 	) {
 		this.uploadSessionRepository = uploadSessionRepository;
@@ -68,10 +73,12 @@ public class UploadSessionService {
 		this.boardAttachmentRepository = boardAttachmentRepository;
 		this.boardMapper = boardMapper;
 		this.uploadSessionFailureService = uploadSessionFailureService;
+		this.validator = validator;
 		this.expirationMs = expirationMs;
 	}
 
 	public UploadSessionStatusSnapshot createSession(String username, CreateUploadSessionRequest request) {
+		validateDecodedRequest(request);
 		validateCreateRequest(request);
 
 		Instant now = Instant.now();
@@ -200,7 +207,11 @@ public class UploadSessionService {
 
 			return boardMapper.toDetailResponse(post, java.util.List.of(attachment));
 		} catch (RuntimeException exception) {
-			uploadSessionFailureService.markFailed(session.getId(), Instant.now());
+			try {
+				uploadSessionFailureService.markFailed(session.getId(), Instant.now());
+			} catch (RuntimeException markFailedFailure) {
+				// session may have been concurrently removed / DB hiccup; never mask the original failure
+			}
 			deleteAssembledFileIfExists(assembledPath);
 			if (storedAttachmentPath != null) {
 				attachmentStorageService.deleteIfExists(storedAttachmentPath);
@@ -234,6 +245,16 @@ public class UploadSessionService {
 			throw new UploadSessionStateException("upload session is currently finalizing");
 		}
 		return session;
+	}
+
+	private void validateDecodedRequest(CreateUploadSessionRequest request) {
+		// The controller @Valid-ates only the encrypted envelope; the DECODED request is built by the wire
+		// codec and never bean-validated. Enforce its @NotBlank/@Size/@Pattern/@Positive here so a hostile
+		// A1..A5 payload (blank/over-long archiveName, bad sha, non-positive sizes) is a clean 400.
+		Set<ConstraintViolation<CreateUploadSessionRequest>> violations = validator.validate(request);
+		if (!violations.isEmpty()) {
+			throw new InvalidUploadSessionRequestException(violations.iterator().next().getMessage());
+		}
 	}
 
 	private void validateCreateRequest(CreateUploadSessionRequest request) {
@@ -383,7 +404,16 @@ public class UploadSessionService {
 		if (!StringUtils.hasText(archiveName)) {
 			throw new InvalidUploadSessionRequestException("archiveName is required");
 		}
-		return Path.of(archiveName).getFileName().toString();
+		Path fileName;
+		try {
+			fileName = Path.of(archiveName).getFileName();
+		} catch (RuntimeException exception) {
+			throw new InvalidUploadSessionRequestException("archiveName is invalid");
+		}
+		if (fileName == null || !StringUtils.hasText(fileName.toString())) {
+			throw new InvalidUploadSessionRequestException("archiveName is invalid");
+		}
+		return fileName.toString();
 	}
 
 	private String buildTitle(String archiveName) {

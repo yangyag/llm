@@ -283,6 +283,28 @@ class UploadSessionControllerTest {
 	}
 
 	@Test
+	void createSessionShouldRejectSeparatorOnlyArchiveName() throws Exception {
+		// "/" normalizes to a null filename; previously NPE -> 500, now a clean 400.
+		mockMvc.perform(post("/api/v1/upload-sessions")
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(createSessionRequest("/", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_UPLOAD_SESSION_REQUEST"));
+	}
+
+	@Test
+	void createSessionShouldRejectOverlongArchiveName() throws Exception {
+		// Decoded request is now bean-validated; an over-long archiveName is a 400 (not a DB-overflow 500).
+		mockMvc.perform(post("/api/v1/upload-sessions")
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(createSessionRequest("a".repeat(300), ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_UPLOAD_SESSION_REQUEST"));
+	}
+
+	@Test
 	void uploadChunkShouldRejectInvalidBase64() throws Exception {
 		UUID sessionId = createSession("bad.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
 

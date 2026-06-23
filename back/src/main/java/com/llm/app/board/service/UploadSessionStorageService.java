@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -16,6 +18,8 @@ import org.springframework.util.unit.DataSize;
 
 @Component
 public class UploadSessionStorageService {
+	private static final Logger log = LoggerFactory.getLogger(UploadSessionStorageService.class);
+
 	private final Path rootPath;
 	private final long maxDecodedChunkSizeBytes;
 
@@ -33,7 +37,10 @@ public class UploadSessionStorageService {
 		}
 
 		String safeOriginalFilename = extractOriginalFilename(originalFilename);
-		String storedFilename = "chunk-%06d-%s".formatted(chunkNumber, safeOriginalFilename);
+		// ponytail: chunk blobs are keyed by (sessionId, chunkNumber); the human name lives in
+		// original_filename. Embedding archiveName here pushed stored_filename past varchar(255) and the
+		// OS filename-length limit for long/multibyte names.
+		String storedFilename = "chunk-%06d".formatted(chunkNumber);
 		String storagePath = sessionId + "/" + storedFilename;
 		Path targetPath = resolve(storagePath);
 
@@ -53,7 +60,11 @@ public class UploadSessionStorageService {
 
 	public Path createAssembledTarget(UUID sessionId, String archiveName) {
 		Path sessionDir = resolve(sessionId.toString());
-		Path assembledPath = sessionDir.resolve("assembled-" + Path.of(archiveName).getFileName());
+		// ponytail: unique per finalize so concurrent/retried finalizes never share one assembled file.
+		// A shared fixed path was a hash-validate-then-copy TOCTOU -> a corrupt stored attachment whose bytes
+		// don't match the advertised SHA-256. archiveName is omitted (unbounded/multibyte; the human name
+		// lives on the final attachment).
+		Path assembledPath = sessionDir.resolve("assembled-" + UUID.randomUUID());
 		try {
 			Files.createDirectories(sessionDir);
 		} catch (IOException exception) {
@@ -79,17 +90,20 @@ public class UploadSessionStorageService {
 		if (!Files.exists(sessionDir)) {
 			return;
 		}
+		// Best-effort: runs in afterCommit synchronizations after the rows are already deleted; throwing here
+		// would poison the cleanup batch (skipping later sessions whose rows are gone) and turn a committed
+		// finalize into a 500. Swallow + log instead.
 		try (var walk = Files.walk(sessionDir)) {
 			walk.sorted(Comparator.reverseOrder())
 				.forEach(path -> {
 					try {
 						Files.deleteIfExists(path);
 					} catch (IOException exception) {
-						throw new AttachmentStorageException("Failed to delete upload session files", exception);
+						log.warn("Best-effort delete failed for upload session file {}", path, exception);
 					}
 				});
 		} catch (IOException exception) {
-			throw new AttachmentStorageException("Failed to delete upload session files", exception);
+			log.warn("Best-effort cleanup failed for upload session directory {}", sessionDir, exception);
 		}
 	}
 

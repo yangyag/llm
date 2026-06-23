@@ -18,6 +18,8 @@ import com.llm.app.board.exception.UploadSessionStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -148,6 +150,15 @@ public class GlobalExceptionHandler {
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "ATTACHMENT_STORAGE_ERROR", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ DataIntegrityViolationException.class, OptimisticLockingFailureException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleConflict(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		// Generic message on purpose: never echo raw SQL/constraint text to clients.
+		return buildResponse(HttpStatus.CONFLICT, "CONFLICT", "request conflicts with the current resource state", request);
 	}
 
 	@ExceptionHandler({
