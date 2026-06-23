@@ -9,16 +9,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
 @Entity
-@Table(
-	name = "post_attachments",
-	uniqueConstraints = {
-		@UniqueConstraint(name = "uk_post_attachments_post_id", columnNames = "post_id")
-	}
-)
+@Table(name = "post_attachments")
 public class BoardAttachment {
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

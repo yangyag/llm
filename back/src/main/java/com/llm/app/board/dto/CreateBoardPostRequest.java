@@ -3,6 +3,7 @@ package com.llm.app.board.dto;
 import com.llm.app.board.model.BoardPostMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
 
 public class CreateBoardPostRequest {
@@ -14,7 +15,7 @@ public class CreateBoardPostRequest {
 
 	private BoardPostMode mode = BoardPostMode.NORMAL;
 
-	private MultipartFile attachment;
+	private List<MultipartFile> attachments;
 
 	public String getTitle() {
 		return title;
@@ -42,11 +43,11 @@ public class CreateBoardPostRequest {
 		}
 	}
 
-	public MultipartFile getAttachment() {
-		return attachment;
+	public List<MultipartFile> getAttachments() {
+		return attachments;
 	}
 
-	public void setAttachment(MultipartFile attachment) {
-		this.attachment = attachment;
+	public void setAttachments(List<MultipartFile> attachments) {
+		this.attachments = attachments;
 	}
 }

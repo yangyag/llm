@@ -33,6 +33,29 @@ const DEFAULT_PAGINATION = {
 
 const ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE = "첨부파일을 올려도 되는 환경입니까?";
 
+const MAX_ATTACHMENTS = 5;
+
+function attachmentFileKey(file) {
+  return `${file.name}::${file.size}::${file.lastModified}`;
+}
+
+// 기존 선택 목록에 새로 고른 파일을 합치되, 중복(이름/크기/수정시각 동일)은 제거하고 최대 개수로 제한한다.
+function mergeAttachmentFiles(existingFiles, incomingFiles, max = MAX_ATTACHMENTS) {
+  const merged = [...existingFiles];
+  const seen = new Set(existingFiles.map(attachmentFileKey));
+  for (const file of incomingFiles) {
+    const key = attachmentFileKey(file);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(file);
+    }
+  }
+  return {
+    files: merged.slice(0, max),
+    truncated: merged.length > max
+  };
+}
+
 function normalizeSearchQuery(value) {
   return value.trim();
 }
@@ -73,7 +96,7 @@ function getPostBodyLabel() {
 }
 
 function getPostBodyHelp() {
-  return "본문은 비워둘 수 있습니다. 첨부파일은 최대 100MB까지 업로드할 수 있습니다.";
+  return `본문은 비워둘 수 있습니다. 첨부파일은 최대 ${MAX_ATTACHMENTS}개, 파일당 100MB까지 업로드할 수 있습니다.`;
 }
 
 function formatFileSize(size) {
@@ -101,16 +124,16 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
   const [selectedPost, setSelectedPost] = useState(null);
   const [postActionMode, setPostActionMode] = useState("none");
   const [postForm, setPostForm] = useState(EMPTY_POST_FORM);
-  const [postAttachmentFile, setPostAttachmentFile] = useState(null);
+  const [postAttachmentFiles, setPostAttachmentFiles] = useState([]);
   const [postAttachmentConfirmed, setPostAttachmentConfirmed] = useState(false);
   const [postAttachmentInputKey, setPostAttachmentInputKey] = useState(0);
   const [replyForm, setReplyForm] = useState(EMPTY_REPLY_FORM);
   const [selectedAiProvider, setSelectedAiProvider] = useState("GPT");
   const [postEditForm, setPostEditForm] = useState(EMPTY_POST_FORM);
-  const [postEditAttachmentFile, setPostEditAttachmentFile] = useState(null);
+  const [postEditAttachmentFiles, setPostEditAttachmentFiles] = useState([]);
   const [postEditAttachmentConfirmed, setPostEditAttachmentConfirmed] = useState(false);
   const [postEditAttachmentInputKey, setPostEditAttachmentInputKey] = useState(0);
-  const [removePostAttachment, setRemovePostAttachment] = useState(false);
+  const [removeAttachmentIds, setRemoveAttachmentIds] = useState(new Set());
   const [replyEditState, setReplyEditState] = useState({ replyId: null, body: "" });
   const [postActionError, setPostActionError] = useState("");
   const [replyActionError, setReplyActionError] = useState("");
@@ -227,10 +250,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
         title: payload.title,
         body: payload.body
       });
-      setPostEditAttachmentFile(null);
+      setPostEditAttachmentFiles([]);
       setPostEditAttachmentConfirmed(false);
       setPostEditAttachmentInputKey((prev) => prev + 1);
-      setRemovePostAttachment(false);
+      setRemoveAttachmentIds(new Set());
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -258,7 +281,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
   function openWrite() {
     setView("write");
     setPostForm(EMPTY_POST_FORM);
-    setPostAttachmentFile(null);
+    setPostAttachmentFiles([]);
     setPostAttachmentConfirmed(false);
     setPostAttachmentInputKey((prev) => prev + 1);
     setPostActionMode("none");
@@ -275,10 +298,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     setPostActionMode("none");
     setReplyForm(EMPTY_REPLY_FORM);
     setReplyEditState({ replyId: null, body: "" });
-    setPostEditAttachmentFile(null);
+    setPostEditAttachmentFiles([]);
     setPostEditAttachmentConfirmed(false);
     setPostEditAttachmentInputKey((prev) => prev + 1);
-    setRemovePostAttachment(false);
+    setRemoveAttachmentIds(new Set());
     setPostActionError("");
     setReplyActionError("");
     setAiReplyError("");
@@ -296,10 +319,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       title: selectedPost.title,
       body: selectedPost.body
     });
-    setPostEditAttachmentFile(null);
+    setPostEditAttachmentFiles([]);
     setPostEditAttachmentConfirmed(false);
     setPostEditAttachmentInputKey((prev) => prev + 1);
-    setRemovePostAttachment(false);
+    setRemoveAttachmentIds(new Set());
     setPostActionError("");
     setPostActionMode("edit");
   }
@@ -307,10 +330,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
   function closePostActionPanel() {
     setPostActionMode("none");
     setPostActionError("");
-    setPostEditAttachmentFile(null);
+    setPostEditAttachmentFiles([]);
     setPostEditAttachmentConfirmed(false);
     setPostEditAttachmentInputKey((prev) => prev + 1);
-    setRemovePostAttachment(false);
+    setRemoveAttachmentIds(new Set());
   }
 
   function confirmAttachmentUploadEnvironment() {
@@ -318,43 +341,69 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
   }
 
   function handleCreateAttachmentChange(event) {
-    const nextFile = event.target.files?.[0] ?? null;
-    if (!nextFile) {
-      setPostAttachmentFile(null);
-      setPostAttachmentConfirmed(false);
+    const selectedFiles = Array.from(event.target.files ?? []);
+    // 입력을 비워 같은 파일을 다시 골라도 onChange가 발생하고, 누적은 우리 상태가 관리하게 한다.
+    setPostAttachmentInputKey((prev) => prev + 1);
+    if (selectedFiles.length === 0) {
       return;
     }
 
     if (!confirmAttachmentUploadEnvironment()) {
-      event.target.value = "";
-      setPostAttachmentFile(null);
-      setPostAttachmentConfirmed(false);
       return;
     }
 
-    setPostAttachmentFile(nextFile);
+    setError("");
+    const { files, truncated } = mergeAttachmentFiles(postAttachmentFiles, selectedFiles);
+    setPostAttachmentFiles(files);
     setPostAttachmentConfirmed(true);
+    if (truncated) {
+      setError(`첨부파일은 최대 ${MAX_ATTACHMENTS}개까지만 첨부할 수 있습니다.`);
+    }
+  }
+
+  function removeCreateAttachment(targetKey) {
+    setPostAttachmentFiles((prev) => prev.filter((file) => attachmentFileKey(file) !== targetKey));
   }
 
   function handleEditAttachmentChange(event) {
-    const nextFile = event.target.files?.[0] ?? null;
+    const selectedFiles = Array.from(event.target.files ?? []);
+    setPostEditAttachmentInputKey((prev) => prev + 1);
     setPostActionError("");
-    if (!nextFile) {
-      setPostEditAttachmentFile(null);
-      setPostEditAttachmentConfirmed(false);
+    if (selectedFiles.length === 0) {
       return;
     }
 
     if (!confirmAttachmentUploadEnvironment()) {
-      event.target.value = "";
-      setPostEditAttachmentFile(null);
-      setPostEditAttachmentConfirmed(false);
       return;
     }
 
-    setPostEditAttachmentFile(nextFile);
+    const keptExistingCount = (selectedPost?.attachments ?? []).filter(
+      (attachment) => !removeAttachmentIds.has(attachment.id)
+    ).length;
+    const availableSlots = Math.max(MAX_ATTACHMENTS - keptExistingCount, 0);
+    const { files, truncated } = mergeAttachmentFiles(postEditAttachmentFiles, selectedFiles, availableSlots);
+    setPostEditAttachmentFiles(files);
     setPostEditAttachmentConfirmed(true);
-    setRemovePostAttachment(false);
+    if (truncated) {
+      setPostActionError(`첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지만 등록할 수 있습니다.`);
+    }
+  }
+
+  function removeEditAttachment(targetKey) {
+    setPostEditAttachmentFiles((prev) => prev.filter((file) => attachmentFileKey(file) !== targetKey));
+  }
+
+  function toggleRemoveExistingAttachment(attachmentId) {
+    setPostActionError("");
+    setRemoveAttachmentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(attachmentId)) {
+        next.delete(attachmentId);
+      } else {
+        next.add(attachmentId);
+      }
+      return next;
+    });
   }
 
   function openReplyEditPanel(reply) {
@@ -373,7 +422,7 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
   async function handleCreatePost(event) {
     event.preventDefault();
 
-    if (postAttachmentFile && !postAttachmentConfirmed && !confirmAttachmentUploadEnvironment()) {
+    if (postAttachmentFiles.length > 0 && !postAttachmentConfirmed && !confirmAttachmentUploadEnvironment()) {
       return;
     }
 
@@ -384,10 +433,10 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     try {
       const created = await createPost({
         ...postForm,
-        attachment: postAttachmentFile
+        attachments: postAttachmentFiles
       }, authToken);
       setPostForm(EMPTY_POST_FORM);
-      setPostAttachmentFile(null);
+      setPostAttachmentFiles([]);
       setPostAttachmentConfirmed(false);
       setPostAttachmentInputKey((prev) => prev + 1);
       navigateToList(1, searchQuery, { replace: true });
@@ -395,7 +444,11 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       openDetail(created.id);
       setMessage("게시글을 등록했습니다.");
     } catch (submitError) {
-      setError(submitError.message);
+      if (submitError?.code === "INVALID_ATTACHMENT_REQUEST") {
+        setError(`첨부파일 요청이 올바르지 않습니다. 첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있습니다.`);
+      } else {
+        setError(submitError.message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -407,7 +460,16 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
       return;
     }
 
-    if (postEditAttachmentFile && !postEditAttachmentConfirmed && !confirmAttachmentUploadEnvironment()) {
+    if (postEditAttachmentFiles.length > 0 && !postEditAttachmentConfirmed && !confirmAttachmentUploadEnvironment()) {
+      return;
+    }
+
+    // 삭제 표시를 해제하는 등으로 (유지 기존 + 신규) 합계가 한도를 넘을 수 있으므로 제출 직전 재검증한다.
+    const keptExistingCount = (selectedPost?.attachments ?? []).filter(
+      (attachment) => !removeAttachmentIds.has(attachment.id)
+    ).length;
+    if (keptExistingCount + postEditAttachmentFiles.length > MAX_ATTACHMENTS) {
+      setPostActionError(`첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지만 등록할 수 있습니다.`);
       return;
     }
 
@@ -419,21 +481,23 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
     try {
       const updated = await updatePost(selectedPostId, {
         ...postEditForm,
-        attachment: postEditAttachmentFile,
-        removeAttachment: removePostAttachment
+        attachments: postEditAttachmentFiles,
+        removeAttachmentIds: [...removeAttachmentIds]
       }, authToken);
       setSelectedPost(updated);
       setPostActionMode("none");
       setPostActionError("");
-      setPostEditAttachmentFile(null);
+      setPostEditAttachmentFiles([]);
       setPostEditAttachmentConfirmed(false);
       setPostEditAttachmentInputKey((prev) => prev + 1);
-      setRemovePostAttachment(false);
+      setRemoveAttachmentIds(new Set());
       await loadPosts(currentPage);
       setMessage("게시글을 수정했습니다.");
     } catch (submitError) {
       if (submitError?.code === "FILE_CONVERSION_LOCKED") {
         setError("암호화 업로드 완료된 글은 수정할 수 없습니다.");
+      } else if (submitError?.code === "INVALID_ATTACHMENT_REQUEST") {
+        setError(`첨부파일 요청이 올바르지 않습니다. 첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있습니다.`);
       } else {
         setError(submitError.message);
       }
@@ -842,13 +906,30 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                   <input
                     key={postAttachmentInputKey}
                     type="file"
+                    multiple
                     onChange={handleCreateAttachmentChange}
                   />
                 </label>
                 <p className="section-meta">
-                  첨부파일은 1개만 업로드할 수 있으며 최대 100MB까지 허용됩니다.
-                  {postAttachmentFile ? ` 현재 선택: ${postAttachmentFile.name} (${formatFileSize(postAttachmentFile.size)})` : ""}
+                  첨부파일은 최대 {MAX_ATTACHMENTS}개, 파일당 100MB까지 업로드할 수 있습니다.
+                  {` (선택: ${postAttachmentFiles.length}/${MAX_ATTACHMENTS})`}
                 </p>
+                {postAttachmentFiles.length > 0 ? (
+                  <ul className="attachment-select-list">
+                    {postAttachmentFiles.map((file) => (
+                      <li key={attachmentFileKey(file)} className="attachment-select-item">
+                        <span>{file.name} ({formatFileSize(file.size)})</span>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => removeCreateAttachment(attachmentFileKey(file))}
+                        >
+                          제거
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </>
             </form>
           </section>
@@ -921,27 +1002,31 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                   ) : (
                     <p className="detail-body">{selectedPost.body}</p>
                   )}
-                  {selectedPost.attachment ? (
+                  {selectedPost.attachments?.length > 0 ? (
                     <div className="attachment-panel">
                       <span className="attachment-label">
-                        {isFileConversionMode(selectedPost.mode) ? "복원 파일" : "첨부파일"}
+                        {isFileConversionMode(selectedPost.mode)
+                          ? "복원 파일"
+                          : `첨부파일 (${selectedPost.attachments.length})`}
                       </span>
-                      <div className="attachment-card">
-                        <div>
-                          <strong>{selectedPost.attachment.originalFilename}</strong>
-                          <p className="section-meta">
-                            {formatFileSize(selectedPost.attachment.size)}
-                            {selectedPost.attachment.contentType ? ` · ${selectedPost.attachment.contentType}` : ""}
-                          </p>
+                      {selectedPost.attachments.map((attachment) => (
+                        <div key={attachment.id} className="attachment-card">
+                          <div>
+                            <strong>{attachment.originalFilename}</strong>
+                            <p className="section-meta">
+                              {formatFileSize(attachment.size)}
+                              {attachment.contentType ? ` · ${attachment.contentType}` : ""}
+                            </p>
+                          </div>
+                          <a
+                            className="ghost-button attachment-link"
+                            href={getApiUrl(attachment.downloadUrl)}
+                            download={attachment.originalFilename}
+                          >
+                            다운로드
+                          </a>
                         </div>
-                        <a
-                          className="ghost-button attachment-link"
-                          href={getApiUrl(selectedPost.attachment.downloadUrl)}
-                          download={selectedPost.attachment.originalFilename}
-                        >
-                          다운로드
-                        </a>
-                      </div>
+                      ))}
                     </div>
                   ) : null}
                   {postActionMode === "edit" ? (
@@ -964,53 +1049,71 @@ function WelcomePage({ authToken, authUsername, onLogout }) {
                         />
                       </label>
                       <p className="section-meta">{getPostBodyHelp()}</p>
-                      {selectedPost.attachment ? (
+                      {selectedPost.attachments?.length > 0 ? (
                         <div className="attachment-panel">
-                          <span className="attachment-label">현재 첨부파일</span>
-                          <div className="attachment-card">
-                            <div>
-                              <strong>{selectedPost.attachment.originalFilename}</strong>
-                              <p className="section-meta">{formatFileSize(selectedPost.attachment.size)}</p>
+                          <span className="attachment-label">현재 첨부파일 ({selectedPost.attachments.length})</span>
+                          {selectedPost.attachments.map((attachment) => (
+                            <div key={attachment.id} className="attachment-card">
+                              <div>
+                                <strong className={removeAttachmentIds.has(attachment.id) ? "attachment-marked-remove" : undefined}>
+                                  {attachment.originalFilename}
+                                </strong>
+                                <p className="section-meta">{formatFileSize(attachment.size)}</p>
+                              </div>
+                              <div className="inline-actions">
+                                <a
+                                  className="ghost-button attachment-link"
+                                  href={getApiUrl(attachment.downloadUrl)}
+                                  download={attachment.originalFilename}
+                                >
+                                  다운로드
+                                </a>
+                                <label className="checkbox-field">
+                                  <input
+                                    type="checkbox"
+                                    checked={removeAttachmentIds.has(attachment.id)}
+                                    onChange={() => toggleRemoveExistingAttachment(attachment.id)}
+                                  />
+                                  <span>삭제</span>
+                                </label>
+                              </div>
                             </div>
-                            <a
-                              className="ghost-button attachment-link"
-                              href={getApiUrl(selectedPost.attachment.downloadUrl)}
-                              download={selectedPost.attachment.originalFilename}
-                            >
-                              다운로드
-                            </a>
-                          </div>
+                          ))}
                         </div>
                       ) : null}
                       <>
                         <label className="field">
-                          <span>{selectedPost.attachment ? "새 첨부파일로 교체" : "첨부파일 추가"}</span>
+                          <span>첨부파일 추가</span>
                           <input
                             key={postEditAttachmentInputKey}
                             type="file"
+                            multiple
                             onChange={handleEditAttachmentChange}
                           />
                         </label>
-                        {postEditAttachmentFile ? (
-                          <p className="section-meta">
-                            새 파일 선택: {postEditAttachmentFile.name} ({formatFileSize(postEditAttachmentFile.size)})
-                          </p>
+                        <p className="section-meta">
+                          {`최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있습니다. (현재 ${
+                            (selectedPost.attachments ?? []).filter((a) => !removeAttachmentIds.has(a.id)).length
+                            + postEditAttachmentFiles.length
+                          }/${MAX_ATTACHMENTS})`}
+                        </p>
+                        {postEditAttachmentFiles.length > 0 ? (
+                          <ul className="attachment-select-list">
+                            {postEditAttachmentFiles.map((file) => (
+                              <li key={attachmentFileKey(file)} className="attachment-select-item">
+                                <span>새 파일: {file.name} ({formatFileSize(file.size)})</span>
+                                <button
+                                  type="button"
+                                  className="ghost-button"
+                                  onClick={() => removeEditAttachment(attachmentFileKey(file))}
+                                >
+                                  제거
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
                         ) : null}
                       </>
-                      {selectedPost.attachment ? (
-                        <label className="checkbox-field">
-                          <input
-                            type="checkbox"
-                            checked={removePostAttachment}
-                            disabled={postEditAttachmentFile != null}
-                            onChange={(event) => {
-                              setPostActionError("");
-                              setRemovePostAttachment(event.target.checked);
-                            }}
-                          />
-                          <span>현재 첨부파일 삭제</span>
-                        </label>
-                      ) : null}
                       {postActionError ? <p className="panel-error">{postActionError}</p> : null}
                       <div className="action-form-actions">
                         <button

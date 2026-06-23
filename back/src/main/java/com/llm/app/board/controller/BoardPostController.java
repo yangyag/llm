@@ -124,9 +124,12 @@ public class BoardPostController {
 		return boardService.createAiReply(id, request);
 	}
 
-	@GetMapping("/{id}/attachment")
-	public ResponseEntity<Resource> downloadAttachment(@PathVariable Long id) {
-		var attachment = boardService.downloadAttachment(id);
+	@GetMapping("/{id}/attachments/{attachmentId}")
+	public ResponseEntity<Resource> downloadAttachment(
+		@PathVariable Long id,
+		@PathVariable Long attachmentId
+	) {
+		var attachment = boardService.downloadAttachment(id, attachmentId);
 		MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
 		if (attachment.contentType() != null && !attachment.contentType().isBlank()) {
 			mediaType = MediaType.parseMediaType(attachment.contentType());

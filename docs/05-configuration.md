@@ -53,13 +53,16 @@ jdbc:postgresql://${APP_DB_HOST}:${APP_DB_PORT}/${APP_DB_NAME}?currentSchema=${A
 | 변수 | 기본/예시 | 설명 |
 | --- | --- | --- |
 | `APP_ATTACHMENTS_ROOT_PATH` | `.env.example`/Compose 예시: `/var/lib/llm/attachments` | 첨부파일 저장 루트 |
-| `APP_ATTACHMENTS_MAX_FILE_SIZE` | `100MB` | 일반 multipart 첨부파일 최대 크기 |
-| `APP_ATTACHMENTS_MAX_REQUEST_SIZE` | `100MB` | multipart 요청 최대 크기 |
+| `APP_ATTACHMENTS_MAX_FILE_SIZE` | `100MB` | 일반 multipart 첨부파일 1개당 최대 크기 |
+| `APP_ATTACHMENTS_MAX_REQUEST_SIZE` | `500MB` | multipart 요청 전체 최대 크기(첨부 여러 개 합산) |
+| `APP_ATTACHMENTS_MAX_COUNT` | `5` | 일반 게시글당 첨부파일 최대 개수 |
 | `APP_ATTACHMENTS_MAX_GENERATED_FILE_SIZE` | `2GB` | 업로드 세션 finalize 결과 파일 최대 크기 |
 
 `APP_ATTACHMENTS_ROOT_PATH`가 없으면 백엔드 fallback은 `${java.io.tmpdir}/llm-attachments`입니다.
 
-`APP_ATTACHMENTS_MAX_REQUEST_SIZE`와 front `nginx.conf`의 `client_max_body_size`(현재 `100M`)는 함께 맞춰야 합니다. 둘 중 작은 값이 실효 상한이며, 8083(front proxy) 경유 요청은 nginx 한도를 먼저 거칩니다. nginx 값은 정적 설정이라 키우려면 front 이미지를 다시 빌드해야 합니다.
+일반 게시글은 한 요청에 첨부파일을 여러 개(같은 form 필드명 `attachments`로 반복) 보낼 수 있고, 합산 크기는 `APP_ATTACHMENTS_MAX_REQUEST_SIZE`의 제한을 받습니다. 파일당 상한은 `APP_ATTACHMENTS_MAX_FILE_SIZE`, 개수 상한은 `APP_ATTACHMENTS_MAX_COUNT`입니다.
+
+`APP_ATTACHMENTS_MAX_REQUEST_SIZE`와 front `nginx.conf`의 `client_max_body_size`(현재 `500M`)는 함께 맞춰야 합니다. 둘 중 작은 값이 실효 상한이며, 8083(front proxy) 경유 요청은 nginx 한도를 먼저 거칩니다. nginx 값은 정적 설정이라 키우려면 front 이미지를 다시 빌드해야 합니다.
 
 ## Upload sessions
 

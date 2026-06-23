@@ -18,7 +18,7 @@
 - `GET /api/v1/health`
 - `GET /api/v1/posts`
 - `GET /api/v1/posts/{id}`
-- `GET /api/v1/posts/{id}/attachment`
+- `GET /api/v1/posts/{id}/attachments/{attachmentId}`
 - `POST /api/v1/auth/login`
 
 ## JWT
@@ -93,9 +93,9 @@ rg -n 'API_''KEY=|SEC''RET=|PASS''WORD=|TO''KEN=|BEGIN .*PRIVATE ''KEY' .
 
 일반 첨부파일 제한:
 
-- `APP_ATTACHMENTS_MAX_FILE_SIZE`
-- `APP_ATTACHMENTS_MAX_REQUEST_SIZE`
-- 게시글당 1개 첨부파일
+- `APP_ATTACHMENTS_MAX_FILE_SIZE` (파일당, 기본 100MB)
+- `APP_ATTACHMENTS_MAX_REQUEST_SIZE` (요청 전체, 기본 500MB)
+- `APP_ATTACHMENTS_MAX_COUNT` (게시글당 첨부 개수, 기본 5)
 
 ZIP 세션 결과 제한:
 

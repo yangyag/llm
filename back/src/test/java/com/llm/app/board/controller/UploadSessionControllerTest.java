@@ -142,14 +142,16 @@ class UploadSessionControllerTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
 			.andExpect(jsonPath("$.conversionReady").value(true))
-			.andExpect(jsonPath("$.attachment.originalFilename").value("bundle.zip"))
+			.andExpect(jsonPath("$.attachments", hasSize(1)))
+			.andExpect(jsonPath("$.attachments[0].originalFilename").value("bundle.zip"))
 			.andExpect(jsonPath("$.title").value("[bundle.zip] 업로드 완료"))
 			.andExpect(jsonPath("$.body").value(containsString("SHA-256 검증: 성공")))
 			.andReturn();
 
-		long postId = extractId(finalizeResult.getResponse().getContentAsString());
+		String downloadUrl = objectMapper.readTree(finalizeResult.getResponse().getContentAsString())
+			.path("attachments").get(0).path("downloadUrl").asText();
 
-		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+		mockMvc.perform(get(downloadUrl))
 			.andExpect(status().isOk())
 			.andExpect(header().string("Content-Disposition", containsString("bundle.zip")))
 			.andExpect(content().bytes(ZIP_BYTES));

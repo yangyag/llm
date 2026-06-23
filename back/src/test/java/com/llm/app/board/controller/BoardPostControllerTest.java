@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -18,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.llm.app.auth.JwtProvider;
 import com.llm.app.board.ai.AiProvider;
@@ -113,7 +113,7 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.body").value("첫 번째 게시글 본문"))
 			.andExpect(jsonPath("$.mode").value("NORMAL"))
 			.andExpect(jsonPath("$.conversionReady").value(false))
-			.andExpect(jsonPath("$.attachment").value(nullValue()))
+			.andExpect(jsonPath("$.attachments", hasSize(0)))
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
@@ -179,78 +179,77 @@ class BoardPostControllerTest {
 	@Test
 	void attachmentLifecycleShouldWork() throws Exception {
 		MockMultipartFile firstAttachment = new MockMultipartFile(
-			"attachment",
+			"attachments",
 			"guide.txt",
 			"text/plain",
 			"첫 첨부".getBytes(StandardCharsets.UTF_8)
 		);
+		MockMultipartFile secondAttachment = new MockMultipartFile(
+			"attachments",
+			"notes.txt",
+			"text/plain",
+			"둘째 첨부".getBytes(StandardCharsets.UTF_8)
+		);
 
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
 				.file(firstAttachment)
+				.file(secondAttachment)
 				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글")
 				.param("bodyBase64", encode("본문")))
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.attachment.originalFilename").value("guide.txt"))
-			.andExpect(jsonPath("$.attachment.size").value(firstAttachment.getSize()))
+			.andExpect(jsonPath("$.attachments", hasSize(2)))
+			.andExpect(jsonPath("$.attachments[0].originalFilename").value("guide.txt"))
+			.andExpect(jsonPath("$.attachments[1].originalFilename").value("notes.txt"))
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
-		assertThat(objectMapper.readTree(createResult.getResponse().getContentAsString())
-			.path("attachment")
-			.path("downloadUrl")
-			.asText()).isEqualTo("/api/v1/posts/" + postId + "/attachment");
+		JsonNode attachments = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("attachments");
+		long firstAttachmentId = attachments.get(0).path("id").asLong();
+		String firstDownloadUrl = attachments.get(0).path("downloadUrl").asText();
+		assertThat(firstDownloadUrl).isEqualTo("/api/v1/posts/" + postId + "/attachments/" + firstAttachmentId);
 
-		assertThat(boardAttachmentRepository.findByPost_Id(postId)).isPresent();
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).hasSize(2);
 
 		mockMvc.perform(get("/api/v1/posts"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.items[0].title").value("첨부 글"))
 			.andExpect(jsonPath("$.items[0].hasAttachment").value(true));
 
-		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+		mockMvc.perform(get(firstDownloadUrl))
 			.andExpect(status().isOk())
 			.andExpect(header().string("Content-Disposition", containsString("attachment")))
 			.andExpect(content().bytes("첫 첨부".getBytes(StandardCharsets.UTF_8)));
 
-		MockMultipartFile replacementAttachment = new MockMultipartFile(
-			"attachment",
-			"update.txt",
+		// 첫 첨부는 삭제하고 새 첨부를 추가한다(치환이 아니라 부분 삭제 + 추가).
+		MockMultipartFile thirdAttachment = new MockMultipartFile(
+			"attachments",
+			"extra.txt",
 			"text/plain",
-			"교체 파일".getBytes(StandardCharsets.UTF_8)
+			"추가 첨부".getBytes(StandardCharsets.UTF_8)
 		);
 
 		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
-				.file(replacementAttachment)
-				.header("Authorization", "Bearer " + token)
-				.param("title", "첨부 글 수정")
-				.param("bodyBase64", encode("본문 수정")))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.attachment.originalFilename").value("update.txt"))
-			.andExpect(jsonPath("$.body").value("본문 수정"));
-
-		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
-			.andExpect(status().isOk())
-			.andExpect(content().bytes("교체 파일".getBytes(StandardCharsets.UTF_8)));
-
-		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.file(thirdAttachment)
 				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글 수정")
 				.param("bodyBase64", encode("본문 수정"))
-				.param("removeAttachment", "true"))
+				.param("removeAttachmentIds", String.valueOf(firstAttachmentId)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.attachment").value(nullValue()));
+			.andExpect(jsonPath("$.attachments", hasSize(2)))
+			.andExpect(jsonPath("$.body").value("본문 수정"));
 
-		assertThat(boardAttachmentRepository.findByPost_Id(postId)).isEmpty();
+		assertThat(boardAttachmentRepository.findByIdAndPost_Id(firstAttachmentId, postId)).isEmpty();
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).hasSize(2);
 
-		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+		mockMvc.perform(get("/api/v1/posts/{postId}/attachments/{attachmentId}", postId, firstAttachmentId))
 			.andExpect(status().isNotFound());
 	}
 
 	@Test
 	void deletingPostShouldDeleteAttachmentMetadataAndFile() throws Exception {
 		MockMultipartFile attachment = new MockMultipartFile(
-			"attachment",
+			"attachments",
 			"delete.txt",
 			"text/plain",
 			"삭제 파일".getBytes(StandardCharsets.UTF_8)
@@ -265,7 +264,7 @@ class BoardPostControllerTest {
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
-		BoardAttachment savedAttachment = boardAttachmentRepository.findByPost_Id(postId).orElseThrow();
+		BoardAttachment savedAttachment = boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId).get(0);
 		Path attachmentPath = Path.of(attachmentRootPath).resolve(savedAttachment.getStoragePath());
 		assertThat(Files.exists(attachmentPath)).isTrue();
 
@@ -273,7 +272,7 @@ class BoardPostControllerTest {
 				.header("Authorization", "Bearer " + token))
 			.andExpect(status().isNoContent());
 
-		assertThat(boardAttachmentRepository.findByPost_Id(postId)).isEmpty();
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).isEmpty();
 		assertThat(Files.exists(attachmentPath)).isFalse();
 	}
 
@@ -370,7 +369,7 @@ class BoardPostControllerTest {
 	@Test
 	void manualFileConversionRequestShouldBeRejectedOnCreate() throws Exception {
 		MockMultipartFile attachment = new MockMultipartFile(
-			"attachment",
+			"attachments",
 			"source.zip",
 			"application/zip",
 			"zip".getBytes(StandardCharsets.UTF_8)
@@ -461,11 +460,13 @@ class BoardPostControllerTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
 			.andExpect(jsonPath("$.conversionReady").value(true))
-			.andExpect(jsonPath("$.attachment.originalFilename").value("bundle.zip"))
+			.andExpect(jsonPath("$.attachments", hasSize(1)))
+			.andExpect(jsonPath("$.attachments[0].originalFilename").value("bundle.zip"))
 			.andExpect(jsonPath("$.body").value(containsString("원본 파일명: bundle.zip")))
 			.andReturn();
 
-		long postId = extractId(finalizeResult.getResponse().getContentAsString());
+		String downloadUrl = objectMapper.readTree(finalizeResult.getResponse().getContentAsString())
+			.path("attachments").get(0).path("downloadUrl").asText();
 
 		mockMvc.perform(get("/api/v1/posts"))
 			.andExpect(status().isOk())
@@ -473,7 +474,7 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.items[0].conversionReady").value(true))
 			.andExpect(jsonPath("$.items[0].hasAttachment").value(true));
 
-		mockMvc.perform(get("/api/v1/posts/{id}/attachment", postId))
+		mockMvc.perform(get(downloadUrl))
 			.andExpect(status().isOk())
 			.andExpect(header().string("Content-Disposition", containsString("bundle.zip")))
 			.andExpect(content().bytes(ZIP_BYTES));
@@ -558,7 +559,7 @@ class BoardPostControllerTest {
 	void tooLargeAttachmentShouldReturnPayloadTooLarge() throws Exception {
 		byte[] largeAttachment = new byte[2 * 1024 * 1024 + 1];
 		MockMultipartFile attachment = new MockMultipartFile(
-			"attachment",
+			"attachments",
 			"big.bin",
 			"application/octet-stream",
 			largeAttachment
@@ -574,8 +575,35 @@ class BoardPostControllerTest {
 	}
 
 	@Test
-	void removeAttachmentAndUploadTogetherShouldReturnBadRequest() throws Exception {
+	void exceedingMaxAttachmentsShouldReturnBadRequest() throws Exception {
+		MockMultipartHttpServletRequestBuilder request = multipartPost("/api/v1/posts");
+		request.header("Authorization", "Bearer " + token)
+			.param("title", "첨부 6개")
+			.param("bodyBase64", encode("본문"));
+		for (int i = 1; i <= 6; i++) {
+			request.file(new MockMultipartFile(
+				"attachments",
+				"file" + i + ".txt",
+				"text/plain",
+				("내용" + i).getBytes(StandardCharsets.UTF_8)
+			));
+		}
+
+		mockMvc.perform(request)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+	}
+
+	@Test
+	void removingUnknownAttachmentShouldReturnBadRequest() throws Exception {
+		MockMultipartFile attachment = new MockMultipartFile(
+			"attachments",
+			"keep.txt",
+			"text/plain",
+			"유지".getBytes(StandardCharsets.UTF_8)
+		);
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(attachment)
 				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글")
 				.param("bodyBase64", encode("본문")))
@@ -583,21 +611,57 @@ class BoardPostControllerTest {
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
-		MockMultipartFile attachment = new MockMultipartFile(
-			"attachment",
-			"bad.txt",
-			"text/plain",
-			"bad".getBytes(StandardCharsets.UTF_8)
-		);
 
 		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
-				.file(attachment)
 				.header("Authorization", "Bearer " + token)
 				.param("title", "첨부 글")
 				.param("bodyBase64", encode("본문"))
-				.param("removeAttachment", "true"))
+				.param("removeAttachmentIds", "999999"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+	}
+
+	@Test
+	void overCapUpdateShouldRejectWithoutDeletingExistingFiles() throws Exception {
+		// 첨부 5개로 생성(상한)
+		MockMultipartHttpServletRequestBuilder createRequest = multipartPost("/api/v1/posts");
+		createRequest.header("Authorization", "Bearer " + token)
+			.param("title", "다중 첨부")
+			.param("bodyBase64", encode("본문"));
+		for (int i = 1; i <= 5; i++) {
+			createRequest.file(new MockMultipartFile(
+				"attachments",
+				"f" + i + ".txt",
+				"text/plain",
+				("내용" + i).getBytes(StandardCharsets.UTF_8)
+			));
+		}
+		MvcResult createResult = mockMvc.perform(createRequest)
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.attachments", hasSize(5)))
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		JsonNode attachments = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("attachments");
+		long firstAttachmentId = attachments.get(0).path("id").asLong();
+		String firstDownloadUrl = attachments.get(0).path("downloadUrl").asText();
+
+		// 유효 1개 삭제 + 신규 2개 추가 → 5 - 1 + 2 = 6 > 5 → 400 (삭제·저장보다 검증이 먼저)
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.file(new MockMultipartFile("attachments", "new1.txt", "text/plain", "신규1".getBytes(StandardCharsets.UTF_8)))
+				.file(new MockMultipartFile("attachments", "new2.txt", "text/plain", "신규2".getBytes(StandardCharsets.UTF_8)))
+				.header("Authorization", "Bearer " + token)
+				.param("title", "다중 첨부")
+				.param("bodyBase64", encode("본문"))
+				.param("removeAttachmentIds", String.valueOf(firstAttachmentId)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+
+		// 거부됐으므로 기존 5개 그대로 유지되고, 삭제하려던 첨부의 실제 파일도 보존되어 다운로드 가능해야 한다.
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).hasSize(5);
+		mockMvc.perform(get(firstDownloadUrl))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes("내용1".getBytes(StandardCharsets.UTF_8)));
 	}
 
 	@Test

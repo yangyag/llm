@@ -197,7 +197,7 @@ public class UploadSessionService {
 				}
 			});
 
-			return boardMapper.toDetailResponse(post, attachment);
+			return boardMapper.toDetailResponse(post, java.util.List.of(attachment));
 		} catch (RuntimeException exception) {
 			uploadSessionFailureService.markFailed(session.getId(), Instant.now());
 			deleteAssembledFileIfExists(assembledPath);

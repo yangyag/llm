@@ -119,10 +119,11 @@ docker logs --tail 100 llm-back
 
 가능 원인:
 
-- `APP_ATTACHMENTS_MAX_FILE_SIZE` 초과
-- `APP_ATTACHMENTS_MAX_REQUEST_SIZE` 초과
+- `APP_ATTACHMENTS_MAX_FILE_SIZE`(파일당) 초과 → 413 `ATTACHMENT_TOO_LARGE`
+- `APP_ATTACHMENTS_MAX_REQUEST_SIZE`(여러 첨부 합산) 또는 nginx `client_max_body_size` 초과 → 413
+- 첨부 개수가 `APP_ATTACHMENTS_MAX_COUNT`(기본 5)를 초과 → 400 `INVALID_ATTACHMENT_REQUEST`
+- `removeAttachmentIds`에 해당 게시글 첨부가 아닌 id 포함 → 400 `INVALID_ATTACHMENT_REQUEST`
 - attachment volume 쓰기 권한 또는 용량 문제
-- `removeAttachment=true`와 새 attachment 동시 전송
 
 확인:
 

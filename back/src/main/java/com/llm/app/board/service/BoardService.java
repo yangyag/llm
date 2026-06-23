@@ -27,8 +27,12 @@ import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
 import com.llm.app.board.repository.BoardPostSummaryProjection;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Set;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -48,6 +52,7 @@ public class BoardService {
 	private final BoardMapper boardMapper;
 	private final AiReplyGenerator aiReplyGenerator;
 	private final AttachmentStorageService attachmentStorageService;
+	private final int maxAttachmentsPerPost;
 
 	public BoardService(
 		BoardPostRepository boardPostRepository,
@@ -56,7 +61,8 @@ public class BoardService {
 		BoardContentCodec boardContentCodec,
 		BoardMapper boardMapper,
 		AiReplyGenerator aiReplyGenerator,
-		AttachmentStorageService attachmentStorageService
+		AttachmentStorageService attachmentStorageService,
+		@Value("${app.attachments.max-count:5}") int maxAttachmentsPerPost
 	) {
 		this.boardPostRepository = boardPostRepository;
 		this.boardReplyRepository = boardReplyRepository;
@@ -65,6 +71,7 @@ public class BoardService {
 		this.boardMapper = boardMapper;
 		this.aiReplyGenerator = aiReplyGenerator;
 		this.attachmentStorageService = attachmentStorageService;
+		this.maxAttachmentsPerPost = maxAttachmentsPerPost;
 	}
 
 	@Transactional(readOnly = true)
@@ -94,7 +101,7 @@ public class BoardService {
 			now,
 			now
 		));
-		replaceAttachment(savedPost, request.getAttachment(), false, now);
+		syncAttachments(savedPost, request.getAttachments(), null, now);
 		return toDetailResponse(savedPost);
 	}
 
@@ -109,21 +116,20 @@ public class BoardService {
 			mode,
 			Instant.now()
 		);
-		replaceAttachment(post, request.getAttachment(), request.isRemoveAttachment(), Instant.now());
+		syncAttachments(post, request.getAttachments(), request.getRemoveAttachmentIds(), Instant.now());
 		return toDetailResponse(post);
 	}
 
 	public void deletePost(Long id) {
 		BoardPost post = findPostWithReplies(id);
-		findAttachment(post.getId()).ifPresent(this::deleteAttachment);
+		findAttachments(post.getId()).forEach(this::deleteAttachment);
 		boardPostRepository.delete(post);
 	}
 
 	public void batchDeletePosts(List<Long> ids) {
 		for (Long id : ids) {
 			boardPostRepository.findById(id).ifPresent(post -> {
-				boardAttachmentRepository.findByPost_Id(post.getId())
-					.ifPresent(this::deleteAttachment);
+				findAttachments(post.getId()).forEach(this::deleteAttachment);
 				boardPostRepository.delete(post);
 			});
 		}
@@ -181,9 +187,9 @@ public class BoardService {
 	}
 
 	@Transactional(readOnly = true)
-	public BoardAttachmentDownload downloadAttachment(Long postId) {
+	public BoardAttachmentDownload downloadAttachment(Long postId, Long attachmentId) {
 		BoardPost post = findPostWithReplies(postId);
-		BoardAttachment attachment = findAttachment(post.getId())
+		BoardAttachment attachment = boardAttachmentRepository.findByIdAndPost_Id(attachmentId, post.getId())
 			.orElseThrow(() -> new BoardAttachmentNotFoundException(postId));
 		return new BoardAttachmentDownload(
 			attachmentStorageService.loadAsResource(attachment),
@@ -210,17 +216,17 @@ public class BoardService {
 	}
 
 	private void ensurePostIsEditable(BoardPost post) {
-		if (post.getMode() == BoardPostMode.FILE_CONVERSION_REQUEST && findAttachment(post.getId()).isPresent()) {
+		if (post.getMode() == BoardPostMode.FILE_CONVERSION_REQUEST && !findAttachments(post.getId()).isEmpty()) {
 			throw new FileConversionLockedException(post.getId());
 		}
 	}
 
 	private BoardPostDetailResponse toDetailResponse(BoardPost post) {
-		return boardMapper.toDetailResponse(post, findAttachment(post.getId()).orElse(null));
+		return boardMapper.toDetailResponse(post, findAttachments(post.getId()));
 	}
 
-	private Optional<BoardAttachment> findAttachment(Long postId) {
-		return boardAttachmentRepository.findByPost_Id(postId);
+	private List<BoardAttachment> findAttachments(Long postId) {
+		return boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId);
 	}
 
 	private String toKeywordPattern(String query) {
@@ -248,33 +254,69 @@ public class BoardService {
 		}
 	}
 
-	private void replaceAttachment(BoardPost post, MultipartFile attachment, boolean removeAttachment, Instant now) {
-		boolean hasNewAttachment = hasAttachmentUpload(attachment);
-		if (removeAttachment && hasNewAttachment) {
-			throw new InvalidAttachmentRequestException("removeAttachment cannot be true when attachment is uploaded");
+	private void syncAttachments(
+		BoardPost post,
+		List<MultipartFile> uploads,
+		Collection<Long> removeAttachmentIds,
+		Instant now
+	) {
+		List<BoardAttachment> existing = findAttachments(post.getId());
+
+		// 1) 삭제 대상만 확정한다(아직 삭제하지 않음).
+		Set<Long> removeIds = removeAttachmentIds == null
+			? Set.of()
+			: new HashSet<>(removeAttachmentIds);
+		List<BoardAttachment> toRemove = removeIds.isEmpty()
+			? List.of()
+			: existing.stream()
+				.filter(attachment -> removeIds.contains(attachment.getId()))
+				.toList();
+		if (toRemove.size() != removeIds.size()) {
+			throw new InvalidAttachmentRequestException(
+				"removeAttachmentIds references attachments that do not belong to this post"
+			);
 		}
 
-		Optional<BoardAttachment> existingAttachment = findAttachment(post.getId());
-		if (removeAttachment) {
-			existingAttachment.ifPresent(this::deleteAttachment);
+		// 2) 신규 업로드만 필터링한다(아직 저장하지 않음).
+		List<MultipartFile> newUploads = (uploads == null ? List.<MultipartFile>of() : uploads).stream()
+			.filter(this::hasAttachmentUpload)
+			.toList();
+
+		// 3) 어떤 디스크/DB 변경보다 먼저 최종 개수를 검증한다 → 실패해도 부수효과가 전혀 없다.
+		if (existing.size() - toRemove.size() + newUploads.size() > maxAttachmentsPerPost) {
+			throw new InvalidAttachmentRequestException(
+				"a post can have at most " + maxAttachmentsPerPost + " attachments"
+			);
+		}
+
+		if (toRemove.isEmpty() && newUploads.isEmpty()) {
 			return;
 		}
 
-		if (!hasNewAttachment) {
-			return;
+		// 4) 신규 파일을 먼저 저장한다. 저장 중 실패하면 이번에 저장한 파일만 정리하고 중단하므로
+		//    기존 첨부(toRemove 포함)는 그대로 보존되어 트랜잭션 롤백과 디스크 상태가 일관된다.
+		List<String> storedPaths = new ArrayList<>();
+		try {
+			for (MultipartFile upload : newUploads) {
+				AttachmentStorageService.StoredAttachment stored = attachmentStorageService.store(upload);
+				storedPaths.add(stored.storagePath());
+				boardAttachmentRepository.save(new BoardAttachment(
+					post,
+					stored.originalFilename(),
+					stored.storedFilename(),
+					stored.storagePath(),
+					stored.contentType(),
+					stored.size(),
+					now
+				));
+			}
+		} catch (RuntimeException exception) {
+			storedPaths.forEach(attachmentStorageService::deleteIfExists);
+			throw exception;
 		}
 
-		existingAttachment.ifPresent(this::deleteAttachment);
-		AttachmentStorageService.StoredAttachment storedAttachment = attachmentStorageService.store(attachment);
-		boardAttachmentRepository.save(new BoardAttachment(
-			post,
-			storedAttachment.originalFilename(),
-			storedAttachment.storedFilename(),
-			storedAttachment.storagePath(),
-			storedAttachment.contentType(),
-			storedAttachment.size(),
-			now
-		));
+		// 5) 신규 저장이 모두 끝난 뒤에야 기존 첨부를 삭제한다.
+		toRemove.forEach(this::deleteAttachment);
 	}
 
 	private void deleteAttachment(BoardAttachment attachment) {

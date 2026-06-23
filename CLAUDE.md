@@ -38,7 +38,7 @@
 - compose는 외부 네트워크 `auto_default`(auto-postgres 거주) 필수. 없으면 `up -d --wait`가 health 단계에서 실패 → 네트워크 + 접근 가능한 PostgreSQL/권한 선결.
 - `APP_ATTACHMENTS_ROOT_PATH` / `APP_UPLOAD_SESSIONS_ROOT_PATH`가 volume mount 경로와 불일치하면 조용히 JVM temp(`${java.io.tmpdir}/llm-*`)로 fallback → volume 무시, ZIP finalize 실패.
 - 로컬 백엔드 기본 포트는 8080 → Vite proxy(8082)와 맞추려면 `SERVER_PORT=8082`로 실행 (또는 `vite.config.js` 수정).
-- Flyway 적용된 `V1~V10` SQL 수정 금지, 새 `V11+`로만 추가. JPA(`ddl-auto=validate`)와 Flyway는 동일 `APP_DB_SCHEMA`. 테스트는 H2(create-drop, Flyway off)라 DDL 경로가 운영과 다름.
+- Flyway 적용된 `V1~V12` SQL 수정 금지, 새 `V13+`로만 추가. JPA(`ddl-auto=validate`)와 Flyway는 동일 `APP_DB_SCHEMA`. 테스트는 H2(create-drop, Flyway off)라 DDL 경로가 운영과 다름.
 - `FILE_CONVERSION_REQUEST` 게시글은 수동 생성 불가(업로드 세션 finalize로만), 첨부 있으면 수정 불가, AI 답변 불가. AI 답변(`is_ai=true`)은 수정·삭제 불가.
 - 업로드 세션 secret은 백엔드(`APP_UPLOAD_SESSIONS_SECRET`)와 스크립트가 **동일**해야 함 (alias A1~A11 + AES-GCM wire format, docs/08).
 - 게시글/댓글 본문은 `bodyBase64`(UTF-8→Base64, 보안 아님). 생성/수정은 `multipart/form-data`.

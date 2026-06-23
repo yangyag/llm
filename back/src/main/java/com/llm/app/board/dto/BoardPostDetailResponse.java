@@ -12,7 +12,7 @@ public record BoardPostDetailResponse(
 	boolean conversionReady,
 	Instant createdAt,
 	Instant updatedAt,
-	BoardAttachmentDto attachment,
+	List<BoardAttachmentDto> attachments,
 	List<BoardReplyDto> replies
 ) {
 }

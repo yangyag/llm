@@ -18,17 +18,19 @@ function encodeBodyBase64(value) {
   return fromUint8Array(new TextEncoder().encode(value));
 }
 
-function buildPostFormData({ title, body, attachment, removeAttachment = false }) {
+function buildPostFormData({ title, body, attachments = [], removeAttachmentIds = [] }) {
   const formData = new FormData();
   formData.append("title", title);
   formData.append("bodyBase64", encodeBodyBase64(body));
 
-  if (attachment) {
-    formData.append("attachment", attachment);
+  for (const attachment of attachments) {
+    if (attachment) {
+      formData.append("attachments", attachment);
+    }
   }
 
-  if (removeAttachment) {
-    formData.append("removeAttachment", "true");
+  for (const attachmentId of removeAttachmentIds) {
+    formData.append("removeAttachmentIds", String(attachmentId));
   }
 
   return formData;
@@ -80,19 +82,19 @@ export function getPost(postId) {
   return requestJson(`/api/v1/posts/${postId}`);
 }
 
-export function createPost({ title, body, attachment }, token) {
+export function createPost({ title, body, attachments = [] }, token) {
   return requestJson("/api/v1/posts", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-    body: buildPostFormData({ title, body, attachment })
+    body: buildPostFormData({ title, body, attachments })
   });
 }
 
-export function updatePost(postId, { title, body, attachment, removeAttachment = false }, token) {
+export function updatePost(postId, { title, body, attachments = [], removeAttachmentIds = [] }, token) {
   return requestJson(`/api/v1/posts/${postId}`, {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}` },
-    body: buildPostFormData({ title, body, attachment, removeAttachment })
+    body: buildPostFormData({ title, body, attachments, removeAttachmentIds })
   });
 }
 

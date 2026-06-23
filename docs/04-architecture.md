@@ -32,7 +32,7 @@ Browser
 2. Nginx가 `/api/` 요청을 `http://llm-back:8080`으로 proxy합니다.
 3. 목록 API는 게시글 요약, 댓글 수, 첨부파일 존재 여부, 변환 준비 여부를 조회합니다.
 4. 상세 API는 게시글 본문, 댓글, 첨부파일 메타데이터를 조회합니다.
-5. 상세 응답의 첨부파일 다운로드 URL은 `/api/v1/posts/{id}/attachment` 형식입니다.
+5. 상세 응답의 `attachments` 배열 각 항목은 `downloadUrl`(`/api/v1/posts/{id}/attachments/{attachmentId}` 형식)을 포함합니다.
 
 ### 관리자 쓰기 작업
 

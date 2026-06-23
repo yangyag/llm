@@ -37,9 +37,14 @@ public class BoardMapper {
 		);
 	}
 
-	public BoardPostDetailResponse toDetailResponse(BoardPost post, BoardAttachment attachment) {
+	public BoardPostDetailResponse toDetailResponse(BoardPost post, List<BoardAttachment> attachments) {
 		List<BoardReplyDto> replies = post.getReplies().stream()
 			.map(this::toReplyDto)
+			.toList();
+
+		List<BoardAttachment> safeAttachments = attachments == null ? List.of() : attachments;
+		List<BoardAttachmentDto> attachmentDtos = safeAttachments.stream()
+			.map(attachment -> toAttachmentDto(post.getId(), attachment))
 			.toList();
 
 		return new BoardPostDetailResponse(
@@ -47,25 +52,21 @@ public class BoardMapper {
 			post.getTitle(),
 			post.getBody(),
 			post.getMode(),
-			post.getMode() == com.llm.app.board.model.BoardPostMode.FILE_CONVERSION_REQUEST && attachment != null,
+			post.getMode() == com.llm.app.board.model.BoardPostMode.FILE_CONVERSION_REQUEST && !safeAttachments.isEmpty(),
 			post.getCreatedAt(),
 			post.getUpdatedAt(),
-			toAttachmentDto(post.getId(), attachment),
+			attachmentDtos,
 			replies
 		);
 	}
 
 	private BoardAttachmentDto toAttachmentDto(Long postId, BoardAttachment attachment) {
-		if (attachment == null) {
-			return null;
-		}
-
 		return new BoardAttachmentDto(
 			attachment.getId(),
 			attachment.getOriginalFilename(),
 			attachment.getSize(),
 			attachment.getContentType(),
-			"/api/v1/posts/" + postId + "/attachment"
+			"/api/v1/posts/" + postId + "/attachments/" + attachment.getId()
 		);
 	}
 

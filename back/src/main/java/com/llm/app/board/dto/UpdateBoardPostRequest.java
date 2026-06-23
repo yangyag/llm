@@ -3,6 +3,7 @@ package com.llm.app.board.dto;
 import com.llm.app.board.model.BoardPostMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
 
 public class UpdateBoardPostRequest {
@@ -14,9 +15,9 @@ public class UpdateBoardPostRequest {
 
 	private BoardPostMode mode = BoardPostMode.NORMAL;
 
-	private MultipartFile attachment;
+	private List<MultipartFile> attachments;
 
-	private boolean removeAttachment;
+	private List<Long> removeAttachmentIds;
 
 	public String getTitle() {
 		return title;
@@ -44,19 +45,19 @@ public class UpdateBoardPostRequest {
 		}
 	}
 
-	public MultipartFile getAttachment() {
-		return attachment;
+	public List<MultipartFile> getAttachments() {
+		return attachments;
 	}
 
-	public void setAttachment(MultipartFile attachment) {
-		this.attachment = attachment;
+	public void setAttachments(List<MultipartFile> attachments) {
+		this.attachments = attachments;
 	}
 
-	public boolean isRemoveAttachment() {
-		return removeAttachment;
+	public List<Long> getRemoveAttachmentIds() {
+		return removeAttachmentIds;
 	}
 
-	public void setRemoveAttachment(boolean removeAttachment) {
-		this.removeAttachment = removeAttachment;
+	public void setRemoveAttachmentIds(List<Long> removeAttachmentIds) {
+		this.removeAttachmentIds = removeAttachmentIds;
 	}
 }

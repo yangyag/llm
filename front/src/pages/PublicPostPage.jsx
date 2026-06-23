@@ -123,27 +123,31 @@ function PublicPostPage({ postId }) {
                   <p className="detail-body">{post.body}</p>
                 )}
 
-                {post.attachment ? (
+                {post.attachments?.length > 0 ? (
                   <div className="attachment-panel">
                     <span className="attachment-label">
-                      {isFileConversionMode(post.mode) ? "복원 파일" : "첨부파일"}
+                      {isFileConversionMode(post.mode)
+                        ? "복원 파일"
+                        : `첨부파일 (${post.attachments.length})`}
                     </span>
-                    <div className="attachment-card">
-                      <div>
-                        <strong>{post.attachment.originalFilename}</strong>
-                        <p className="section-meta">
-                          {formatFileSize(post.attachment.size)}
-                          {post.attachment.contentType ? ` · ${post.attachment.contentType}` : ""}
-                        </p>
+                    {post.attachments.map((attachment) => (
+                      <div key={attachment.id} className="attachment-card">
+                        <div>
+                          <strong>{attachment.originalFilename}</strong>
+                          <p className="section-meta">
+                            {formatFileSize(attachment.size)}
+                            {attachment.contentType ? ` · ${attachment.contentType}` : ""}
+                          </p>
+                        </div>
+                        <a
+                          className="ghost-button attachment-link"
+                          href={getApiUrl(attachment.downloadUrl)}
+                          download={attachment.originalFilename}
+                        >
+                          다운로드
+                        </a>
                       </div>
-                      <a
-                        className="ghost-button attachment-link"
-                        href={getApiUrl(post.attachment.downloadUrl)}
-                        download={post.attachment.originalFilename}
-                      >
-                        다운로드
-                      </a>
-                    </div>
+                    ))}
                   </div>
                 ) : null}
               </article>

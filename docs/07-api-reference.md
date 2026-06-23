@@ -126,12 +126,12 @@ Authorization: Bearer <jwt>
   "conversionReady": false,
   "createdAt": "2026-05-31T00:00:00Z",
   "updatedAt": "2026-05-31T00:00:00Z",
-  "attachment": null,
+  "attachments": [],
   "replies": []
 }
 ```
 
-`attachment`가 있으면 다음 형식입니다.
+`attachments`는 첨부파일 배열입니다(없으면 빈 배열). 각 항목은 다음 형식이며, 일반 게시글은 최대 5개까지 가질 수 있습니다. 업로드 세션 finalize로 만들어진 `FILE_CONVERSION_REQUEST` 게시글은 항상 1개(원본 ZIP)입니다.
 
 ```json
 {
@@ -139,7 +139,7 @@ Authorization: Bearer <jwt>
   "originalFilename": "archive.zip",
   "size": 12345,
   "contentType": "application/zip",
-  "downloadUrl": "/api/v1/posts/1/attachment"
+  "downloadUrl": "/api/v1/posts/1/attachments/10"
 }
 ```
 
@@ -156,7 +156,7 @@ Content-Type: `multipart/form-data`
 | `title` | 예 | 200자 이하 |
 | `bodyBase64` | 아니오 | UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
 | `mode` | 아니오 | 기본 `NORMAL`. 수동 `FILE_CONVERSION_REQUEST` 생성은 거부 |
-| `attachment` | 아니오 | 첨부파일 |
+| `attachments` | 아니오 | 첨부파일. 같은 이름 `attachments`로 여러 개 전송 가능(최대 5개, 파일당 100MB) |
 
 응답: 게시글 상세, HTTP 201
 
@@ -173,14 +173,16 @@ Content-Type: `multipart/form-data`
 | `title` | 예 | 200자 이하 |
 | `bodyBase64` | 아니오 | UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
 | `mode` | 아니오 | 기본 `NORMAL` |
-| `attachment` | 아니오 | 새 첨부파일 |
-| `removeAttachment` | 아니오 | `true`면 기존 첨부파일 삭제 |
+| `attachments` | 아니오 | 추가할 새 첨부파일. 같은 이름으로 여러 개 전송 가능 |
+| `removeAttachmentIds` | 아니오 | 삭제할 기존 첨부파일 id. 여러 개 전송 가능 |
 
 응답: 게시글 상세, HTTP 200
 
 제약:
 
-- `removeAttachment=true`와 새 `attachment`를 동시에 보낼 수 없습니다.
+- 새 `attachments` 추가와 `removeAttachmentIds` 삭제는 한 요청에서 함께 보낼 수 있습니다(일부 삭제 + 일부 추가).
+- 삭제·추가 반영 후 게시글의 총 첨부파일 수가 5개를 넘으면 거부됩니다(`INVALID_ATTACHMENT_REQUEST`).
+- `removeAttachmentIds`에 해당 게시글의 첨부가 아닌 id가 있으면 거부됩니다(`INVALID_ATTACHMENT_REQUEST`).
 - `mode=FILE_CONVERSION_REQUEST`는 생성과 수정 모두에서 거부됩니다. 파일 변환 게시글은 업로드 세션 finalize로만 만들어집니다.
 - `FILE_CONVERSION_REQUEST` 게시글에 첨부파일이 있으면 수정할 수 없습니다.
 
@@ -275,9 +277,11 @@ Content-Type: `multipart/form-data`
 
 ## Attachments
 
-### `GET /api/v1/posts/{id}/attachment`
+### `GET /api/v1/posts/{id}/attachments/{attachmentId}`
 
 인증: 필요 없음
+
+`attachmentId`는 상세 응답 `attachments[].id`(또는 `downloadUrl`)에서 얻습니다. 해당 첨부가 그 게시글의 것이 아니면 404입니다.
 
 응답:
 
