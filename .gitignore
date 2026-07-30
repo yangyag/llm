@@ -10,7 +10,9 @@ llm.env.*
 # Frontend artifacts
 front/.env
 front/node_modules/
-front/dist/
+front/dist
+front/.nuxt/
+front/.output/
 
 # Backend artifacts
 back/HELP.md
