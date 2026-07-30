@@ -1,4 +1,4 @@
-// 게시글 상세/작성/댓글/AI/첨부 스토어 — WelcomePage.jsx 핵심 로직 이관.
+// 게시글 상세/작성/댓글/AI/첨부 상태와 동작을 관리하는 스토어.
 import { defineStore } from "pinia";
 import {
   createAiReply,

@@ -42,7 +42,7 @@
 | `docs-index-agent` | 이상 없음 | 목차, 링크, 전체 개발-운영 흐름과 실제 문서 파일 존재를 확인했습니다. |
 | `project-overview-agent` | 이상 없음 | 기능, 저장소 구성, 기술 스택, EC2 운영 상태가 코드와 실제 상태에 맞음을 확인했습니다. |
 | `dev-setup-agent` | 이상 없음 | `auto_default`와 별도 PostgreSQL 준비 조건을 포함한 개발 준비 절차가 실제 compose와 맞음을 확인했습니다. |
-| `local-dev-agent` | 이상 없음 | compose 포트, Vite proxy, volume mount와 백엔드 fallback 경로 설명이 실제 파일과 맞음을 확인했습니다. |
+| `local-dev-agent` | 이상 없음 | compose 포트, Nitro dev proxy, volume mount와 백엔드 fallback 경로 설명이 실제 파일과 맞음을 확인했습니다. |
 | `architecture-agent` | 이상 없음 | 목록/상세 응답 차이, 업로드 세션 secret 소유권, 전체 요청 흐름이 코드와 맞음을 확인했습니다. |
 | `configuration-agent` | 이상 없음 | `.env.example`, 현재 루트 `.env`, EC2 `.env`의 DB/CORS/AI 모델값 구분과 환경 변수 설명이 실제 상태와 맞음을 확인했습니다. |
 | `database-agent` | 이상 없음 | Flyway/JPA 설정, migration, 테스트 DB, 테이블 제약, 백업 설명이 실제 파일과 맞음을 확인했습니다. |

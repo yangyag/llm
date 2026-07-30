@@ -1,4 +1,4 @@
-// 유휴 타임아웃 — App.jsx의 useEffect(auth.token) 로직 1:1 포팅.
+// 로그인 세션 유휴 타임아웃.
 // 1시간 비활동 시 자동 로그아웃. activity 이벤트 capture 단계, throttle 5초,
 // visibilitychange/focus 시 즉시 재평가, localStorage 시드 보존(리로드 시 리셋 방지).
 import { onMounted, onUnmounted } from "vue";
@@ -13,7 +13,11 @@ export function useIdleTimeout(): void {
   let lastWrite = 0;
 
   function logout() {
+    if (!auth.token) {
+      return;
+    }
     auth.logout();
+    void navigateTo("/login", { replace: true });
   }
 
   function checkIdle() {
@@ -30,6 +34,12 @@ export function useIdleTimeout(): void {
 
   function markActivity() {
     const now = Date.now();
+    const storedLastActivity = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
+    // 절전 등으로 타이머 실행이 늦었다면 첫 활동이 만료 시각을 덮어쓰기 전에 로그아웃한다.
+    if (storedLastActivity && storedLastActivity + IDLE_TIMEOUT_MS <= now) {
+      logout();
+      return;
+    }
     // 스크롤 등 빈번한 이벤트로 인한 과도한 저장 방지 (1시간 기준 5초 오차 무시 가능).
     if (now - lastWrite < 5000) {
       return;

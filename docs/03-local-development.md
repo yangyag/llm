@@ -37,7 +37,7 @@ docker compose up -d --wait
 
 ## 백엔드 단독 실행
 
-백엔드 기본 포트는 `8080`입니다. 로컬 프론트 Vite proxy는 `http://localhost:8082`로 잡혀 있으므로, 백엔드를 단독 개발 서버로 붙일 때는 포트를 맞춰야 합니다.
+백엔드 기본 포트는 `8080`입니다. 로컬 프론트의 Nitro dev proxy는 `http://localhost:8082`로 잡혀 있으므로, 백엔드를 단독 개발 서버로 붙일 때는 포트를 맞춰야 합니다.
 
 예시:
 
@@ -64,10 +64,10 @@ npm run dev
 
 기본 URL:
 
-- Vite dev server: `http://localhost:5174`
+- Nuxt dev server: `http://localhost:5174`
 - `/api` proxy: `http://localhost:8082`
 
-백엔드를 `8080`으로 실행한다면 `front/vite.config.js`의 proxy나 백엔드 실행 포트를 조정해야 합니다.
+백엔드를 `8080`으로 실행한다면 `front/nuxt.config.ts`의 `nitro.devProxy` 또는 백엔드 실행 포트를 조정해야 합니다.
 
 ## 로컬 인증 흐름
 

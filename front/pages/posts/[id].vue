@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import AttachmentPanel from "~/components/post/AttachmentPanel.vue";
 import { getApiUrl, getPost } from "~/services/api";
 import { formatFileSize, getPostModeLabel, isFileConversionMode } from "~/utils/post";
 import type { PostDetail } from "~/types/api";

@@ -4,7 +4,7 @@
 
 ```text
 Browser
-  -> Frontend: React app served by Nginx
+  -> Frontend: Nuxt/Vue static SPA served by Nginx
       -> /api/* proxy
           -> Backend: Spring Boot API
               -> PostgreSQL
@@ -17,7 +17,7 @@ Browser
 
 | 컴포넌트 | 컨테이너/프로세스 | 역할 |
 | --- | --- | --- |
-| Frontend | `llm-front` | 정적 React 앱 제공, `/api/` 요청을 백엔드로 proxy |
+| Frontend | `llm-front` | Nuxt 정적 산출물 제공, `/api/` 요청을 백엔드로 proxy |
 | Backend | `llm-back` | REST API, 인증, 게시판, 업로드 세션, AI 답변 생성 |
 | Database | `auto-postgres` 운영 기준 | PostgreSQL 데이터 저장 |
 | Volumes | `*-llm-back-attachments`, `*-llm-back-upload-sessions` | 첨부파일과 임시 청크 저장 |
@@ -61,7 +61,7 @@ Browser
 
 1. 로그인 상태에서만 프론트가 유휴 타이머를 동작시킵니다. 마지막 사용자 활동(`mousedown`/`keydown`/`scroll`/`touchstart`) 후 1시간(`IDLE_TIMEOUT_MS`, 프론트 하드코딩 상수) 무동작이면 자동 로그아웃합니다.
 2. 활동 시각은 `localStorage`의 `auth_last_activity`에 5초 throttle로 기록되며, 리로드/탭 복원이 유휴 데드라인을 리셋하지 않습니다(로그인 시점에 시드). `visibilitychange`/`focus`로 탭 복귀 시 유휴 시간을 재평가합니다.
-3. `api.js`의 인증 요청(`Authorization` 헤더 포함)이 `401`을 받으면 `window`에 `auth:unauthorized` 이벤트를 보내고, 프론트가 이를 수신해 강제 로그아웃합니다. 로그인 요청은 `Authorization` 헤더가 없어 제외됩니다.
+3. `front/services/api.ts`의 인증 요청(`Authorization` 헤더 포함)이 `401`을 받으면 `window`에 `auth:unauthorized` 이벤트를 보내고, 인증 플러그인이 이를 수신해 강제 로그아웃한 뒤 `/login`으로 이동합니다. 로그인 요청은 `Authorization` 헤더가 없어 제외됩니다.
 4. 자동 로그아웃은 `auth_token`/`auth_username`/`auth_last_activity`를 제거합니다. 이는 프론트 전용 동작이며, 백엔드 JWT는 기존대로 `APP_JWT_EXPIRATION_MS`(기본 1시간) 후 고정 만료하고 토큰 갱신/슬라이딩 세션은 없습니다.
 
 ## 계층 구조
@@ -76,7 +76,7 @@ Browser
 
 ## 배포 경계
 
-- 프론트 이미지는 빌드 시점 `VITE_API_BASE_URL` 값을 정적 번들에 포함할 수 있습니다.
-- 운영에서는 Nginx proxy가 같은 origin의 `/api/`를 백엔드로 전달하므로 `VITE_API_BASE_URL`을 비워 두는 구성이 단순합니다.
+- 프론트 이미지는 빌드 시점 `NUXT_PUBLIC_API_BASE` 값을 정적 번들에 포함할 수 있습니다.
+- 운영에서는 Nginx proxy가 같은 origin의 `/api/`를 백엔드로 전달하므로 `NUXT_PUBLIC_API_BASE`를 비워 둡니다.
 - 백엔드는 DB와 파일 volume을 상태 저장소로 사용합니다.
 - AI provider API key가 비어 있으면 해당 provider 호출 시 `AI_PROVIDER_NOT_CONFIGURED` 오류를 반환합니다.

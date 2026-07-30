@@ -39,5 +39,5 @@
 - 루트 `docker-compose.yml`이 로컬과 EC2의 공통 실행 단위입니다.
 - 운영 배포는 `/home/ubuntu/llm/.env`와 `/home/ubuntu/llm/docker-compose.yml`을 기준으로 확인합니다.
 - 백엔드 API 변경 시 `cd back && ./gradlew clean test`를 통과시킵니다.
-- 프론트 변경 시 `cd front && npm run build`를 통과시킵니다.
+- 프론트 변경 시 `cd front && npm run typecheck && npm run build`를 통과시킵니다.
 - 통합 영향이 있으면 `docker compose up -d --wait`와 헬스체크를 확인합니다.

@@ -17,31 +17,31 @@ export interface Reply {
   id: number;
   body: string;
   ai: boolean;
-  aiProvider?: string;
-  aiModel?: string;
+  aiProvider: AiProvider | null;
+  aiModel: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 게시글 목록과 상세 응답이 공유하는 필드 */
+export interface Post {
+  id: number;
+  title: string;
+  mode: PostMode;
+  conversionReady: boolean;
   createdAt: string;
 }
 
 /** GET /posts 목록의 개별 요약 */
-export interface PostSummary {
-  id: number;
-  title: string;
-  mode: PostMode;
-  conversionReady: boolean;
+export interface PostSummary extends Post {
   replyCount: number;
   hasAttachment: boolean;
-  createdAt: string;
 }
 
 /** GET /posts/{id} 상세 */
-export interface PostDetail {
-  id: number;
-  title: string;
+export interface PostDetail extends Post {
   body: string;
-  mode: PostMode;
-  conversionReady: boolean;
-  createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
   attachments: Attachment[];
   replies: Reply[];
 }

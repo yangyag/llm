@@ -16,6 +16,7 @@ cd /home/yangyag/llm/back
 ```bash
 cd /home/yangyag/llm/front
 npm ci
+npm run typecheck
 npm run build
 ```
 
@@ -55,7 +56,7 @@ curl -fsS http://localhost:8083/api/v1/health
 | --- | --- |
 | 백엔드 controller/service/domain | `cd back && ./gradlew clean test` |
 | DB migration | 백엔드 테스트와 실제 PostgreSQL 연결 검증. 루트 compose에는 PostgreSQL 서비스가 없으므로 로컬/EC2의 외부 DB 또는 별도 PostgreSQL을 준비 |
-| 프론트 UI/API client | `cd front && npm run build` |
+| 프론트 UI/API client | `cd front && npm run typecheck && npm run build` |
 | Dockerfile/compose | `docker compose --profile build build back-build front-build`, `docker compose up -d --wait` |
 | 배포 스크립트 | `./deploy-ec2.sh --help`, EC2에서 dry-run에 준하는 option/path 확인 |
 | 운영 env 변경 | 컨테이너 재기동, `docker inspect`, health, 기능 smoke test |
@@ -78,9 +79,26 @@ curl -fsS http://localhost:8083/api/v1/health
 ## 실패 분석 기준
 
 - 백엔드 테스트 실패: 실패 테스트 이름, expected/actual, 관련 controller/service를 먼저 확인합니다.
-- 프론트 빌드 실패: TypeScript는 없지만 Vite 번들 오류, import 경로, 환경 변수 참조를 확인합니다.
+- 프론트 검사/빌드 실패: `nuxi typecheck`의 TypeScript 오류, Vue 컴포넌트 import, `NUXT_PUBLIC_API_BASE`, 정적 생성 로그를 확인합니다.
 - 통합 health 실패: `docker compose ps`, `docker compose logs back`, `docker compose logs front` 순서로 확인합니다.
 - DB 연결 실패: `APP_DB_HOST`, `APP_DB_NAME`, `APP_DB_SCHEMA`, 네트워크 `auto_default` 존재 여부를 확인합니다.
+
+## 프론트 의존성 보안 점검
+
+```bash
+cd /home/yangyag/llm/front
+npm audit --omit=dev
+npm ls nuxt nitropack archiver archiver-utils readdir-glob zip-stream minimatch brace-expansion vue-tsc --all
+```
+
+2026-07-30 기준 `vue-tsc`를 Nuxt와 호환되는 `3.3.8`로 갱신한 뒤 `npm audit --omit=dev`에 남은 high 11건은 하나의 [`brace-expansion` 메모리 고갈(DoS) 권고](https://github.com/advisories/GHSA-mh99-v99m-4gvg)에서 파생됩니다.
+
+- 빌드 경로: `nuxt` → `@nuxt/nitro-server` → `nitropack` → `archiver` → `glob`/`minimatch`/`brace-expansion`
+- 직접 선언 의존성으로 표시되는 것은 `nuxt`이고, 취약 구현은 전이 의존성에 있습니다. 기존 `vue-tsc` 2.x 경로는 3.3.8 갱신으로 제거했습니다.
+- Docker 최종 단계는 `.output/public`만 `nginx:1.27-alpine`에 복사하므로 Node/Nuxt 의존성은 운영 이미지에 포함되지 않습니다. 따라서 HTTP 런타임 노출은 없고, 신뢰하지 않는 glob 입력을 빌드에 넣을 때의 빌드 가용성 위험으로 분류합니다.
+- 당시 최신 Nuxt 3(`3.21.10`)과 Nuxt 4도 같은 전이 경로가 보고되어, 강제 major override나 Nuxt 3 다운그레이드는 적용하지 않습니다. 패치된 Nuxt 3/Nitropack 계열이 나오면 `npm install` 후 typecheck/build/Docker 회귀검증을 수행합니다.
+
+`npm audit fix --force`는 Nuxt/타입 도구의 호환성을 깨뜨릴 수 있으므로 사용하지 않습니다.
 
 ## 문서 변경 검증
 

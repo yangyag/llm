@@ -25,6 +25,7 @@ cd back
 ```bash
 cd front
 npm ci
+npm run typecheck
 npm run build
 ```
 
@@ -35,7 +36,7 @@ cd /home/yangyag/llm
 docker compose --profile build build back-build front-build
 ```
 
-> `VITE_API_BASE_URL`은 front 이미지 **빌드 시점**에 정적 번들로 굳어집니다(런타임 변경 불가). 운영은 상대경로 `/api`를 쓰도록 `.env`에서 비워 둔 채 빌드하고, API base URL을 바꾸려면 front 이미지를 다시 빌드·push해야 합니다.
+> `NUXT_PUBLIC_API_BASE`는 front 이미지 **빌드 시점**에 정적 번들로 굳어집니다(런타임 변경 불가). 운영은 상대경로 `/api`를 쓰도록 `.env`에서 비워 둔 채 빌드하고, API base URL을 바꾸려면 front 이미지를 다시 빌드·push해야 합니다.
 
 ## Dockerfile 요약
 
@@ -50,8 +51,9 @@ Frontend:
 
 - builder: `node:22-bookworm-slim`
 - runtime: `nginx:1.27-alpine`
-- build command: `npm ci`, `npm run build`
-- `VITE_API_BASE_URL` build arg 지원
+- build command: `npm ci`, `npm run build` (`nuxi generate`)
+- 산출물: `.output/public`
+- `NUXT_PUBLIC_API_BASE` build arg 지원
 - Nginx가 `/api/`를 `http://llm-back:8080`으로 proxy
 
 ## 릴리스 전 체크리스트
@@ -69,10 +71,10 @@ Frontend:
    cd back && ./gradlew clean test
    ```
 
-3. 프론트 빌드
+3. 프론트 타입 검사와 빌드
 
    ```bash
-   cd front && npm run build
+   cd front && npm run typecheck && npm run build
    ```
 
 4. 이미지 빌드

@@ -1,6 +1,6 @@
 # 프로젝트 개요
 
-`llm`은 익명 게시판, 관리자 로그인, 첨부파일, 단일 ZIP 청크 업로드, AI 답변 생성을 제공하는 monorepo입니다. 프론트엔드는 React/Vite, 백엔드는 Spring Boot, 데이터베이스는 PostgreSQL을 사용하며, 배포 단위는 Docker Compose입니다.
+`llm`은 익명 게시판, 관리자 로그인, 첨부파일, 단일 ZIP 청크 업로드, AI 답변 생성을 제공하는 monorepo입니다. 프론트엔드는 Nuxt 3/Vue 3/TypeScript/Pinia, 백엔드는 Spring Boot, 데이터베이스는 PostgreSQL을 사용하며, 배포 단위는 Docker Compose입니다.
 
 ## 주요 기능
 
@@ -19,7 +19,7 @@
 
 | 경로 | 역할 |
 | --- | --- |
-| `front/` | React/Vite UI, API 클라이언트, Nginx 설정, 프론트 Dockerfile |
+| `front/` | Nuxt/Vue/TypeScript UI, Pinia 상태 관리, API 클라이언트, Nginx 설정, 프론트 Dockerfile |
 | `back/` | Spring Boot API, JPA 도메인, Flyway 마이그레이션, 테스트, 백엔드 Dockerfile |
 | `docker-compose.yml` | 공통 런타임과 빌드 프로파일 |
 | `deploy-ec2.sh` | EC2 순차 배포 스크립트 |
@@ -31,7 +31,7 @@
 
 | 영역 | 구성 |
 | --- | --- |
-| Frontend | React 18, Vite 5, `js-base64`, Nginx |
+| Frontend | Nuxt 3, Vue 3, TypeScript, Pinia, `js-base64`, Nginx |
 | Backend | Spring Boot 3.5.11, Java 25, Gradle, JPA, Flyway |
 | Database | PostgreSQL 18 운영 기준, H2 테스트 기준 |
 | Auth | 관리자 계정, BCrypt password hash, JWT HS256 |

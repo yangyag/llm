@@ -12,7 +12,7 @@
              -> PostgreSQL (:5432)
 ```
 
-- Frontend는 Vite + React로 동작합니다.
+- Frontend는 Nuxt 3 + Vue 3 + TypeScript + Pinia로 동작하며, 정적 생성 결과를 Nginx가 제공합니다.
 - Backend는 Spring Boot 3.5.11, Java 25, PostgreSQL 18, Flyway를 사용합니다.
 - 프론트는 관리자 로그인 후 Bearer 토큰으로 생성/수정/삭제와 AI 답변 API를 호출합니다.
 
@@ -38,7 +38,7 @@ docker compose down
 
 공통 compose는 `.env`에서 환경별 값을 읽습니다. 로컬과 EC2는 각각 자기 머신의 `.env`만 다르게 두고, 실제 `.env` 파일은 `.gitignore`로 관리 대상에서 제외합니다.
 
-- `VITE_API_BASE_URL`: 프론트 이미지를 빌드할 때 사용할 API base URL (빌드 타임에 번들로 고정되어 런타임 변경 불가, 변경 시 front 이미지 재빌드 필요)
+- `NUXT_PUBLIC_API_BASE`: 프론트 이미지를 빌드할 때 사용할 API base URL (빌드 타임에 번들로 고정되어 런타임 변경 불가, 변경 시 front 이미지 재빌드 필요)
 - `LLM_BACK_IMAGE`, `LLM_FRONT_IMAGE`: compose가 실행할 Docker 이미지
 - `LLM_FRONT_PORT`: 프론트 컨테이너를 호스트에 공개할 포트
 - `APP_CORS_ALLOWED_ORIGINS`: 허용 Origin 목록
@@ -94,7 +94,7 @@ python3 upload_zip_post.py
 - 업로드 세션 JSON은 의미 있는 필드명이 아니라 내부 alias 키만 사용합니다. 외부에서 payload를 봐도 필드 의미를 추론하기 어렵게 설계되어 있습니다.
 - `APP_UPLOAD_SESSIONS_SECRET`와 `LLM_UPLOAD_SESSIONS_SECRET`는 backend와 script가 같은 값을 써야 합니다.
 - 업로드 중간에 끊기면 `<archive>.llm-upload-session.json` 사이드카를 사용해 누락 청크만 이어올립니다. 이전 byte-size 사이드카는 새 포맷과 호환되지 않으므로 새 세션으로 다시 생성됩니다.
-- `LLM_API_BASE_URL` 또는 `VITE_API_BASE_URL`을 우선 사용하고, `LLM_JWT_TOKEN`이 없으면 `LLM_USERNAME` / `LLM_PASSWORD`로 로그인합니다.
+- `LLM_API_BASE_URL` 또는 `NUXT_PUBLIC_API_BASE`를 우선 사용하고, `LLM_JWT_TOKEN`이 없으면 `LLM_USERNAME` / `LLM_PASSWORD`로 로그인합니다.
 - 모든 청크를 업로드한 뒤 `finalize`가 호출되면 서버가 원본 ZIP 바이트를 복원하고 게시글을 자동 생성합니다.
 - 게시판 웹 UI는 생성된 결과 게시글의 조회와 다운로드만 담당합니다.
 
@@ -102,7 +102,7 @@ python3 upload_zip_post.py
 
 ```bash
 cd back && ./gradlew clean test
-cd front && npm run build
+cd front && npm run typecheck && npm run build
 ```
 
 통합 확인 (외부 네트워크 `auto_default` 필요):

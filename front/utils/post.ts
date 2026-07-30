@@ -1,4 +1,4 @@
-// 게시글/첨부 공용 유틸 — WelcomePage.jsx의 helper 함수 이관.
+// 게시글/첨부 공용 유틸리티.
 import type { PostMode } from "~/types/api";
 
 export const MAX_ATTACHMENTS = 5;

@@ -53,40 +53,42 @@ export const usePostsStore = defineStore("posts", {
     setSearchInput(value: string) {
       this.searchInput = value;
     },
-    navigateToList(page: number, query: string = this.searchQuery, options: { replace?: boolean } = {}) {
+    navigateToList(page: number, query?: string, options: { replace?: boolean } = {}) {
       const nextPage = Math.max(page, 1);
-      const normalizedQuery = normalizeSearchQuery(query);
+      const normalizedQuery = normalizeSearchQuery(query ?? this.searchQuery);
       updateListStateInUrl(nextPage, normalizedQuery, options);
       this.currentPage = nextPage;
       this.searchQuery = normalizedQuery;
     },
-    async loadPosts(page: number = this.currentPage, query: string = this.searchQuery): Promise<PostListResponse | null> {
+    async loadPosts(page?: number, query?: string): Promise<PostListResponse | null> {
+      const targetPage = page ?? this.currentPage;
+      const targetQuery = query ?? this.searchQuery;
       this.loading = true;
       this.selectedPostIds = new Set();
       this.listError = "";
 
       try {
-        const normalizedQuery = normalizeSearchQuery(query);
-        const payload = await getPosts(page, normalizedQuery);
-        if ((payload.totalPages ?? 0) > 0 && page > payload.totalPages) {
+        const normalizedQuery = normalizeSearchQuery(targetQuery);
+        const payload = await getPosts(targetPage, normalizedQuery);
+        if ((payload.totalPages ?? 0) > 0 && targetPage > payload.totalPages) {
           this.navigateToList(payload.totalPages, normalizedQuery, { replace: true });
           return this.loadPosts(payload.totalPages, normalizedQuery);
         }
-        if ((payload.totalPages ?? 0) === 0 && page > 1) {
+        if ((payload.totalPages ?? 0) === 0 && targetPage > 1) {
           this.navigateToList(1, normalizedQuery, { replace: true });
           return this.loadPosts(1, normalizedQuery);
         }
 
         this.items = payload.items ?? [];
         this.pagination = {
-          page: payload.page ?? page,
+          page: payload.page ?? targetPage,
           pageSize: payload.pageSize ?? DEFAULT_PAGINATION.pageSize,
           totalItems: payload.totalItems ?? 0,
           totalPages: payload.totalPages ?? 0,
           hasPrevious: payload.hasPrevious ?? false,
           hasNext: payload.hasNext ?? false
         };
-        this.currentPage = payload.page ?? page;
+        this.currentPage = payload.page ?? targetPage;
         this.searchQuery = normalizedQuery;
         return payload;
       } catch (loadError) {

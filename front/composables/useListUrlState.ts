@@ -1,4 +1,4 @@
-// 목록 page/query URL 동기화 — WelcomePage.jsx의 getListStateFromLocation/updateListStateInUrl 이관.
+// 목록 page/query URL과 Pinia 상태를 동기화하는 유틸리티.
 // 일반 함수(composable 컨텍스트 불필요) — window.history 직접 조작.
 
 export function normalizeSearchQuery(value: string): string {

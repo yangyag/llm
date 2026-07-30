@@ -1,7 +1,6 @@
-// API 클라이언트 — React src/api.js 포팅.
+// API 클라이언트 — Nuxt $fetch 기반의 게시판 API 계약 구현.
 // Nuxt $fetch 사용. 에러 정규화(ApiError) + 인증 요청 401 시 auth:unauthorized 디스패치 보존.
 import { fromUint8Array } from "js-base64";
-import type { FetchOptions } from "ofetch";
 import type {
   AiProvider,
   ApiError,
@@ -12,8 +11,10 @@ import type {
   PostMutationInput
 } from "~/types/api";
 
-type RequestOptions = FetchOptions & {
+type RequestOptions = {
+  method?: "GET" | "HEAD" | "PATCH" | "POST" | "PUT" | "DELETE" | "CONNECT" | "OPTIONS" | "TRACE";
   headers?: Record<string, string>;
+  body?: BodyInit | Record<string, unknown> | null;
 };
 
 function getApiBase(): string {
@@ -67,7 +68,7 @@ async function requestJson<T>(path: string, options: RequestOptions = {}): Promi
         ...(optionHeaders ?? {})
       },
       ...restOptions
-    } as FetchOptions);
+    });
   } catch (err) {
     const errorResponse = err as { response?: { status?: number; _data?: { code?: string; message?: string } | null } };
     const status = errorResponse.response?.status ?? 0;

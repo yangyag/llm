@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from "vue";
+import BatchActionBar from "~/components/board/BatchActionBar.vue";
+import Pagination from "~/components/board/Pagination.vue";
+import PostList from "~/components/board/PostList.vue";
+import SearchBar from "~/components/board/SearchBar.vue";
 import { useAuthStore } from "~/stores/auth";
 import { usePostsStore } from "~/stores/posts";
 import { usePostDetailStore } from "~/stores/postDetail";
@@ -14,7 +18,7 @@ const detail = usePostDetailStore();
 
 useIdleTimeout();
 
-// 부팅 검증(fetchMe) 완료 전엔 빈 화면 (원본 App.jsx 동등).
+// 부팅 검증(fetchMe) 완료 전에는 보호 화면을 렌더링하지 않는다.
 const message = computed(
   () => detail.message || posts.listMessage
 );
@@ -42,7 +46,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("popstate", handlePopState);
 });
 
-// currentPage/searchQuery 변경 시 목록 재로드 (원본 useEffect).
+// currentPage/searchQuery 변경 시 목록을 다시 불러온다.
 watch(
   [() => posts.currentPage, () => posts.searchQuery],
   () => {
@@ -54,7 +58,7 @@ watch(
 
 function handleLogout() {
   auth.logout();
-  navigateTo("/login");
+  navigateTo("/login", { replace: true });
 }
 </script>
 

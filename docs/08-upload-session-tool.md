@@ -29,7 +29,7 @@ upload_zip_post.py
 
 | 변수 | 설명 |
 | --- | --- |
-| `LLM_API_BASE_URL` | API base URL. 없으면 `VITE_API_BASE_URL` 사용 가능 |
+| `LLM_API_BASE_URL` | API base URL. 없으면 `NUXT_PUBLIC_API_BASE` 사용 가능 |
 | `LLM_JWT_TOKEN` | 이미 발급받은 JWT. 있으면 로그인 생략 |
 | `LLM_USERNAME` | JWT가 없을 때 로그인 username |
 | `LLM_PASSWORD` | JWT가 없을 때 로그인 password |

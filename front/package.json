@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxi generate",
+    "typecheck": "nuxi typecheck",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare"
   },
@@ -19,6 +20,6 @@
   },
   "devDependencies": {
     "typescript": "^5.6.3",
-    "vue-tsc": "^2.1.10"
+    "vue-tsc": "^3.3.8"
   }
 }

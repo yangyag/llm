@@ -15,12 +15,12 @@ export default defineNuxtRouteMiddleware((to) => {
 
   if (isLogin) {
     if (auth.token) {
-      return navigateTo("/");
+      return navigateTo("/", { replace: true });
     }
     return;
   }
 
   if (!auth.token) {
-    return navigateTo("/login");
+    return navigateTo("/login", { replace: true });
   }
 });

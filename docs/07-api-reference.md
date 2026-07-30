@@ -143,6 +143,20 @@ Authorization: Bearer <jwt>
 }
 ```
 
+`replies`는 댓글 배열입니다. 일반 댓글의 `aiProvider`와 `aiModel`은 `null`이고, AI 댓글의 `aiProvider`는 `GPT`, `CLAUDE`, `GROK` 중 하나입니다.
+
+```json
+{
+  "id": 20,
+  "body": "reply",
+  "ai": false,
+  "aiProvider": null,
+  "aiModel": null,
+  "createdAt": "2026-05-31T00:00:00Z",
+  "updatedAt": "2026-05-31T00:00:00Z"
+}
+```
+
 ### `POST /api/v1/posts`
 
 인증: 필요

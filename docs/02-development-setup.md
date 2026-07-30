@@ -99,12 +99,12 @@ docker compose down
 cd /home/yangyag/llm
 git status --short
 cd back && ./gradlew clean test
-cd ../front && npm run build
+cd ../front && npm run typecheck && npm run build
 ```
 
 ## Git 관리 기준
 
 - `.env`, `.env.*`, `llm.env`, `llm.env.*`는 커밋하지 않습니다.
-- `front/node_modules/`, `front/dist/`, `back/build/`, `.gradle/`은 커밋하지 않습니다.
+- `front/node_modules/`, `front/.nuxt/`, `front/.output/`, `back/build/`, `.gradle/`은 커밋하지 않습니다.
 - 프로젝트 규칙상 Git commit 메시지는 한글로 작성합니다.
 - 작업 전후 `git status --short`로 변경 범위를 확인합니다.

@@ -41,7 +41,7 @@ docker inspect --format '{{.Name}} {{if .State.Health}}{{.State.Health.Status}}{
 
 ## 프론트 dev server에서 API 호출 실패
 
-`front/vite.config.js`는 `/api` proxy를 `http://localhost:8082`로 보냅니다.
+`front/nuxt.config.ts`의 `nitro.devProxy`는 `/api` 요청을 `http://localhost:8082`로 보냅니다.
 
 대응:
 
@@ -50,7 +50,7 @@ cd back
 APP_DB_HOST=localhost SERVER_PORT=8082 ./gradlew bootRun
 ```
 
-또는 Vite proxy target을 백엔드 실제 포트로 수정합니다.
+또는 Nitro dev proxy target을 백엔드 실제 포트로 수정합니다.
 
 ## DB 연결 실패
 
@@ -107,7 +107,7 @@ docker logs --tail 100 llm-back
 대응:
 
 - 정상 동작이므로 다시 로그인합니다.
-- 유휴 시간(1시간)은 프론트 상수이며 환경 변수로 조정하지 않습니다. 변경이 필요하면 `front/src/App.jsx`의 `IDLE_TIMEOUT_MS`를 수정 후 front 이미지를 재빌드합니다.
+- 유휴 시간(1시간)은 프론트 상수이며 환경 변수로 조정하지 않습니다. 변경이 필요하면 `front/composables/useIdleTimeout.ts`의 `IDLE_TIMEOUT_MS`를 수정 후 front 이미지를 재빌드합니다.
 
 ## 게시글 body가 깨짐
 
@@ -189,7 +189,7 @@ secret key 값은 출력하지 않습니다.
 - 새 front 이미지가 push되지 않음
 - EC2에서 pull하지 않음
 - 브라우저 캐시
-- `VITE_API_BASE_URL`이 빌드 시점에 잘못 들어감
+- `NUXT_PUBLIC_API_BASE`가 빌드 시점에 잘못 들어감
 
 대응:
 

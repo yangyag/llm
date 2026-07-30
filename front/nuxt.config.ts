@@ -1,7 +1,7 @@
 // Nuxt 3 SPA/SSG 설정.
 // - ssr:false + nuxi generate → 정적 산출물(.output/public)을 nginx가 서빙. Node 서버 불필요.
 // - runtimeConfig.public.apiBase: 빈값(운영) → 상대경로 /api. 빌드 인자 NUXT_PUBLIC_API_BASE로 주입.
-// - nitro.devProxy: 로컬 dev에서 /api → localhost:8082(bootRun/Vite 대체).
+// - nitro.devProxy: 로컬 dev에서 /api → localhost:8082.
 export default defineNuxtConfig({
   ssr: false,
   modules: ["@pinia/nuxt"],
@@ -14,6 +14,10 @@ export default defineNuxtConfig({
     }
   },
   nitro: {
+    // nginx SPA fallback이 /login 직접 요청을 200으로 처리하도록 라우트별 디렉터리는 만들지 않는다.
+    prerender: {
+      ignore: ["/login"]
+    },
     devProxy: {
       "/api": {
         target: "http://localhost:8082",

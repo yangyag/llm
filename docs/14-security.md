@@ -38,13 +38,14 @@
 
 백엔드 JWT는 발급 후 `APP_JWT_EXPIRATION_MS`(기본 1시간)에 고정 만료되며, 토큰 갱신이나 슬라이딩 세션은 없습니다. 프론트엔드는 이와 별개로 다음 두 가지 자동 로그아웃을 수행합니다.
 
-- 유휴 자동 로그아웃: 로그인 상태에서 마지막 사용자 활동(`mousedown`/`keydown`/`scroll`/`touchstart`) 후 1시간 동안 동작이 없으면 자동 로그아웃합니다. 이 1시간은 프론트 코드의 하드코딩 상수(`front/src/App.jsx`의 `IDLE_TIMEOUT_MS`)이며 별도 환경 변수가 없습니다.
+- 유휴 자동 로그아웃: 로그인 상태에서 마지막 사용자 활동(`mousedown`/`keydown`/`scroll`/`touchstart`) 후 1시간 동안 동작이 없으면 자동 로그아웃합니다. 이 1시간은 프론트 코드의 하드코딩 상수(`front/composables/useIdleTimeout.ts`의 `IDLE_TIMEOUT_MS`)이며 별도 환경 변수가 없습니다.
 - 401 강제 로그아웃: `Authorization` 헤더를 보낸 인증 요청이 `401`을 받으면(서버가 토큰을 거부) 세션 만료로 보고 즉시 로그아웃합니다. 로그인 요청은 `Authorization` 헤더가 없으므로 제외됩니다.
 
 구현 세부:
 
 - 마지막 활동 시각은 `localStorage`의 `auth_last_activity`에 보존됩니다. 리로드나 탭 복원이 유휴 데드라인을 리셋하지 않으며, 절전/탭 복귀 시 `visibilitychange`/`focus`로 유휴 시간을 재평가합니다.
 - 로그아웃 시 `auth_token`/`auth_username`/`auth_last_activity`를 모두 제거합니다.
+- 자동 로그아웃 뒤에는 공개 상세(`/posts/:id`)를 제외하고 `/login`으로 history를 교체해 보호 화면이 남지 않게 합니다.
 - 이 처리는 클라이언트 측 UX 보호이며 서버 세션 무효화가 아닙니다. 토큰 자체는 백엔드 만료 시점까지 유효하므로, 강한 세션 보장이 필요하면 `APP_JWT_EXPIRATION_MS`를 짧게 유지하는 것이 우선입니다.
 
 ## 관리자 계정
