@@ -180,11 +180,7 @@ export const usePostDetailStore = defineStore("postDetail", {
     confirmAttachmentUploadEnvironment(): boolean {
       return window.confirm(ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE);
     },
-    handleCreateAttachmentChange(event: Event) {
-      const input = event.target as HTMLInputElement;
-      const selectedFiles = Array.from(input.files ?? []);
-      // 입력을 비워 같은 파일을 다시 골라도 onChange가 발생하고, 누적은 상태가 관리하게 한다.
-      this.postAttachmentInputKey += 1;
+    selectCreateAttachmentFiles(selectedFiles: File[]) {
       if (selectedFiles.length === 0) {
         return;
       }
@@ -204,10 +200,7 @@ export const usePostDetailStore = defineStore("postDetail", {
         (file) => attachmentFileKey(file) !== targetKey
       );
     },
-    handleEditAttachmentChange(event: Event) {
-      const input = event.target as HTMLInputElement;
-      const selectedFiles = Array.from(input.files ?? []);
-      this.postEditAttachmentInputKey += 1;
+    selectEditAttachmentFiles(selectedFiles: File[]) {
       this.postActionError = "";
       if (selectedFiles.length === 0) {
         return;

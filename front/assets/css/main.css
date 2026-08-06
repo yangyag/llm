@@ -233,6 +233,102 @@ body {
   min-height: 180px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.attachment-dropzone {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-height: 172px;
+  padding: 20px;
+  border: 2px dashed rgba(143, 183, 255, 0.42);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  text-align: center;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.attachment-dropzone:hover,
+.attachment-dropzone:focus-within {
+  border-color: rgba(143, 183, 255, 0.82);
+  background: rgba(143, 183, 255, 0.1);
+}
+
+.attachment-dropzone:focus-within {
+  outline: 3px solid rgba(143, 183, 255, 0.5);
+  outline-offset: 3px;
+}
+
+.attachment-dropzone.is-dragging {
+  border-style: solid;
+  border-color: #8fb7ff;
+  background: rgba(143, 183, 255, 0.16);
+  transform: scale(1.01);
+}
+
+.attachment-dropzone strong {
+  color: #eef5ff;
+}
+
+.attachment-dropzone-help,
+.attachment-dropzone-mobile-help {
+  margin: 0;
+  color: #9bb0ca;
+  font-size: 0.9rem;
+}
+
+.attachment-dropzone-mobile-help {
+  display: none;
+}
+
+.attachment-dropzone .ghost-button:focus-visible {
+  outline: 3px solid rgba(143, 183, 255, 0.75);
+  outline-offset: 3px;
+}
+
+.field .attachment-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .attachment-dropzone {
+    min-height: 156px;
+    padding: 18px;
+  }
+
+  .attachment-dropzone .ghost-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .attachment-dropzone-drag-title,
+  .attachment-dropzone-help {
+    display: none;
+  }
+
+  .attachment-dropzone-mobile-help {
+    display: block;
+  }
+}
+
 .primary-button,
 .submit-button,
 .ghost-button,

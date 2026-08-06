@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AttachmentDropzone from "./AttachmentDropzone.vue";
 import { usePostDetailStore } from "~/stores/postDetail";
 import { getApiUrl } from "~/services/api";
 import {
@@ -60,15 +61,11 @@ function onBody(event: Event) {
       </div>
     </div>
 
-    <label class="field">
-      <span>첨부파일 추가</span>
-      <input
-        :key="detail.postEditAttachmentInputKey"
-        type="file"
-        multiple
-        @change="detail.handleEditAttachmentChange($event)"
-      />
-    </label>
+    <AttachmentDropzone
+      label="첨부파일 추가"
+      :input-key="detail.postEditAttachmentInputKey"
+      @files-selected="detail.selectEditAttachmentFiles($event)"
+    />
     <p class="section-meta">
       최대 {{ MAX_ATTACHMENTS }}개까지 등록할 수 있습니다. (현재
       {{ (detail.selectedPost?.attachments ?? []).filter((a) => !detail.removeAttachmentIds.has(a.id)).length + detail.postEditAttachmentFiles.length }}/{{ MAX_ATTACHMENTS }})
@@ -80,7 +77,12 @@ function onBody(event: Event) {
         class="attachment-select-item"
       >
         <span>새 파일: {{ file.name }} ({{ formatFileSize(file.size) }})</span>
-        <button type="button" class="ghost-button" @click="detail.removeEditAttachment(attachmentFileKey(file))">
+        <button
+          type="button"
+          class="ghost-button"
+          :aria-label="`${file.name} 첨부파일 제거`"
+          @click="detail.removeEditAttachment(attachmentFileKey(file))"
+        >
           제거
         </button>
       </li>

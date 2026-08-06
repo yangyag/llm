@@ -87,8 +87,8 @@ function handleLogout() {
         </div>
       </header>
 
-      <p v-if="message" class="message-banner success">{{ message }}</p>
-      <p v-if="error" class="message-banner error">{{ error }}</p>
+      <p v-if="message" class="message-banner success" role="status">{{ message }}</p>
+      <p v-if="error" class="message-banner error" role="alert">{{ error }}</p>
 
       <template v-if="detail.view === 'list'">
         <div class="download-link-row">
