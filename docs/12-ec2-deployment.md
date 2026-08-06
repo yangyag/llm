@@ -30,7 +30,6 @@ ssh -i /home/yangyag/aws/test-keypair.pem ubuntu@43.202.113.123
 | --- | --- |
 | `/home/ubuntu/llm/.env` | 존재 |
 | `/home/ubuntu/llm/docker-compose.yml` | 존재 |
-| `/home/ubuntu/llm/deploy-ec2.sh` | 존재, 실행 권한 있음 |
 
 `/home/yangyag/aws`의 기존 메모에는 다른 프로젝트용 `/home/ubuntu/auto` 경로와 예전 LLM 경로인 `/home/ubuntu/llm.env`, `/home/ubuntu/docker-compose.ec2.yml`, `/home/yangyag/playground/test-keypair.pem`가 남아 있습니다. LLM 운영 작업의 우선 기준은 실제 EC2에서 확인한 `/home/ubuntu/llm` 경로와 `/home/yangyag/aws/test-keypair.pem`입니다.
 
@@ -72,43 +71,19 @@ secret 값은 확인하거나 문서에 기록하지 않습니다.
 
 ## 배포 절차
 
-EC2에서:
+EC2에서 Docker 데몬과 외부 네트워크를 확인한 뒤, Compose를 직접 실행합니다.
 
 ```bash
 cd /home/ubuntu/llm
-./deploy-ec2.sh
-```
-
-스크립트가 수행하는 일:
-
-1. Docker 데몬 접근과 외부 네트워크 `auto_default` 존재를 사전 확인 (없으면 명확한 오류로 중단)
-2. `docker compose pull`
-3. `docker compose up -d --wait --wait-timeout 180 --remove-orphans`
-4. `docker compose ps`
-
-옵션 예시:
-
-```bash
-./deploy-ec2.sh \
-  --compose-file /home/ubuntu/llm/docker-compose.yml \
-  --env-file /home/ubuntu/llm/.env \
-  --project-name ubuntu \
-  --wait-timeout 180
-```
-
-## 수동 배포 명령
-
-```bash
-cd /home/ubuntu/llm
-LLM_ENV_FILE=/home/ubuntu/llm/.env \
+docker info >/dev/null
+docker network inspect auto_default >/dev/null
+export LLM_ENV_FILE=/home/ubuntu/llm/.env
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
-
-LLM_ENV_FILE=/home/ubuntu/llm/.env \
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
-
-LLM_ENV_FILE=/home/ubuntu/llm/.env \
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
+
+`auto_default`가 없으면 배포를 진행하지 말고 auto-postgres 스택과 네트워크 상태를 확인합니다. 이 네트워크는 auto-postgres 스택 소유이므로 EC2에서 빈 네트워크를 직접 만들면 DB 누락을 가릴 수 있습니다.
 
 ## 배포 후 검증
 

@@ -58,7 +58,7 @@ curl -fsS http://localhost:8083/api/v1/health
 | DB migration | 백엔드 테스트와 실제 PostgreSQL 연결 검증. 루트 compose에는 PostgreSQL 서비스가 없으므로 로컬/EC2의 외부 DB 또는 별도 PostgreSQL을 준비 |
 | 프론트 UI/API client | `cd front && npm run typecheck && npm run build` |
 | Dockerfile/compose | `docker compose --profile build build back-build front-build`, `docker compose up -d --wait` |
-| 배포 스크립트 | `./deploy-ec2.sh --help`, EC2에서 dry-run에 준하는 option/path 확인 |
+| EC2 배포 절차 | `auto_default` 존재와 `docker compose --project-name ubuntu --env-file .env -f docker-compose.yml config --quiet`를 확인하고 Compose pull/up/ps 및 8083 health 경로 검증 |
 | 운영 env 변경 | 컨테이너 재기동, `docker inspect`, health, 기능 smoke test |
 | AI provider 변경 | provider별 성공/오류 smoke test |
 | 업로드 도구 변경 | 작은 ZIP과 큰 ZIP 업로드, 중단 후 재개 테스트 |

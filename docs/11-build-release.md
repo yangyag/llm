@@ -92,7 +92,7 @@ Frontend:
    curl -fsS http://localhost:8083/api/v1/health
    ```
 
-   > EC2 운영에서는 `--project-name ubuntu`까지 포함한 전체 호출 또는 `./deploy-ec2.sh`를 사용합니다(docs/12 참조). 단, **EC2에서는 `auto_default`를 직접 생성하지 마세요** — 이 네트워크는 auto-postgres 스택 소유이고, 빈 네트워크를 만들면 DB 누락을 가립니다(`deploy-ec2.sh`는 의도적으로 자동 생성하지 않고 fail-fast). 자세한 구분은 docs/15 참조.
+   > EC2 운영에서는 docs/12의 명령처럼 `--project-name ubuntu`, `--env-file .env`, `-f docker-compose.yml`을 모두 명시합니다. **EC2에서는 `auto_default`를 직접 생성하지 마세요** — 이 네트워크는 auto-postgres 스택 소유이고, 빈 네트워크를 만들면 DB 누락을 가립니다. 배포 전에 `docker network inspect auto_default`로 존재를 확인합니다. 자세한 구분은 docs/15 참조.
 
 ## 이미지 push
 
@@ -101,11 +101,15 @@ docker push yangyag2/llm-back:latest
 docker push yangyag2/llm-front:latest
 ```
 
-push 후 EC2에서 pull/up을 수행합니다.
+push 후 EC2에서 Compose로 pull/up을 수행합니다.
 
 ```bash
 cd /home/ubuntu/llm
-./deploy-ec2.sh
+docker network inspect auto_default >/dev/null
+export LLM_ENV_FILE=/home/ubuntu/llm/.env
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
 
 ## 롤백 기준

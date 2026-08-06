@@ -69,7 +69,7 @@ ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no \
 
 확인 결과 요약:
 
-- `/home/ubuntu/llm/.env`, `/home/ubuntu/llm/docker-compose.yml`, `/home/ubuntu/llm/deploy-ec2.sh` 존재
+- `/home/ubuntu/llm/.env`, `/home/ubuntu/llm/docker-compose.yml` 존재
 - `llm-front`, `llm-back`, `auto-postgres` health 정상
 - health API는 front proxy 경유 `http://127.0.0.1:8083/api/v1/health`에서 정상
 - 백엔드 8080은 호스트에 직접 공개되지 않음

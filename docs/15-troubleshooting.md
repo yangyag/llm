@@ -195,7 +195,10 @@ secret key 값은 출력하지 않습니다.
 
 ```bash
 cd /home/ubuntu/llm
-./deploy-ec2.sh
+docker network inspect auto_default >/dev/null
+export LLM_ENV_FILE=/home/ubuntu/llm/.env
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 docker image ls | grep 'llm-front'
 docker logs --tail 100 llm-front
 ```

@@ -31,10 +31,15 @@ docker logs --tail 100 llm-front
 
 ```bash
 cd /home/ubuntu/llm
-./deploy-ec2.sh
+docker network inspect auto_default >/dev/null
+export LLM_ENV_FILE=/home/ubuntu/llm/.env
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 curl -fsS http://127.0.0.1:8083/api/v1/health
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
+
+`auto_default`가 없으면 빈 네트워크를 생성하지 말고 auto-postgres 스택을 확인합니다.
 
 배포 기록에 남길 것:
 
@@ -143,7 +148,11 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d
 docker ps -a | grep llm
 docker logs --tail 200 llm-back
 docker logs --tail 200 llm-front
-cd /home/ubuntu/llm && ./deploy-ec2.sh
+cd /home/ubuntu/llm
+docker network inspect auto_default >/dev/null
+export LLM_ENV_FILE=/home/ubuntu/llm/.env
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 ```
 
 ### Health 실패

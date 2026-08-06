@@ -22,7 +22,6 @@
 | `front/` | Nuxt/Vue/TypeScript UI, Pinia 상태 관리, API 클라이언트, Nginx 설정, 프론트 Dockerfile |
 | `back/` | Spring Boot API, JPA 도메인, Flyway 마이그레이션, 테스트, 백엔드 Dockerfile |
 | `docker-compose.yml` | 공통 런타임과 빌드 프로파일 |
-| `deploy-ec2.sh` | EC2 순차 배포 스크립트 |
 | `.env.example` | 로컬/운영 `.env` 작성 기준 |
 | `front/public/upload_zip_post.zip` | ZIP 청크 업로드 스크립트 배포 파일 |
 | `docs/` | 개발부터 운영까지의 문서 |
