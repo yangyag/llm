@@ -113,8 +113,8 @@ function handleUsernameBlur(event: Event) {
     <section class="board-shell login-shell">
       <header class="board-header">
         <div>
-          <p class="eyebrow">Admin Login</p>
-          <h1>관리자 로그인</h1>
+          <p class="eyebrow">Login</p>
+          <h1>로그인</h1>
         </div>
       </header>
 

@@ -137,7 +137,11 @@ export const usePostsStore = defineStore("posts", {
         this.listMessage = `${count}개의 게시글을 삭제했습니다.`;
         return count;
       } catch (batchError) {
-        this.listError = (batchError as Error).message;
+        const err = batchError as { code?: string; message?: string };
+        this.listError =
+          err.code === "FORBIDDEN"
+            ? "선택한 글 중 권한이 없는 게시글이 포함되어 있습니다."
+            : (err.message || "일괄 삭제에 실패했습니다.");
         return 0;
       }
     }

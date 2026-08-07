@@ -1,9 +1,30 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import { useAuthStore } from "~/stores/auth";
 import { usePostsStore } from "~/stores/posts";
+import { canManagePost } from "~/utils/post";
 
+const auth = useAuthStore();
 const posts = usePostsStore();
 const deleting = ref(false);
+
+const manageableItems = computed(() =>
+  posts.items.filter((post) => canManagePost(post.authorUsername, auth.username, auth.role))
+);
+
+const allManageableSelected = computed(
+  () =>
+    manageableItems.value.length > 0 &&
+    manageableItems.value.every((post) => posts.selectedPostIds.has(post.id))
+);
+
+function toggleSelectAllManageable() {
+  if (allManageableSelected.value) {
+    posts.selectedPostIds = new Set();
+    return;
+  }
+  posts.selectedPostIds = new Set(manageableItems.value.map((post) => post.id));
+}
 
 async function onBatchDelete() {
   if (deleting.value || posts.selectedPostIds.size === 0) return;
@@ -19,12 +40,12 @@ async function onBatchDelete() {
 </script>
 
 <template>
-  <div class="batch-action-bar">
+  <div v-if="manageableItems.length > 0" class="batch-action-bar">
     <label class="checkbox-field batch-select-all">
       <input
         type="checkbox"
-        :checked="posts.items.length > 0 && posts.selectedPostIds.size === posts.items.length"
-        @change="posts.toggleSelectAll()"
+        :checked="allManageableSelected"
+        @change="toggleSelectAllManageable()"
       />
       <span>전체 선택</span>
     </label>

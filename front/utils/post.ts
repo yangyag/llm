@@ -1,5 +1,5 @@
 // 게시글/첨부 공용 유틸리티.
-import type { PostMode } from "~/types/api";
+import type { PostMode, UserRole } from "~/types/api";
 
 export const MAX_ATTACHMENTS = 5;
 export const ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE = "첨부파일을 올려도 되는 환경입니까?";
@@ -53,4 +53,19 @@ export function formatFileSize(size: number): string {
     return `${(size / 1024).toFixed(1)}KB`;
   }
   return `${(size / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+/** 작성자 본인 또는 ADMIN만 수정/삭제 가능. author 없는 레거시 글은 ADMIN만. */
+export function canManagePost(
+  authorUsername: string | null | undefined,
+  currentUsername: string | null | undefined,
+  role: UserRole | null | undefined
+): boolean {
+  if (!currentUsername) {
+    return false;
+  }
+  if (role === "ADMIN") {
+    return true;
+  }
+  return Boolean(authorUsername) && authorUsername === currentUsername;
 }

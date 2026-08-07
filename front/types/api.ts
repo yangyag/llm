@@ -5,6 +5,27 @@ export type AiProvider = "GPT" | "CLAUDE" | "GROK";
 
 export type PostMode = "NORMAL" | "FILE_CONVERSION_REQUEST";
 
+/** 사용자 레벨. ADMIN은 사용자 관리 가능, USER는 게시판 쓰기만 가능. */
+export type UserRole = "ADMIN" | "USER";
+
+export interface UserAccount {
+  id: number;
+  username: string;
+  role: UserRole;
+  createdAt: string;
+}
+
+export interface CreateUserInput {
+  username: string;
+  password: string;
+  role: UserRole;
+}
+
+export interface UpdateUserInput {
+  password?: string;
+  role: UserRole;
+}
+
 export interface Attachment {
   id: number;
   originalFilename: string;
@@ -29,6 +50,8 @@ export interface Post {
   title: string;
   mode: PostMode;
   conversionReady: boolean;
+  /** 작성자 username. 레거시 글은 null일 수 있음. */
+  authorUsername: string | null;
   createdAt: string;
 }
 
@@ -68,10 +91,12 @@ export interface ApiError {
 export interface LoginResponse {
   token: string;
   username: string;
+  role: UserRole;
 }
 
 export interface MeResponse {
   username: string;
+  role: UserRole;
 }
 
 /** 게시글 생성/수정 폼 데이터 */

@@ -323,6 +323,8 @@ export const usePostDetailStore = defineStore("postDetail", {
         const err = submitError as ApiError;
         if (err.code === "FILE_CONVERSION_LOCKED") {
           this.error = "암호화 업로드 완료된 글은 수정할 수 없습니다.";
+        } else if (err.code === "FORBIDDEN") {
+          this.error = "작성자 본인 또는 관리자만 수정할 수 있습니다.";
         } else if (err.code === "INVALID_ATTACHMENT_REQUEST") {
           this.error = `첨부파일 요청이 올바르지 않습니다. 첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있습니다.`;
         } else {
@@ -346,7 +348,12 @@ export const usePostDetailStore = defineStore("postDetail", {
         this.resetListViewState();
         this.message = "게시글을 삭제했습니다.";
       } catch (submitError) {
-        this.error = (submitError as Error).message;
+        const err = submitError as ApiError;
+        if (err.code === "FORBIDDEN") {
+          this.error = "작성자 본인 또는 관리자만 삭제할 수 있습니다.";
+        } else {
+          this.error = err.message;
+        }
       } finally {
         this.submitting = false;
       }

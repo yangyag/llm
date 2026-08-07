@@ -1,11 +1,20 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useAuthStore } from "~/stores/auth";
 import { usePostDetailStore } from "~/stores/postDetail";
-import { getPostModeLabel, isFileConversionMode } from "~/utils/post";
+import { canManagePost, getPostModeLabel, isFileConversionMode } from "~/utils/post";
 import AttachmentPanel from "./AttachmentPanel.vue";
 import ConversionSummary from "./ConversionSummary.vue";
 import PostEditPanel from "./PostEditPanel.vue";
 
+const auth = useAuthStore();
 const detail = usePostDetailStore();
+
+const manageable = computed(() =>
+  canManagePost(detail.selectedPost?.authorUsername, auth.username, auth.role)
+);
+
+const authorLabel = computed(() => detail.selectedPost?.authorUsername || "작성자 없음");
 
 async function onDelete() {
   if (!window.confirm("이 게시글을 삭제하시겠습니까?")) return;
@@ -29,21 +38,34 @@ async function onDelete() {
             암호화 업로드 완료
           </span>
         </div>
-        <time>{{ new Date(detail.selectedPost?.createdAt ?? '').toLocaleString() }}</time>
+        <div class="post-author-row">
+          <span class="post-author-label">작성자</span>
+          <strong class="post-author-name" :class="{ muted: !detail.selectedPost?.authorUsername }">
+            {{ authorLabel }}
+          </strong>
+          <time>{{ new Date(detail.selectedPost?.createdAt ?? '').toLocaleString() }}</time>
+        </div>
       </div>
       <div class="inline-actions">
         <button type="button" class="ghost-button" @click="detail.handleCopyPostLink()">
           {{ detail.postLinkCopied ? "복사됨!" : "링크 복사" }}
         </button>
         <button
-          v-if="!detail.selectedPost?.conversionReady"
+          v-if="manageable && !detail.selectedPost?.conversionReady"
           type="button"
           class="ghost-button"
           @click="detail.openPostEditPanel()"
         >
           수정
         </button>
-        <button type="button" class="danger-button" @click="onDelete">삭제</button>
+        <button
+          v-if="manageable"
+          type="button"
+          class="danger-button"
+          @click="onDelete"
+        >
+          삭제
+        </button>
       </div>
     </div>
 
@@ -51,7 +73,7 @@ async function onDelete() {
       v-if="detail.selectedPost && isFileConversionMode(detail.selectedPost.mode)"
       :post="detail.selectedPost"
     />
-    <p v-else class="detail-body">{{ detail.selectedPost?.body }}</p>
+    <p v-else class="post-body-box">{{ detail.selectedPost?.body }}</p>
 
     <AttachmentPanel
       v-if="detail.selectedPost && detail.selectedPost.attachments.length > 0"
@@ -59,6 +81,6 @@ async function onDelete() {
       :mode="detail.selectedPost.mode"
     />
 
-    <PostEditPanel v-if="detail.postActionMode === 'edit'" />
+    <PostEditPanel v-if="detail.postActionMode === 'edit' && manageable" />
   </article>
 </template>

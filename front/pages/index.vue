@@ -72,6 +72,7 @@ function handleLogout() {
         </div>
         <div class="board-actions">
           <span v-if="auth.username" class="auth-username">{{ auth.username }}</span>
+          <NuxtLink v-if="auth.isAdmin" to="/users" class="ghost-button">사용자 관리</NuxtLink>
           <button type="button" class="ghost-button" @click="handleLogout">로그아웃</button>
           <button type="button" class="ghost-button" @click="detail.refreshListView()">목록</button>
           <button

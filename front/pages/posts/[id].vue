@@ -2,9 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import AttachmentPanel from "~/components/post/AttachmentPanel.vue";
+import { useAuthStore } from "~/stores/auth";
 import { getApiUrl, getPost } from "~/services/api";
 import { formatFileSize, getPostModeLabel, isFileConversionMode } from "~/utils/post";
 import type { PostDetail } from "~/types/api";
+
+const auth = useAuthStore();
 
 const route = useRoute();
 const postId = computed(() => Number.parseInt(route.params.id as string, 10));
@@ -59,6 +62,7 @@ function goToBoard() {
           <h1>게시글 보기</h1>
         </div>
         <div class="board-actions">
+          <NuxtLink v-if="auth.isAdmin" to="/users" class="ghost-button">사용자 관리</NuxtLink>
           <button type="button" class="ghost-button" @click="goToBoard">← 게시판으로</button>
         </div>
       </header>
@@ -92,14 +96,20 @@ function goToBoard() {
                   </span>
                   <span v-if="post.conversionReady" class="post-mode-badge success">암호화 업로드 완료</span>
                 </div>
-                <time>{{ new Date(post.createdAt).toLocaleString() }}</time>
+                <div class="post-author-row">
+                  <span class="post-author-label">작성자</span>
+                  <strong class="post-author-name" :class="{ muted: !post.authorUsername }">
+                    {{ post.authorUsername || "작성자 없음" }}
+                  </strong>
+                  <time>{{ new Date(post.createdAt).toLocaleString() }}</time>
+                </div>
               </div>
             </div>
 
-            <p v-if="isFileConversionMode(post.mode)" class="detail-body">
+            <p v-if="isFileConversionMode(post.mode)" class="post-body-box">
               암호화 업로드 글입니다. 본문은 공개 상세 화면에서 표시되지 않습니다.
             </p>
-            <p v-else class="detail-body">{{ post.body }}</p>
+            <p v-else class="post-body-box">{{ post.body }}</p>
 
             <AttachmentPanel
               v-if="post.attachments.length > 0"
@@ -137,10 +147,10 @@ function goToBoard() {
 
         <section class="card">
           <div class="section-heading">
-            <h2>관리자 전용 기능</h2>
+            <h2>로그인 안내</h2>
           </div>
-          <p class="section-meta">수정, 삭제, 댓글 작성 등 관리자 기능은 로그인 후 사용할 수 있습니다.</p>
-          <a class="ghost-button" href="/" @click.prevent="goToBoard">관리자 로그인</a>
+          <p class="section-meta">글 수정·삭제는 작성자 본인 또는 관리자만 가능합니다. 로그인 후 게시판에서 이용하세요.</p>
+          <a class="ghost-button" href="/" @click.prevent="goToBoard">로그인하러 가기</a>
         </section>
       </template>
     </section>

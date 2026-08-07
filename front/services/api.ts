@@ -4,11 +4,14 @@ import { fromUint8Array } from "js-base64";
 import type {
   AiProvider,
   ApiError,
+  CreateUserInput,
   LoginResponse,
   MeResponse,
   PostDetail,
   PostListResponse,
-  PostMutationInput
+  PostMutationInput,
+  UpdateUserInput,
+  UserAccount
 } from "~/types/api";
 
 type RequestOptions = {
@@ -179,5 +182,37 @@ export function batchDeletePosts(ids: number[], token: string): Promise<void> {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({ ids })
+  });
+}
+
+// ---------- 사용자 관리 (ADMIN 전용) ----------
+
+export function listUsers(token: string, query = ""): Promise<UserAccount[]> {
+  const searchParams = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : "";
+  return requestJson<UserAccount[]>(`/api/v1/users${searchParams}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+export function createUser(input: CreateUserInput, token: string): Promise<UserAccount> {
+  return requestJson<UserAccount>("/api/v1/users", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input)
+  });
+}
+
+export function updateUser(userId: number, input: UpdateUserInput, token: string): Promise<UserAccount> {
+  return requestJson<UserAccount>(`/api/v1/users/${userId}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input)
+  });
+}
+
+export function deleteUser(userId: number, token: string): Promise<void> {
+  return requestJson<void>(`/api/v1/users/${userId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` }
   });
 }
