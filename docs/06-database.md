@@ -36,10 +36,10 @@ spring.flyway.create-schemas=true
 
 | 테이블 | 역할 |
 | --- | --- |
-| `posts` | 게시글 본문, 제목, 모드, 생성/수정 시각 |
+| `posts` | 게시글 본문, 제목, 모드, 작성자(`author_username`), 생성/수정 시각 |
 | `post_replies` | 댓글과 AI 답변 |
 | `post_attachments` | 게시글 첨부파일 메타데이터(일반 게시글 최대 5개) |
-| `admins` | 관리자 계정 |
+| `admins` | 사용자 계정(ADMIN/USER 역할) |
 | `upload_sessions` | ZIP 청크 업로드 세션 |
 | `upload_session_parts` | 세션별 청크 파일 메타데이터 |
 
@@ -59,6 +59,9 @@ spring.flyway.create-schemas=true
 | `V10__purge_upload_sessions_for_chunk_contract_break.sql` | 청크 계약 변경에 따라 기존 세션 데이터 정리 |
 | `V11__add_ai_model_to_replies.sql` | AI 답변에 사용한 모델 컬럼 추가 |
 | `V12__allow_multiple_post_attachments.sql` | `post_attachments.post_id` unique 제약 해제(다중 첨부 허용) |
+| `V13__add_role_to_admins.sql` | `admins`에 `role` 컬럼 추가. 기존 계정(시드 admin 포함)은 전부 `ADMIN`으로 승계 |
+| `V14__add_author_to_posts.sql` | `posts.author_username` 추가. 작성자 본인/관리자 수정·삭제 권한 기준. 기존 글은 null |
+| `V15__backfill_post_author_as_admin.sql` | 기존 게시글 중 `author_username`이 null인 글을 전부 `admin`으로 백필 |
 
 ## 도메인 제약
 
@@ -67,6 +70,8 @@ spring.flyway.create-schemas=true
 - `upload_session_parts.session_id`는 세션 삭제 시 cascade 삭제됩니다.
 - `upload_session_parts`는 `(session_id, chunk_number)` unique 제약을 가집니다.
 - `admins.username`은 unique입니다.
+- `admins.role`은 `varchar(20) not null default 'ADMIN'`이며 `check (role in ('ADMIN', 'USER'))` 제약으로 `ADMIN`/`USER`만 허용합니다(V13). V13 이전 생성 계정은 전부 기본값 `ADMIN`으로 승계됩니다.
+- `posts.author_username`은 작성자 username이며 nullable입니다(V14). null인 레거시 글은 관리자만 수정/삭제할 수 있습니다. 새 글은 작성 시점의 JWT subject(로그인 username)가 저장됩니다. 기존 레거시 글은 `V15`에서 `admin`으로 백필됩니다.
 
 ## 기본 관리자 계정
 
@@ -76,6 +81,8 @@ spring.flyway.create-schemas=true
 - password: `admin`
 
 운영 노출 전에 반드시 비밀번호를 변경하거나 별도 관리자 계정으로 교체해야 합니다.
+
+기본 계정은 ADMIN 역할을 가지며, 추가 계정 생성과 역할/비밀번호 관리, 계정 삭제는 ADMIN 전용 사용자 관리 API(docs/07)로 수행합니다. 마지막 남은 ADMIN은 삭제/강등할 수 없습니다.
 
 비밀번호는 BCrypt hash로 저장됩니다. 운영 DB에서 변경할 때는 새 BCrypt hash를 만들어 `admins.password_hash`를 갱신합니다.
 

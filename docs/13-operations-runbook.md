@@ -77,6 +77,7 @@ docker logs -f llm-back
 자주 보는 오류 코드:
 
 - `INVALID_CREDENTIALS`: 로그인 실패, 토큰 누락/만료
+- `FORBIDDEN`: 권한 없음. USER가 남의 게시글 수정/삭제, 레거시 글 수정/삭제, 사용자 관리 API 호출
 - `AI_PROVIDER_NOT_CONFIGURED`: API key 누락
 - `AI_REPLY_GENERATION_FAILED`: 외부 AI 호출 실패
 - `ATTACHMENT_STORAGE_ERROR`: volume 또는 파일 권한 문제

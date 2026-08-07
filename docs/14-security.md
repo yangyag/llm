@@ -11,6 +11,7 @@
 - 댓글 생성/수정/삭제
 - AI 답변 생성
 - 업로드 세션 생성/조회/chunk/finalize
+- 사용자 관리(`GET/POST /api/v1/users`, `PUT/DELETE /api/v1/users/{id}`) — JWT 인증에 더해 ADMIN 역할까지 필요
 - `/api/v1/auth/me`
 
 공개 접근:
@@ -20,6 +21,20 @@
 - `GET /api/v1/posts/{id}`
 - `GET /api/v1/posts/{id}/attachments/{attachmentId}`
 - `POST /api/v1/auth/login`
+
+## 역할 기반 인가
+
+계정 역할은 `ADMIN`(관리자)과 `USER`(일반사용자) 두 가지입니다. `admins` 테이블의 `role` 컬럼(V13)으로 관리되며, 기존 시드 `admin` 계정을 포함한 모든 기존 계정은 `ADMIN`으로 승계됩니다.
+
+- 쓰기 기능(게시글 작성/댓글/AI 답변/업로드 세션)은 유효한 JWT만 있으면 `USER`도 전부 사용할 수 있습니다.
+- 게시글 **수정/삭제**는 작성자 본인 또는 `ADMIN`만 가능합니다. 작성자가 null인 레거시 글은 `ADMIN`만 수정/삭제할 수 있습니다. `USER`가 남의 글을 수정/삭제하면 403 `FORBIDDEN`입니다(코드: `BoardService.ensureCanManagePost`). 일괄 삭제도 포함된 id 전부에 대해 소유권/ADMIN을 검사하며, 하나라도 권한이 없으면 전체가 403으로 실패합니다.
+- 역할 제한이 있는 기능(사용자 관리 API)은 `ADMIN` 전용이며, 이 외에는 게시글 소유권 검사가 추가로 적용됩니다.
+- 인가 방식은 인증과 마찬가지로 Spring Security filter chain이 아니라 컨트롤러별 직접 JWT 검증입니다. JWT 자체에는 role이 없고 username만 subject로 들어갑니다.
+- ADMIN 여부 판단은 `UserManagementService`에서 매 요청마다 username으로 DB를 조회해 수행합니다. 토큰에 역할 정보가 내장되지 않으므로, 강등이나 계정 삭제가 다음 요청부터 즉시 반영됩니다.
+- `USER`가 사용자 관리 API를 호출하면 403 `FORBIDDEN`입니다. 계정이 삭제된 경우 그 계정 JWT는 이후 요청에서 401 `INVALID_CREDENTIALS`로 거부됩니다.
+- 마지막 남은 ADMIN은 삭제하거나 USER로 강등할 수 없습니다(409 `LAST_ADMIN_PROTECTED`). 자기 자신의 계정 삭제도 불가합니다(409 `SELF_DELETE_NOT_ALLOWED`).
+
+프론트엔드는 로그인/me 응답의 `role`을 auth store와 `localStorage`(`auth_role`)에 보관합니다. `/users` 사용자 관리 화면은 라우트 가드에서 ADMIN만 접근을 허용하며, ADMIN이 아니면 `/`로 리다이렉트합니다. 이는 UX 가드일 뿐이며 실제 인가는 백엔드에서 수행됩니다.
 
 ## JWT
 
@@ -44,7 +59,7 @@
 구현 세부:
 
 - 마지막 활동 시각은 `localStorage`의 `auth_last_activity`에 보존됩니다. 리로드나 탭 복원이 유휴 데드라인을 리셋하지 않으며, 절전/탭 복귀 시 `visibilitychange`/`focus`로 유휴 시간을 재평가합니다.
-- 로그아웃 시 `auth_token`/`auth_username`/`auth_last_activity`를 모두 제거합니다.
+- 로그아웃 시 `auth_token`/`auth_username`/`auth_role`/`auth_last_activity`를 모두 제거합니다. 유휴 자동 로그아웃 등 기존 세션 동작은 역할과 무관하게 동일하게 적용됩니다.
 - 자동 로그아웃 뒤에는 공개 상세(`/posts/:id`)를 제외하고 `/login`으로 history를 교체해 보호 화면이 남지 않게 합니다.
 - 이 처리는 클라이언트 측 UX 보호이며 서버 세션 무효화가 아닙니다. 토큰 자체는 백엔드 만료 시점까지 유효하므로, 강한 세션 보장이 필요하면 `APP_JWT_EXPIRATION_MS`를 짧게 유지하는 것이 우선입니다.
 
@@ -55,6 +70,8 @@ Flyway 마이그레이션이 기본 `admin`/`admin` 계정을 만듭니다. 운�
 - 기본 계정 비밀번호 hash 교체
 - 별도 관리자 계정 생성 후 기본 계정 제거
 - 최소한 외부 공개 전에 강한 비밀번호로 변경
+
+기본 계정은 ADMIN 역할입니다(`admins.role` 컬럼 기본값, V13). 추가 관리자/일반사용자 계정 생성, 역할 변경(승격/강등), 비밀번호 재설정, 계정 삭제는 ADMIN 전용 사용자 관리 API로 수행합니다. 마지막 남은 ADMIN은 삭제/강등할 수 없습니다.
 
 username은 코드상 영문/숫자만 허용합니다.
 
@@ -133,6 +150,7 @@ EC2 현재 구성:
 ## 운영 보안 체크리스트
 
 - [ ] 기본 관리자 계정 변경
+- [ ] 기본 admin 외 추가 관리자/일반사용자 계정은 사용자 관리 API(`/users`)로 생성·관리
 - [ ] `.env` secret 난수화
 - [ ] `.env`와 key 파일 권한 제한
 - [ ] SSH inbound IP 제한

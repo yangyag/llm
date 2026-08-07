@@ -61,23 +61,120 @@ Authorization: Bearer <jwt>
 ```json
 {
   "token": "<jwt>",
-  "username": "admin"
+  "username": "admin",
+  "role": "ADMIN"
 }
 ```
+
+`role`은 `ADMIN`(관리자) 또는 `USER`(일반사용자)입니다.
 
 ### `GET /api/v1/auth/me`
 
 인증: 필요
 
-토큰 누락 또는 무효 토큰이면 body 없이 HTTP 401을 반환합니다.
+토큰 누락 또는 무효 토큰이면 body 없이 HTTP 401을 반환합니다. me는 토큰의 username으로 DB를 조회하므로 계정이 삭제된 경우에도 body 없이 HTTP 401을 반환합니다.
 
 응답:
 
 ```json
 {
-  "username": "admin"
+  "username": "admin",
+  "role": "ADMIN"
 }
 ```
+
+## Users
+
+사용자 관리 API입니다. 네 엔드포인트 모두 JWT 인증과 ADMIN 역할이 필요합니다. 유효한 JWT라도 호출자가 USER면 HTTP 403 `FORBIDDEN`입니다. 토큰이 없거나 유효하지 않으면 401 `INVALID_CREDENTIALS`, 대상 id가 없으면 404 `NOT_FOUND`, 요청 validation 실패는 400 `INVALID_REQUEST`입니다. 모든 응답에서 비밀번호는 반환되지 않습니다.
+
+### `GET /api/v1/users?query=<아이디부분검색>`
+
+인증: 필요(ADMIN 전용)
+
+`query`는 선택입니다. 지정하면 username 부분 검색(대소문자 구분 없음)으로 필터링하고, 생략하면 전체 사용자를 반환합니다.
+
+응답: HTTP 200, 사용자 배열.
+
+```json
+[
+  {
+    "id": 1,
+    "username": "admin",
+    "role": "ADMIN",
+    "createdAt": "2026-05-31T00:00:00Z"
+  }
+]
+```
+
+| 필드 | 설명 |
+| --- | --- |
+| `id` | 사용자 id |
+| `username` | 계정 아이디 |
+| `role` | `ADMIN` 또는 `USER` |
+| `createdAt` | 계정 생성 시각 |
+
+### `POST /api/v1/users`
+
+인증: 필요(ADMIN 전용)
+
+요청:
+
+```json
+{
+  "username": "operator1",
+  "password": "...",
+  "role": "USER"
+}
+```
+
+| 필드 | 필수 | 설명 |
+| --- | --- | --- |
+| `username` | 예 | 영문과 숫자만 허용, 100자 이하, 중복 불가 |
+| `password` | 예 | 4~64자 |
+| `role` | 예 | `ADMIN` 또는 `USER`. 대소문자 구분 없이 `ADMIN`/`USER`로 정규화 |
+
+응답: HTTP 201, 생성된 사용자(id, username, role, createdAt). 비밀번호는 포함되지 않습니다.
+
+제약:
+
+- `username`이 이미 존재하면 409 `DUPLICATE_USERNAME`입니다.
+
+### `PUT /api/v1/users/{id}`
+
+인증: 필요(ADMIN 전용)
+
+요청:
+
+```json
+{
+  "password": "...",
+  "role": "USER"
+}
+```
+
+| 필드 | 필수 | 설명 |
+| --- | --- | --- |
+| `role` | 예 | `ADMIN` 또는 `USER`. 대소문자 구분 없이 정규화 |
+| `password` | 아니오 | 생략하면 기존 비밀번호를 유지합니다. 지정할 때는 4~64자 |
+
+응답: HTTP 200, 수정된 사용자(id, username, role, createdAt).
+
+제약:
+
+- `username`은 변경할 수 없습니다.
+- 마지막 남은 ADMIN을 USER로 강등할 수 없습니다. 위반 시 409 `LAST_ADMIN_PROTECTED`입니다.
+
+### `DELETE /api/v1/users/{id}`
+
+인증: 필요(ADMIN 전용)
+
+응답: HTTP 204
+
+제약:
+
+- 마지막 남은 ADMIN은 삭제할 수 없습니다. 위반 시 409 `LAST_ADMIN_PROTECTED`입니다.
+- 자기 자신의 계정은 삭제할 수 없습니다. 위반 시 409 `SELF_DELETE_NOT_ALLOWED`입니다.
+- 삭제된 계정의 기존 JWT는 이후 `GET /api/v1/auth/me`와 사용자 관리 API에서 DB 조회 시 거부됩니다.
 
 ## Posts
 
@@ -107,6 +204,7 @@ Authorization: Bearer <jwt>
   "conversionReady": false,
   "replyCount": 0,
   "hasAttachment": false,
+  "authorUsername": "member1",
   "createdAt": "2026-05-31T00:00:00Z"
 }
 ```
@@ -124,6 +222,7 @@ Authorization: Bearer <jwt>
   "body": "plain text",
   "mode": "NORMAL",
   "conversionReady": false,
+  "authorUsername": "member1",
   "createdAt": "2026-05-31T00:00:00Z",
   "updatedAt": "2026-05-31T00:00:00Z",
   "attachments": [],
@@ -172,11 +271,13 @@ Content-Type: `multipart/form-data`
 | `mode` | 아니오 | 기본 `NORMAL`. 수동 `FILE_CONVERSION_REQUEST` 생성은 거부 |
 | `attachments` | 아니오 | 첨부파일. 같은 이름 `attachments`로 여러 개 전송 가능(최대 5개, 파일당 100MB) |
 
-응답: 게시글 상세, HTTP 201
+응답: 게시글 상세(`authorUsername`은 요청 JWT의 subject), HTTP 201
 
 ### `PUT /api/v1/posts/{id}`
 
 인증: 필요
+
+권한: 작성자 본인 또는 `ADMIN`. `authorUsername`이 없는 레거시 글은 `ADMIN`만 수정 가능. 그 외는 `403 FORBIDDEN`.
 
 Content-Type: `multipart/form-data`
 
@@ -204,11 +305,15 @@ Content-Type: `multipart/form-data`
 
 인증: 필요
 
+권한: 작성자 본인 또는 `ADMIN`. `authorUsername`이 없는 레거시 글은 `ADMIN`만 삭제 가능. 그 외는 `403 FORBIDDEN`.
+
 응답: HTTP 204
 
 ### `POST /api/v1/posts/batch-delete`
 
 인증: 필요
+
+권한: 요청에 포함된 모든 id에 대해 작성자 본인 또는 `ADMIN`이어야 한다. 하나라도 권한이 없으면 전체 요청이 `403 FORBIDDEN`으로 실패하며 삭제되지 않는다.
 
 요청:
 
@@ -362,7 +467,11 @@ Content-Type: `multipart/form-data`
 
 | 코드 | 의미 |
 | --- | --- |
-| `INVALID_CREDENTIALS` | 인증 실패 또는 토큰 누락/만료. 단, `/api/v1/auth/me`는 body 없이 401을 반환 |
+| `INVALID_CREDENTIALS` | 인증 실패, 토큰 누락/만료, 삭제된 계정. 단, `/api/v1/auth/me`는 body 없이 401을 반환 |
+| `FORBIDDEN` | 권한 없음. 사용자 관리 API를 USER가 호출한 경우, 남의 게시글을 수정/삭제하려는 경우(작성자 본인/ADMIN 아님), 레거시(작성자 없음) 글을 USER가 수정/삭제하려는 경우 |
+| `DUPLICATE_USERNAME` | 사용자 추가 시 username 중복 |
+| `LAST_ADMIN_PROTECTED` | 마지막 남은 ADMIN 삭제/강등 불가 |
+| `SELF_DELETE_NOT_ALLOWED` | 자기 자신의 계정 삭제 불가 |
 | `INVALID_REQUEST` | validation 또는 JSON parsing 실패 |
 | `INVALID_ENCODED_BODY` | bodyBase64 decode 실패 |
 | `FILE_CONVERSION_LOCKED` | 파일 변환 게시글 수정 불가 |

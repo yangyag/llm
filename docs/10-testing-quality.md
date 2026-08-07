@@ -46,8 +46,9 @@ curl -fsS http://localhost:8083/api/v1/health
 | --- | --- |
 | `AuthControllerTest` | 로그인, JWT 검증, 인증 실패 |
 | `HealthControllerTest` | health endpoint |
-| `BoardPostControllerTest` | 게시글, 댓글, 첨부파일, AI 답변 제약 |
-| `UploadSessionControllerTest` | 업로드 세션 생성, chunk, finalize, 오류 조건 |
+| `UserManagementControllerTest` | 사용자 추가/수정/삭제, ADMIN 전용, 마지막 ADMIN/자기 자신 보호 |
+| `BoardPostControllerTest` | 게시글, 댓글, 첨부파일, AI 답변 제약, 작성자 소유권(본인/ADMIN/레거시), 일괄 삭제 권한 |
+| `UploadSessionControllerTest` | 업로드 세션 생성, chunk, finalize, 오류 조건, finalize 게시글 작성자 기록 |
 | `ExternalAiReplyGeneratorDefaultsTest` | AI provider 기본값 |
 
 ## 변경별 권장 게이트

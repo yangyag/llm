@@ -22,6 +22,7 @@
 - 포트: back **8080**(내부 expose 전용, host publish 안 함) / **8082**(로컬 bootRun + Nitro dev proxy 대상) / **8083**(front proxy host 포트 = health 진입점) / 5174(Nuxt dev) / 5432(DB, 외부 차단). health는 어디서든 **8083** 경유.
 - 모든 API는 `/api/v1` 아래. front/Nginx가 `/api/` → `http://llm-back:8080` proxy. 운영에선 `NUXT_PUBLIC_API_BASE`를 비워 상대경로 `/api` 사용.
 - 인증은 Spring Security filter chain이 아니라 **컨트롤러별 직접 JWT 검증**. 새 보호 엔드포인트는 컨트롤러에서 수동 추가. 공개 엔드포인트 목록은 docs/14.
+- 게시글 **수정/삭제는 작성자 본인 또는 ADMIN만** 가능. 작성자는 `posts.author_username`(JWT subject로 기록), null인 레거시 글은 ADMIN만 관리. 검사는 `BoardService.ensureCanManagePost`(USER가 남의 글 → 403 `FORBIDDEN`). 일괄 삭제도 포함 id 전체에 대해 검사 후 부분 삭제 없이 실패. (docs/07, docs/14)
 - 세션 종료는 **두 경로**: 백엔드 JWT 고정 만료(`APP_JWT_EXPIRATION_MS`, 기본 1시간) ↔ 프론트 유휴 자동 로그아웃(하드코딩 1시간, `front/composables/useIdleTimeout.ts`의 `IDLE_TIMEOUT_MS`). 토큰 갱신/슬라이딩 세션 없음 → 둘은 독립이며 한쪽만 바꾸면 만료 시점이 어긋남. 프론트는 인증 요청(`Authorization` 포함) 401 시 `auth:unauthorized` 이벤트로 강제 로그아웃(`front/services/api.ts`, `front/plugins/auth.client.ts`). 새 env 없음 (docs/14).
 - AI provider는 `GPT`/`CLAUDE`/`GROK`만. 구현은 `back/.../board/ai/` (docs/09).
 - 운영 DB는 별도 공용 컨테이너 `auto-postgres` (외부 `auto_default` 네트워크). 정상 컨테이너: `llm-front`, `llm-back`, `auto-postgres` healthy.
@@ -38,6 +39,8 @@
 - `APP_ATTACHMENTS_ROOT_PATH` / `APP_UPLOAD_SESSIONS_ROOT_PATH`가 volume mount 경로와 불일치하면 조용히 JVM temp(`${java.io.tmpdir}/llm-*`)로 fallback → volume 무시, ZIP finalize 실패.
 - 로컬 백엔드 기본 포트는 8080 → Nitro dev proxy(8082)와 맞추려면 `SERVER_PORT=8082`로 실행 (또는 `front/nuxt.config.ts` 수정).
 - Flyway 적용된 `V1~V12` SQL 수정 금지, 새 `V13+`로만 추가. JPA(`ddl-auto=validate`)와 Flyway는 동일 `APP_DB_SCHEMA`. 테스트는 H2(create-drop, Flyway off)라 DDL 경로가 운영과 다름.
+- **EC2 DB의 flyway history와 로컬 migration 파일이 어긋나면 체크섬 충돌로 `llm-back` 시작 실패** (2026-08-08: EC2에 구버전 `V13 create ai reply jobs`가 있어 로컬 `V13 add role to admins`와 충돌 → history에서 version=13 행 제거 후 V13~V15 적용). 배포 전 `select version, description from llm.flyway_schema_history`로 로컬 파일과 대조. (docs/12, docs/15)
+- 게시글 수정/삭제는 작성자 본인 또는 ADMIN만 가능(레거시 null 작성자 글은 ADMIN만). 프론트는 목록/상세에서 권한 없는 글의 수정·삭제·체크박스를 숨김. (docs/07, docs/14)
 - `FILE_CONVERSION_REQUEST` 게시글은 수동 생성 불가(업로드 세션 finalize로만), 첨부 있으면 수정 불가, AI 답변 불가. AI 답변(`is_ai=true`)은 수정·삭제 불가.
 - 업로드 세션 secret은 백엔드(`APP_UPLOAD_SESSIONS_SECRET`)와 스크립트가 **동일**해야 함 (alias A1~A11 + AES-GCM wire format, docs/08).
 - 게시글/댓글 본문은 `bodyBase64`(UTF-8→Base64, 보안 아님). 생성/수정은 `multipart/form-data`.

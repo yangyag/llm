@@ -34,12 +34,12 @@ Browser
 4. 상세 API는 게시글 본문, 댓글, 첨부파일 메타데이터를 조회합니다.
 5. 상세 응답의 `attachments` 배열 각 항목은 `downloadUrl`(`/api/v1/posts/{id}/attachments/{attachmentId}` 형식)을 포함합니다.
 
-### 관리자 쓰기 작업
+### 인증 쓰기 작업
 
-1. 관리자가 `POST /api/v1/auth/login`으로 JWT를 받습니다.
+1. 사용자가 `POST /api/v1/auth/login`으로 JWT를 받습니다.
 2. 프론트는 쓰기 API에 `Authorization: Bearer <token>`을 보냅니다.
-3. 각 컨트롤러가 `JwtProvider.validateAndGetUsername`으로 직접 토큰을 검증합니다.
-4. 서비스 계층이 게시글, 댓글, 첨부파일을 처리합니다.
+3. 각 컨트롤러가 `JwtProvider.validateAndGetUsername`으로 직접 토큰을 검증하고 JWT subject(username)를 서비스에 전달합니다.
+4. 서비스 계층이 게시글 생성 시 `author_username`을 기록하고, 수정/삭제 시 **작성자 본인 또는 ADMIN 여부**(`admins.role`)를 검증한 뒤 게시글, 댓글, 첨부파일을 처리합니다.
 
 ### ZIP 청크 업로드
 

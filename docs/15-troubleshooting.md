@@ -74,6 +74,43 @@ grep -E '^(APP_DB_HOST|APP_DB_PORT|APP_DB_NAME|APP_DB_SCHEMA)=' .env
 - 로컬: 실제 PostgreSQL 위치와 DB/schema가 있는지 확인
 - schema는 Flyway `create-schemas=true`로 생성 가능하지만 DB 자체와 권한은 먼저 있어야 합니다.
 
+## Flyway checksum mismatch로 백엔드 시작 실패
+
+증상:
+
+```text
+Migration checksum mismatch for migration version 13
+-> Applied to database : -1323145214
+-> Resolved locally    : 862869711
+```
+
+원인:
+
+- EC2 운영 DB에 이미 적용된 마이그레이션과 새 이미지에 포함된 마이그레이션 파일의 내용(체크섬)이 다릅니다.
+- 예: 2026-08-08 배포에서 EC2 history의 V13이 구버전 `create ai reply jobs`였고 로컬 저장소의 V13은 `add role to admins`였음.
+
+확인:
+
+```bash
+DB_PASS=$(grep "^APP_DB_PASSWORD=" /home/ubuntu/llm/.env | cut -d= -f2-)
+docker exec -e PGPASSWORD="$DB_PASS" auto-postgres psql -U llm -d auto   -c "select installed_rank, version, description, checksum, success from llm.flyway_schema_history order by installed_rank;"
+ls /home/yangyag/llm/back/src/main/resources/db/migration/
+```
+
+대응:
+
+1. history와 로컬 파일의 version/description을 비교해 어떤 버전이 어긋났는지 확인합니다.
+2. 어긋난 버전이 현재 코드에 없는(제거된) 기능이면, DB 백업 후 해당 history 행만 제거합니다.
+
+   ```bash
+   docker exec -e PGPASSWORD="$DB_PASS" auto-postgres psql -U llm -d auto      -c "delete from llm.flyway_schema_history where version='13';"
+   ```
+
+3. `docker compose ... up -d --wait`로 재배포해 새 마이그레이션을 적용합니다.
+4. 어긋난 버전이 현재 코드에 필요한 기능이면 Flyway repair로 체크섬을 갱신하는 대신, migration 파일을 새 버전으로 추가하는 방식으로 해결합니다(기존 적용 파일 수정 금지).
+
+주의: history 행 삭제는 테이블(예: ai_reply_jobs)을 삭제하지 않습니다. JPA 엔티티가 없는 테이블은 `ddl-auto=validate`에 영향이 없어 그대로 둬도 무해합니다.
+
 ## 로그인 실패
 
 확인:
