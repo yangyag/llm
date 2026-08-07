@@ -72,7 +72,7 @@ curl -fsS http://localhost:8083/api/v1/health
 
 1. `docker compose up -d --wait`
 2. `http://localhost:8083` 접속
-3. `admin`/`admin`으로 로그인
+3. 기본 관리자 계정으로 로그인
 4. 게시글 작성
 5. 게시글 상세 공개 URL 확인
 6. 첨부파일 업로드/다운로드 확인

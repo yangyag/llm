@@ -77,12 +77,7 @@ spring.flyway.create-schemas=true
 
 ## 기본 관리자 계정
 
-`V6__create_admins_table.sql`이 기본 계정을 생성합니다.
-
-- username: `admin`
-- password: `admin`
-
-운영 노출 전에 반드시 비밀번호를 변경하거나 별도 관리자 계정으로 교체해야 합니다.
+`V6__create_admins_table.sql`이 기본 관리자 계정을 시드합니다. 시드 계정은 로컬 확인용이며, 운영 노출 전에 반드시 비밀번호를 변경하거나 별도 관리자 계정으로 교체해야 합니다.
 
 기본 계정은 ADMIN 역할을 가지며, 추가 계정 생성과 역할/비밀번호 관리, 계정 삭제는 ADMIN 전용 사용자 관리 API(docs/07)로 수행합니다. 마지막 남은 ADMIN은 삭제/강등할 수 없습니다.
 

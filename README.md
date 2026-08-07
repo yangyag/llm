@@ -197,7 +197,6 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ## 주의 사항
 
 - 관리자 로그인 ID는 영문과 숫자만 허용합니다.
-- 시드된 기본 관리자 계정(`admin` / `admin`)은 공용 노출 전에 반드시 변경하세요.
 - 일반 게시글 본문은 비워둘 수 있습니다. 본문을 보낼 때는 게시글과 답변 모두 프론트에서 Base64로 인코딩해 전송하고, 서버는 이를 디코딩해 저장합니다.
 - 단일 ZIP 청크 업로드는 `upload_zip_post.py`를 통해 처리합니다.
 - 업로드 세션 wire JSON은 alias 키와 AES-GCM 암호문만 사용합니다. 파일명도 실제 값이 암호화되어 전송됩니다.

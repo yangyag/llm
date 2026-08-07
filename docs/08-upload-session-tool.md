@@ -45,8 +45,8 @@ upload_zip_post.py
 unzip front/public/upload_zip_post.zip -d /tmp/llm-upload-tool
 cd /tmp/llm-upload-tool
 LLM_API_BASE_URL=http://localhost:8083 \
-LLM_USERNAME=admin \
-LLM_PASSWORD=admin \
+LLM_USERNAME=<username> \
+LLM_PASSWORD=<password> \
 APP_UPLOAD_SESSIONS_SECRET='...' \
 python3 upload_zip_post.py
 ```

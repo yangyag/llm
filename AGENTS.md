@@ -44,7 +44,6 @@
 - `FILE_CONVERSION_REQUEST` 게시글은 수동 생성 불가(업로드 세션 finalize로만), 첨부 있으면 수정 불가, AI 답변 불가. AI 답변(`is_ai=true`)은 수정·삭제 불가.
 - 업로드 세션 secret은 백엔드(`APP_UPLOAD_SESSIONS_SECRET`)와 스크립트가 **동일**해야 함 (alias A1~A11 + AES-GCM wire format, docs/08).
 - 게시글/댓글 본문은 `bodyBase64`(UTF-8→Base64, 보안 아님). 생성/수정은 `multipart/form-data`.
-- 기본 관리자 `admin/admin`(마이그레이션 시드)은 공용 노출 전 반드시 변경.
 - 운영에서 `docker compose down -v` / 무분별한 volume·prune 금지 (첨부 데이터 손실). 수동 compose는 `LLM_ENV_FILE=/home/ubuntu/llm/.env`를 설정하고 `--project-name ubuntu --env-file .env -f docker-compose.yml`을 명시.
 - 빌드/배포: Docker Hub namespace `yangyag2`, 태그 `latest`만 push (롤백 위해 시각/SHA/digest 기록). compose 이미지 빌드는 `docker compose --profile build build back-build front-build`.
 

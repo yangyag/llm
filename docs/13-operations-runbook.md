@@ -184,4 +184,4 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d
 - 운영 volume을 확인 없이 삭제하지 않습니다.
 - 운영 `.env`를 채팅, 문서, 로그에 붙여넣지 않습니다.
 - `docker compose down -v`를 운영에서 실행하지 않습니다.
-- 기본 관리자 계정 `admin`/`admin`을 공용 운영에 그대로 두지 않습니다.
+- 기본 관리자 계정(시드)을 공용 운영에 그대로 두지 않습니다.

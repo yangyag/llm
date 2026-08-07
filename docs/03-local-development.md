@@ -71,7 +71,7 @@ npm run dev
 
 ## 로컬 인증 흐름
 
-마이그레이션 `V6__create_admins_table.sql`은 기본 관리자 계정 `admin`/`admin`을 생성합니다. 로컬 확인용으로만 사용하고, 운영에서는 변경해야 합니다.
+마이그레이션 `V6__create_admins_table.sql`은 기본 관리자 계정(시드)을 생성합니다. 로컬 확인용으로만 사용하고, 운영에서는 반드시 변경해야 합니다.
 
 로그인 성공 시 프론트는 `auth_token`, `auth_username`, `auth_role`(`ADMIN`/`USER`)을 `localStorage`에 저장합니다. 인증 오류가 나면 세 값을 삭제하고 로그인 화면으로 돌아갑니다. `auth_role`은 `/users` 화면 라우트 가드와 목록/상세의 수정·삭제 버튼 노출 판단에 사용됩니다.
 

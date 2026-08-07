@@ -46,8 +46,8 @@ Authorization: Bearer <jwt>
 
 ```json
 {
-  "username": "admin",
-  "password": "admin"
+  "username": "<username>",
+  "password": "<password>"
 }
 ```
 
