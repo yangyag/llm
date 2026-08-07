@@ -251,6 +251,7 @@ Authorization: Bearer <jwt>
   "ai": false,
   "aiProvider": null,
   "aiModel": null,
+  "authorUsername": "member1",
   "createdAt": "2026-05-31T00:00:00Z",
   "updatedAt": "2026-05-31T00:00:00Z"
 }
@@ -347,6 +348,8 @@ Content-Type: `multipart/form-data`
 
 인증: 필요
 
+권한: 댓글 작성자 본인 또는 `ADMIN`. `authorUsername`이 없는 레거시 일반 댓글은 `ADMIN`만 수정 가능. 그 외는 `403 FORBIDDEN`.
+
 요청:
 
 ```json
@@ -362,6 +365,8 @@ Content-Type: `multipart/form-data`
 ### `DELETE /api/v1/posts/replies/{replyId}`
 
 인증: 필요
+
+권한: 댓글 작성자 본인 또는 `ADMIN`. `authorUsername`이 없는 레거시 일반 댓글은 `ADMIN`만 삭제 가능. 그 외는 `403 FORBIDDEN`.
 
 응답: HTTP 204
 
@@ -468,7 +473,7 @@ Content-Type: `multipart/form-data`
 | 코드 | 의미 |
 | --- | --- |
 | `INVALID_CREDENTIALS` | 인증 실패, 토큰 누락/만료, 삭제된 계정. 단, `/api/v1/auth/me`는 body 없이 401을 반환 |
-| `FORBIDDEN` | 권한 없음. 사용자 관리 API를 USER가 호출한 경우, 남의 게시글을 수정/삭제하려는 경우(작성자 본인/ADMIN 아님), 레거시(작성자 없음) 글을 USER가 수정/삭제하려는 경우 |
+| `FORBIDDEN` | 권한 없음. 사용자 관리 API를 USER가 호출한 경우, 남의 게시글/댓글을 수정/삭제하려는 경우(작성자 본인/ADMIN 아님), 레거시(작성자 없음) 글/댓글을 USER가 수정/삭제하려는 경우 |
 | `DUPLICATE_USERNAME` | 사용자 추가 시 username 중복 |
 | `LAST_ADMIN_PROTECTED` | 마지막 남은 ADMIN 삭제/강등 불가 |
 | `SELF_DELETE_NOT_ALLOWED` | 자기 자신의 계정 삭제 불가 |

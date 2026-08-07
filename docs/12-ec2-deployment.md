@@ -110,7 +110,7 @@ curl -fsS https://yangyag.duckdns.org/api/v1/health
 
 ## Flyway 마이그레이션 주의 (V13 이력 충돌)
 
-2026-08-08 배포에서 EC2 운영 DB에 **이전 버전의 `V13__create_ai_reply_jobs.sql`**(ai_reply_jobs/ai_reply_outbox 테이블 생성, 로컬 저장소에는 없는 파일)이 이미 적용되어 있어 새 이미지의 `V13__add_role_to_admins.sql`과 체크섬 충돌로 `llm-back`이 시작하지 못하는 문제가 있었습니다. 해당 기능은 현재 코드에 없으므로 `llm.flyway_schema_history`에서 version=13 행만 제거하고 새 이미지의 V13~V15(`add role to admins` → `add author to posts` → `backfill post author as admin`)를 적용해 해결했습니다.
+2026-08-08 배포에서 EC2 운영 DB에 **이전 버전의 `V13__create_ai_reply_jobs.sql`**(ai_reply_jobs/ai_reply_outbox 테이블 생성, 로컬 저장소에는 없는 파일)이 이미 적용되어 있어 새 이미지의 `V13__add_role_to_admins.sql`과 체크섬 충돌로 `llm-back`이 시작하지 못하는 문제가 있었습니다. 해당 기능은 현재 코드에 없으므로 `llm.flyway_schema_history`에서 version=13 행만 제거하고 새 이미지의 V13~V15(`add role to admins` → `add author to posts` → `backfill post author as admin`)를 적용해 해결했습니다. 이후 배포(V14~V16: 게시글/댓글 작성자 컬럼과 백필)도 history-파일 일치를 확인한 뒤 적용해야 합니다.
 
 배포 전 확인:
 

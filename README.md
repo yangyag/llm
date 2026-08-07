@@ -187,7 +187,7 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 - 관리자 로그인
 - 관리자 전용 사용자 관리(사용자 추가/수정/삭제, ADMIN/USER 레벨)
 - 게시글 목록, 상세, 작성, 수정, 삭제 (수정/삭제는 작성자 본인 또는 ADMIN만)
-- 답변 작성, 수정, 삭제
+- 답변 작성, 수정, 삭제 (댓글도 작성자 본인 또는 ADMIN만 수정/삭제)
 - 게시글당 첨부파일 다중 업로드(일반 게시글 최대 5개), 개별 삭제, 다운로드
 - 단일 ZIP 청크 업로드 후 자동 게시글 생성 및 ZIP 다운로드
 - AI 답변 생성(OpenAI / Claude / Grok)
@@ -205,4 +205,4 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 - 첨부파일은 일반 게시글당 최대 5개까지 허용합니다. 업로드 세션으로 생성된 파일 변환 게시글은 첨부 1개(원본 ZIP)만 가집니다.
 - 최대 업로드 크기는 기본 `100MB`입니다.
 - 게시글 목록, 상세, 첨부파일 다운로드는 로그인 없이 공개 접근할 수 있으며, 이 동작은 유지합니다.
-- 게시글 작성 시 작성자(`posts.author_username`)가 기록됩니다. 수정/삭제는 **작성자 본인 또는 ADMIN**만 가능하며, 작성자가 없는 레거시 글은 ADMIN만 수정/삭제할 수 있습니다. 일괄 삭제도 같은 권한 규칙이 적용됩니다.
+- 게시글/댓글 작성 시 작성자(`posts.author_username` / `post_replies.author_username`)가 기록됩니다. 수정/삭제는 **작성자 본인 또는 ADMIN**만 가능하며, 작성자가 없는 레거시 글/댓글은 ADMIN만 수정/삭제할 수 있습니다. 게시글 일괄 삭제도 같은 권한 규칙이 적용됩니다.

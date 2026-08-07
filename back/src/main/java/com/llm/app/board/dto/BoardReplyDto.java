@@ -8,6 +8,7 @@ public record BoardReplyDto(
 	boolean ai,
 	String aiProvider,
 	String aiModel,
+	String authorUsername,
 	Instant createdAt,
 	Instant updatedAt
 ) {

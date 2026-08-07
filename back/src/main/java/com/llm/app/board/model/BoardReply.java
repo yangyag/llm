@@ -25,6 +25,10 @@ public class BoardReply {
 	@Column(nullable = false, columnDefinition = "text")
 	private String body;
 
+	/** 작성자 username. AI 답변은 null이며 일반 댓글은 항상 기록된다. */
+	@Column(name = "author_username", length = 100)
+	private String authorUsername;
+
 	@Column(name = "is_ai", nullable = false)
 	private boolean ai;
 
@@ -43,13 +47,14 @@ public class BoardReply {
 	protected BoardReply() {
 	}
 
-	public BoardReply(BoardPost post, String body, Instant createdAt, Instant updatedAt) {
-		this(post, body, createdAt, updatedAt, false, null, null);
+	public BoardReply(BoardPost post, String body, String authorUsername, Instant createdAt, Instant updatedAt) {
+		this(post, body, authorUsername, createdAt, updatedAt, false, null, null);
 	}
 
 	public BoardReply(
 		BoardPost post,
 		String body,
+		String authorUsername,
 		Instant createdAt,
 		Instant updatedAt,
 		boolean ai,
@@ -58,6 +63,7 @@ public class BoardReply {
 	) {
 		this.post = post;
 		this.body = body;
+		this.authorUsername = authorUsername;
 		this.ai = ai;
 		this.aiProvider = aiProvider;
 		this.aiModel = aiModel;
@@ -75,6 +81,10 @@ public class BoardReply {
 
 	public String getBody() {
 		return body;
+	}
+
+	public String getAuthorUsername() {
+		return authorUsername;
 	}
 
 	public boolean isAi() {

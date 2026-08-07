@@ -22,7 +22,7 @@
 - 포트: back **8080**(내부 expose 전용, host publish 안 함) / **8082**(로컬 bootRun + Nitro dev proxy 대상) / **8083**(front proxy host 포트 = health 진입점) / 5174(Nuxt dev) / 5432(DB, 외부 차단). health는 어디서든 **8083** 경유.
 - 모든 API는 `/api/v1` 아래. front/Nginx가 `/api/` → `http://llm-back:8080` proxy. 운영에선 `NUXT_PUBLIC_API_BASE`를 비워 상대경로 `/api` 사용.
 - 인증은 Spring Security filter chain이 아니라 **컨트롤러별 직접 JWT 검증**. 새 보호 엔드포인트는 컨트롤러에서 수동 추가. 공개 엔드포인트 목록은 docs/14.
-- 게시글 **수정/삭제는 작성자 본인 또는 ADMIN만** 가능. 작성자는 `posts.author_username`(JWT subject로 기록), null인 레거시 글은 ADMIN만 관리. 검사는 `BoardService.ensureCanManagePost`(USER가 남의 글 → 403 `FORBIDDEN`). 일괄 삭제도 포함 id 전체에 대해 검사 후 부분 삭제 없이 실패. (docs/07, docs/14)
+- 게시글/댓글 **수정/삭제는 작성자 본인 또는 ADMIN만** 가능. 작성자는 `posts.author_username`/`post_replies.author_username`(JWT subject로 기록, V14/V16), null인 레거시 글/댓글은 ADMIN만 관리. 검사는 `BoardService.ensureCanManagePost`/`ensureCanManageReply`(USER가 남의 글/댓글 → 403 `FORBIDDEN`). AI 답변은 작성자 없음 + `AI_REPLY_LOCKED`. 게시글 일괄 삭제도 포함 id 전체에 대해 검사 후 부분 삭제 없이 실패. (docs/07, docs/14)
 - 세션 종료는 **두 경로**: 백엔드 JWT 고정 만료(`APP_JWT_EXPIRATION_MS`, 기본 1시간) ↔ 프론트 유휴 자동 로그아웃(하드코딩 1시간, `front/composables/useIdleTimeout.ts`의 `IDLE_TIMEOUT_MS`). 토큰 갱신/슬라이딩 세션 없음 → 둘은 독립이며 한쪽만 바꾸면 만료 시점이 어긋남. 프론트는 인증 요청(`Authorization` 포함) 401 시 `auth:unauthorized` 이벤트로 강제 로그아웃(`front/services/api.ts`, `front/plugins/auth.client.ts`). 새 env 없음 (docs/14).
 - AI provider는 `GPT`/`CLAUDE`/`GROK`만. 구현은 `back/.../board/ai/` (docs/09).
 - 운영 DB는 별도 공용 컨테이너 `auto-postgres` (외부 `auto_default` 네트워크). 정상 컨테이너: `llm-front`, `llm-back`, `auto-postgres` healthy.

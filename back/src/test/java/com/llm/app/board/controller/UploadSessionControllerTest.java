@@ -23,6 +23,7 @@ import com.llm.app.board.dto.CreateUploadSessionRequest;
 import com.llm.app.board.dto.EncryptedUploadSessionCreateRequest;
 import com.llm.app.board.dto.EncryptedUploadSessionChunkUploadRequest;
 import com.llm.app.board.dto.UploadSessionStatusResponse;
+import com.llm.app.board.model.UploadSession;
 import com.llm.app.board.model.UploadSessionStatus;
 import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
@@ -100,6 +101,7 @@ class UploadSessionControllerTest {
 	private AiReplyGenerator aiReplyGenerator;
 
 	private String token;
+	private String memberToken;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -117,7 +119,14 @@ class UploadSessionControllerTest {
 		admin.setRole(UserRole.ADMIN);
 		admin.setCreatedAt(Instant.now());
 		adminRepository.saveAndFlush(admin);
+		Admin member = new Admin();
+		member.setUsername("member1");
+		member.setPasswordHash(passwordEncoder.encode("memberpass"));
+		member.setRole(UserRole.USER);
+		member.setCreatedAt(Instant.now());
+		adminRepository.saveAndFlush(member);
 		token = jwtProvider.generateToken("admin");
+		memberToken = jwtProvider.generateToken("member1");
 	}
 
 	@Test
@@ -319,6 +328,134 @@ class UploadSessionControllerTest {
 				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(createSessionRequest("a".repeat(300), ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_UPLOAD_SESSION_REQUEST"));
+	}
+
+
+	@Test
+	void otherUserCannotAccessSessionShouldReturn401() throws Exception {
+		UUID sessionId = createSession("private.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
+		String encoded = encode(ZIP_BYTES);
+
+		mockMvc.perform(get("/api/v1/upload-sessions/{sessionId}", sessionId)
+				.header("Authorization", "Bearer " + memberToken))
+			.andExpect(status().isUnauthorized());
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(chunkRequest(1, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isUnauthorized());
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
+				.header("Authorization", "Bearer " + memberToken))
+			.andExpect(status().isUnauthorized());
+
+		// 소유자는 여전히 접근 가능해야 한다.
+		mockMvc.perform(get("/api/v1/upload-sessions/{sessionId}", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void expiredSessionShouldReturnConflict() throws Exception {
+		Instant now = Instant.now();
+		UUID sessionId = UUID.randomUUID();
+		uploadSessionRepository.saveAndFlush(new UploadSession(
+			sessionId,
+			"expired.zip",
+			ZIP_BYTES.length,
+			CHUNK_SIZE_BASE64_CHARS,
+			2,
+			ZIP_SHA256,
+			UploadSessionStatus.PENDING,
+			"admin",
+			now.minusSeconds(3600),
+			now.minusSeconds(3600),
+			now.minusSeconds(10)
+		));
+
+		mockMvc.perform(get("/api/v1/upload-sessions/{sessionId}", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("UPLOAD_SESSION_STATE_ERROR"));
+	}
+
+	@Test
+	void completedSessionShouldBeGoneAfterFinalize() throws Exception {
+		// finalize 성공 시 세션 row와 임시 디렉터리가 정리되므로 이후 접근은 404여야 한다.
+		UUID sessionId = createSession("done.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
+		String encoded = encode(ZIP_BYTES);
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(chunkRequest(1, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(chunkRequest(2, encoded.substring(CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/v1/upload-sessions/{sessionId}", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(chunkRequest(1, encode(ZIP_BYTES).substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+	}
+
+	@Test
+	void manuallyCompletedSessionShouldReturnStateError() throws Exception {
+		// COMPLETED 상태가 남아있는 세션(예: 정리 전)은 상태 오류로 거부된다.
+		Instant now = Instant.now();
+		UUID sessionId = UUID.randomUUID();
+		uploadSessionRepository.saveAndFlush(new UploadSession(
+			sessionId,
+			"done.zip",
+			ZIP_BYTES.length,
+			CHUNK_SIZE_BASE64_CHARS,
+			2,
+			ZIP_SHA256,
+			UploadSessionStatus.COMPLETED,
+			"admin",
+			now.minusSeconds(60),
+			now.minusSeconds(10),
+			now.plusSeconds(3600)
+		));
+
+		mockMvc.perform(get("/api/v1/upload-sessions/{sessionId}", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("UPLOAD_SESSION_STATE_ERROR"));
+	}
+
+	@Test
+	void chunkNumberOutOfRangeShouldBeRejected() throws Exception {
+		UUID sessionId = createSession("range.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
+		String encoded = encode(ZIP_BYTES);
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(chunkRequest(0, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_UPLOAD_SESSION_REQUEST"));
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(chunkRequest(3, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.code").value("INVALID_UPLOAD_SESSION_REQUEST"));
 	}

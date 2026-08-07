@@ -101,8 +101,8 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @RequestBody CreateBoardReplyRequest request
 	) {
-		jwtProvider.authenticate(authHeader);
-		return boardService.createReply(id, request);
+		String username = jwtProvider.authenticate(authHeader);
+		return boardService.createReply(username, id, request);
 	}
 
 	@PostMapping("/{id}/ai-replies")
@@ -145,8 +145,8 @@ public class BoardPostController {
 		@PathVariable Long replyId,
 		@Valid @RequestBody UpdateBoardReplyRequest request
 	) {
-		jwtProvider.authenticate(authHeader);
-		return boardService.updateReply(replyId, request);
+		String username = jwtProvider.authenticate(authHeader);
+		return boardService.updateReply(username, replyId, request);
 	}
 
 	@DeleteMapping("/replies/{replyId}")
@@ -155,7 +155,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long replyId
 	) {
-		jwtProvider.authenticate(authHeader);
-		boardService.deleteReply(replyId);
+		String username = jwtProvider.authenticate(authHeader);
+		boardService.deleteReply(username, replyId);
 	}
 }

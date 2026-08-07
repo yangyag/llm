@@ -27,7 +27,7 @@
 계정 역할은 `ADMIN`(관리자)과 `USER`(일반사용자) 두 가지입니다. `admins` 테이블의 `role` 컬럼(V13)으로 관리되며, 기존 시드 `admin` 계정을 포함한 모든 기존 계정은 `ADMIN`으로 승계됩니다.
 
 - 쓰기 기능(게시글 작성/댓글/AI 답변/업로드 세션)은 유효한 JWT만 있으면 `USER`도 전부 사용할 수 있습니다.
-- 게시글 **수정/삭제**는 작성자 본인 또는 `ADMIN`만 가능합니다. 작성자가 null인 레거시 글은 `ADMIN`만 수정/삭제할 수 있습니다. `USER`가 남의 글을 수정/삭제하면 403 `FORBIDDEN`입니다(코드: `BoardService.ensureCanManagePost`). 일괄 삭제도 포함된 id 전부에 대해 소유권/ADMIN을 검사하며, 하나라도 권한이 없으면 전체가 403으로 실패합니다.
+- 게시글/댓글 **수정/삭제**는 작성자 본인 또는 `ADMIN`만 가능합니다. 작성자가 null인 레거시 글/댓글은 `ADMIN`만 수정/삭제할 수 있습니다. `USER`가 남의 글/댓글을 수정/삭제하면 403 `FORBIDDEN`입니다(코드: `BoardService.ensureCanManagePost`/`ensureCanManageReply`). AI 답변은 작성자 없음 + `AI_REPLY_LOCKED`로 수정/삭제가 차단됩니다. 게시글 일괄 삭제도 포함된 id 전부에 대해 소유권/ADMIN을 검사하며, 하나라도 권한이 없으면 전체가 403으로 실패합니다.
 - 역할 제한이 있는 기능(사용자 관리 API)은 `ADMIN` 전용이며, 이 외에는 게시글 소유권 검사가 추가로 적용됩니다.
 - 인가 방식은 인증과 마찬가지로 Spring Security filter chain이 아니라 컨트롤러별 직접 JWT 검증입니다. JWT 자체에는 role이 없고 username만 subject로 들어갑니다.
 - ADMIN 여부 판단은 `UserManagementService`에서 매 요청마다 username으로 DB를 조회해 수행합니다. 토큰에 역할 정보가 내장되지 않으므로, 강등이나 계정 삭제가 다음 요청부터 즉시 반영됩니다.

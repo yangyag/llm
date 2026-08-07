@@ -37,7 +37,7 @@ spring.flyway.create-schemas=true
 | 테이블 | 역할 |
 | --- | --- |
 | `posts` | 게시글 본문, 제목, 모드, 작성자(`author_username`), 생성/수정 시각 |
-| `post_replies` | 댓글과 AI 답변 |
+| `post_replies` | 댓글과 AI 답변(작성자 `author_username`, AI 답변은 null) |
 | `post_attachments` | 게시글 첨부파일 메타데이터(일반 게시글 최대 5개) |
 | `admins` | 사용자 계정(ADMIN/USER 역할) |
 | `upload_sessions` | ZIP 청크 업로드 세션 |
@@ -62,6 +62,7 @@ spring.flyway.create-schemas=true
 | `V13__add_role_to_admins.sql` | `admins`에 `role` 컬럼 추가. 기존 계정(시드 admin 포함)은 전부 `ADMIN`으로 승계 |
 | `V14__add_author_to_posts.sql` | `posts.author_username` 추가. 작성자 본인/관리자 수정·삭제 권한 기준. 기존 글은 null |
 | `V15__backfill_post_author_as_admin.sql` | 기존 게시글 중 `author_username`이 null인 글을 전부 `admin`으로 백필 |
+| `V16__add_author_to_replies.sql` | `post_replies.author_username` 추가. 작성자 본인/관리자 수정·삭제 권한 기준. 기존 일반 댓글은 `admin`으로 백필(AI 답변 제외) |
 
 ## 도메인 제약
 
@@ -72,6 +73,7 @@ spring.flyway.create-schemas=true
 - `admins.username`은 unique입니다.
 - `admins.role`은 `varchar(20) not null default 'ADMIN'`이며 `check (role in ('ADMIN', 'USER'))` 제약으로 `ADMIN`/`USER`만 허용합니다(V13). V13 이전 생성 계정은 전부 기본값 `ADMIN`으로 승계됩니다.
 - `posts.author_username`은 작성자 username이며 nullable입니다(V14). null인 레거시 글은 관리자만 수정/삭제할 수 있습니다. 새 글은 작성 시점의 JWT subject(로그인 username)가 저장됩니다. 기존 레거시 글은 `V15`에서 `admin`으로 백필됩니다.
+- `post_replies.author_username`은 댓글 작성자 username이며 nullable입니다(V16). AI 답변(`is_ai=true`)은 null이고, 일반 댓글은 작성 시점의 JWT subject가 저장됩니다. 기존 일반 댓글은 `V16`에서 `admin`으로 백필됩니다. 댓글 수정/삭제도 작성자 본인 또는 ADMIN만 가능하며, null인 레거시 일반 댓글은 ADMIN만 수정/삭제할 수 있습니다.
 
 ## 기본 관리자 계정
 

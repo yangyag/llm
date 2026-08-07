@@ -40,6 +40,8 @@ export interface Reply {
   ai: boolean;
   aiProvider: AiProvider | null;
   aiModel: string | null;
+  /** 작성자 username. AI 답변은 null. 레거시 일반 댓글도 null일 수 있음. */
+  authorUsername: string | null;
   createdAt: string;
   updatedAt: string;
 }

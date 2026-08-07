@@ -395,7 +395,11 @@ export const usePostDetailStore = defineStore("postDetail", {
         await posts.loadPosts(posts.currentPage);
         this.message = "답변을 수정했습니다.";
       } catch (submitError) {
-        this.error = (submitError as Error).message;
+        const err = submitError as { code?: string; message?: string };
+        this.error =
+          err.code === "FORBIDDEN"
+            ? "작성자 본인 또는 관리자만 수정할 수 있습니다."
+            : (err.message || "답변 수정에 실패했습니다.");
       } finally {
         this.submitting = false;
       }
@@ -414,7 +418,11 @@ export const usePostDetailStore = defineStore("postDetail", {
         await posts.loadPosts(posts.currentPage);
         this.message = "답변을 삭제했습니다.";
       } catch (submitError) {
-        this.error = (submitError as Error).message;
+        const err = submitError as { code?: string; message?: string };
+        this.error =
+          err.code === "FORBIDDEN"
+            ? "작성자 본인 또는 관리자만 삭제할 수 있습니다."
+            : (err.message || "답변 삭제에 실패했습니다.");
       } finally {
         this.submitting = false;
       }

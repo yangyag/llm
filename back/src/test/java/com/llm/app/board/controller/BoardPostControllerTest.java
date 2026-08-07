@@ -25,6 +25,8 @@ import com.llm.app.auth.JwtProvider;
 import com.llm.app.auth.UserRole;
 import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
+import com.llm.app.board.exception.AiProviderNotConfiguredException;
+import com.llm.app.board.exception.AiReplyGenerationException;
 import com.llm.app.board.dto.CreateUploadSessionRequest;
 import com.llm.app.board.dto.UploadSessionStatusResponse;
 import com.llm.app.board.model.BoardAttachment;
@@ -715,9 +717,9 @@ class BoardPostControllerTest {
 			}
 		}
 		boardPostRepository.flush();
-		boardReplyRepository.save(new BoardReply(latestPost, "답변 A", baseTime.plusSeconds(30), baseTime.plusSeconds(30)));
-		boardReplyRepository.save(new BoardReply(latestPost, "답변 B", baseTime.plusSeconds(31), baseTime.plusSeconds(31)));
-		boardReplyRepository.save(new BoardReply(twelfthPost, "답변 C", baseTime.plusSeconds(32), baseTime.plusSeconds(32)));
+		boardReplyRepository.save(new BoardReply(latestPost, "답변 A", "admin", baseTime.plusSeconds(30), baseTime.plusSeconds(30)));
+		boardReplyRepository.save(new BoardReply(latestPost, "답변 B", "admin", baseTime.plusSeconds(31), baseTime.plusSeconds(31)));
+		boardReplyRepository.save(new BoardReply(twelfthPost, "답변 C", "admin", baseTime.plusSeconds(32), baseTime.plusSeconds(32)));
 		boardAttachmentRepository.save(new BoardAttachment(
 			latestPost,
 			"latest.txt",
@@ -1072,6 +1074,377 @@ class BoardPostControllerTest {
 			.andExpect(status().isOk());
 		mockMvc.perform(get("/api/v1/posts/{id}", otherId))
 			.andExpect(status().isOk());
+	}
+
+
+	@Test
+	void updateMissingPostShouldReturn404() throws Exception {
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", 99999L)
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "없는 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+	}
+
+	@Test
+	void deleteMissingPostShouldReturn404() throws Exception {
+		mockMvc.perform(delete("/api/v1/posts/{id}", 99999L)
+				.header("Authorization", "Bearer " + memberToken))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+	}
+
+	@Test
+	void updateMissingReplyShouldReturn404() throws Exception {
+		mockMvc.perform(put("/api/v1/posts/replies/{id}", 99999L)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("본문"))))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+	}
+
+	@Test
+	void deleteMissingReplyShouldReturn404() throws Exception {
+		mockMvc.perform(delete("/api/v1/posts/replies/{id}", 99999L)
+				.header("Authorization", "Bearer " + memberToken))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
+	}
+
+	@Test
+	void aiReplyGenerationFailureShouldReturn502() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "AI 실패 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		given(aiReplyGenerator.generateReply(eq(AiProvider.GPT), anyString(), anyString()))
+			.willThrow(new AiReplyGenerationException("external api boom"));
+
+		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "provider": "GPT"
+					}
+					"""))
+			.andExpect(status().isBadGateway())
+			.andExpect(jsonPath("$.code").value("AI_REPLY_GENERATION_FAILED"));
+	}
+
+	@Test
+	void aiReplyWhenProviderNotConfiguredShouldReturn503() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "AI 미설정 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		given(aiReplyGenerator.generateReply(eq(AiProvider.GPT), anyString(), anyString()))
+			.willThrow(new AiProviderNotConfiguredException("GPT"));
+
+		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "provider": "GPT"
+					}
+					"""))
+			.andExpect(status().isServiceUnavailable())
+			.andExpect(jsonPath("$.code").value("AI_PROVIDER_NOT_CONFIGURED"));
+	}
+
+	@Test
+	void replyBodyLongerThanOneMillionShouldReturnBadRequest() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "댓글 길이 제한 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		String hugeBody = encode("a".repeat(1_000_001));
+		mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(hugeBody)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
+	}
+
+	@Test
+	void adminCanBatchDeleteOtherUsersPosts() throws Exception {
+		MvcResult memberPost = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "멤버 글 1")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		MvcResult otherPost = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + otherMemberToken)
+				.param("title", "멤버 글 2")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long memberId = extractId(memberPost.getResponse().getContentAsString());
+		long otherId = extractId(otherPost.getResponse().getContentAsString());
+
+		mockMvc.perform(post("/api/v1/posts/batch-delete")
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "ids": [%d, %d]
+					}
+					""".formatted(memberId, otherId)))
+			.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/api/v1/posts"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.totalItems").value(0));
+	}
+
+
+	@Test
+	void createReplyShouldPersistAuthorUsername() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "댓글 작성자 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("내 댓글"))))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.replies[0].body").value("내 댓글"))
+			.andExpect(jsonPath("$.replies[0].authorUsername").value("member1"));
+	}
+
+	@Test
+	void replyAuthorCanUpdateAndDeleteOwnReply() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "댓글 소유 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		MvcResult replyResult = mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("원본 댓글"))))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.replies[0].authorUsername").value("member1"))
+			.andReturn();
+		long replyId = extractFirstReplyId(replyResult.getResponse().getContentAsString());
+
+		mockMvc.perform(put("/api/v1/posts/replies/{id}", replyId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("수정된 댓글"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.replies[0].body").value("수정된 댓글"))
+			.andExpect(jsonPath("$.replies[0].authorUsername").value("member1"));
+
+		mockMvc.perform(delete("/api/v1/posts/replies/{id}", replyId)
+				.header("Authorization", "Bearer " + memberToken))
+			.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/api/v1/posts/{id}", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.replies", hasSize(0)));
+	}
+
+	@Test
+	void nonReplyAuthorCannotUpdateOrDeleteReply() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "댓글 권한 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		MvcResult replyResult = mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("멤버1의 댓글"))))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long replyId = extractFirstReplyId(replyResult.getResponse().getContentAsString());
+
+		mockMvc.perform(put("/api/v1/posts/replies/{id}", replyId)
+				.header("Authorization", "Bearer " + otherMemberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("가로채기"))))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+		mockMvc.perform(delete("/api/v1/posts/replies/{id}", replyId)
+				.header("Authorization", "Bearer " + otherMemberToken))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+		mockMvc.perform(get("/api/v1/posts/{id}", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.replies[0].body").value("멤버1의 댓글"));
+	}
+
+	@Test
+	void adminCanUpdateAndDeleteOthersReply() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "관리자 댓글 권한 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		MvcResult replyResult = mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("멤버 댓글"))))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long replyId = extractFirstReplyId(replyResult.getResponse().getContentAsString());
+
+		mockMvc.perform(put("/api/v1/posts/replies/{id}", replyId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("관리자 수정"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.replies[0].body").value("관리자 수정"))
+			.andExpect(jsonPath("$.replies[0].authorUsername").value("member1"));
+
+		mockMvc.perform(delete("/api/v1/posts/replies/{id}", replyId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isNoContent());
+	}
+
+	@Test
+	void legacyReplyWithoutAuthorCanBeManagedOnlyByAdmin() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "레거시 댓글 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		Instant now = Instant.now();
+		BoardPost post = boardPostRepository.findWithRepliesById(postId).orElseThrow();
+		BoardReply legacy = new BoardReply(
+			post,
+			"레거시 댓글",
+			null,
+			now,
+			now
+		);
+		// 게시글의 replies 컬렉션에도 추가해야 같은 트랜잭션 재조회에서 응답에 포함된다.
+		post.getReplies().add(legacy);
+		boardReplyRepository.saveAndFlush(legacy);
+
+		mockMvc.perform(put("/api/v1/posts/replies/{id}", legacy.getId())
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("멤버 수정 시도"))))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+		mockMvc.perform(put("/api/v1/posts/replies/{id}", legacy.getId())
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "bodyBase64": "%s"
+					}
+					""".formatted(encode("관리자 수정"))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.replies[0].body").value("관리자 수정"));
+	}
+
+	@Test
+	void adminCanBatchDeleteLegacyPosts() throws Exception {
+		Instant now = Instant.parse("2026-03-11T00:00:00Z");
+		BoardPost legacy = boardPostRepository.save(new BoardPost(
+			"레거시 배치 삭제",
+			"작성자 없음",
+			BoardPostMode.NORMAL,
+			null,
+			now,
+			now
+		));
+		boardPostRepository.flush();
+
+		mockMvc.perform(post("/api/v1/posts/batch-delete")
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "ids": [%d]
+					}
+					""".formatted(legacy.getId())))
+			.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/api/v1/posts"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.totalItems").value(0));
 	}
 
 	@Test

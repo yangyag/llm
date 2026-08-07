@@ -139,7 +139,7 @@ public class BoardService {
 		List<BoardPost> posts = boardPostRepository.findAllById(ids);
 		// 하나라도 권한이 없으면 어떤 글도 지우지 않는다.
 		for (BoardPost post : posts) {
-			if (!admin && !isOwner(actorUsername, post)) {
+			if (!admin && !isOwner(actorUsername, post.getAuthorUsername())) {
 				throw new ForbiddenException("작성자 본인 또는 관리자만 삭제할 수 있습니다.");
 			}
 		}
@@ -151,12 +151,13 @@ public class BoardService {
 		boardPostRepository.delete(post);
 	}
 
-	public BoardPostDetailResponse createReply(Long postId, CreateBoardReplyRequest request) {
+	public BoardPostDetailResponse createReply(String authorUsername, Long postId, CreateBoardReplyRequest request) {
 		BoardPost post = findPostWithReplies(postId);
 		Instant now = Instant.now();
 		BoardReply reply = new BoardReply(
 			post,
 			boardContentCodec.decodeBody(request.bodyBase64()),
+			authorUsername,
 			now,
 			now
 		);
@@ -176,6 +177,7 @@ public class BoardService {
 		BoardReply reply = new BoardReply(
 			post,
 			result.content(),
+			null,
 			now,
 			now,
 			true,
@@ -187,16 +189,18 @@ public class BoardService {
 		return toDetailResponse(findPostWithReplies(postId));
 	}
 
-	public BoardPostDetailResponse updateReply(Long replyId, UpdateBoardReplyRequest request) {
+	public BoardPostDetailResponse updateReply(String actorUsername, Long replyId, UpdateBoardReplyRequest request) {
 		BoardReply reply = findReply(replyId);
 		ensureReplyIsEditable(reply);
+		ensureCanManageReply(actorUsername, reply);
 		reply.update(boardContentCodec.decodeBody(request.bodyBase64()), Instant.now());
 		return toDetailResponse(findPostWithReplies(reply.getPost().getId()));
 	}
 
-	public void deleteReply(Long replyId) {
+	public void deleteReply(String actorUsername, Long replyId) {
 		BoardReply reply = findReply(replyId);
 		ensureReplyIsEditable(reply);
+		ensureCanManageReply(actorUsername, reply);
 		reply.getPost().getReplies().remove(reply);
 		boardReplyRepository.delete(reply);
 		boardReplyRepository.flush();
@@ -246,14 +250,29 @@ public class BoardService {
 		if (actor.getRole() == UserRole.ADMIN) {
 			return;
 		}
-		if (!isOwner(actorUsername, post)) {
+		if (!isOwner(actorUsername, post.getAuthorUsername())) {
 			throw new ForbiddenException("작성자 본인 또는 관리자만 수정·삭제할 수 있습니다.");
 		}
 	}
 
-	private boolean isOwner(String actorUsername, BoardPost post) {
-		return post.getAuthorUsername() != null
-			&& Objects.equals(post.getAuthorUsername(), actorUsername);
+	/**
+	 * 작성자 본인 또는 ADMIN만 댓글 수정/삭제 가능.
+	 * authorUsername 이 null 인 댓글(AI 답변 등)은 앞선 ensureReplyIsEditable 에서 이미 차단되며,
+	 * null 이 남아있는 레거시 일반 댓글은 ADMIN 만 관리 가능.
+	 */
+	private void ensureCanManageReply(String actorUsername, BoardReply reply) {
+		Admin actor = requireExistingUser(actorUsername);
+		if (actor.getRole() == UserRole.ADMIN) {
+			return;
+		}
+		if (!isOwner(actorUsername, reply.getAuthorUsername())) {
+			throw new ForbiddenException("작성자 본인 또는 관리자만 수정·삭제할 수 있습니다.");
+		}
+	}
+
+	private boolean isOwner(String actorUsername, String authorUsername) {
+		return authorUsername != null
+			&& Objects.equals(authorUsername, actorUsername);
 	}
 
 	private Admin requireExistingUser(String username) {
