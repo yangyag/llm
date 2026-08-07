@@ -16,5 +16,7 @@ public interface BoardPostSummaryProjection {
 
 	boolean getHasAttachment();
 
+	String getAuthorUsername();
+
 	Instant getCreatedAt();
 }

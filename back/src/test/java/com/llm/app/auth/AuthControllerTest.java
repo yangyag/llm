@@ -43,6 +43,7 @@ class AuthControllerTest {
         Admin admin = new Admin();
         admin.setUsername("admin");
         admin.setPasswordHash(passwordEncoder.encode("admin"));
+        admin.setRole(UserRole.ADMIN);
         admin.setCreatedAt(Instant.now());
         adminRepository.save(admin);
     }
@@ -69,6 +70,7 @@ class AuthControllerTest {
         Admin admin = new Admin();
         admin.setUsername("admin1");
         admin.setPasswordHash(passwordEncoder.encode("admin"));
+        admin.setRole(UserRole.ADMIN);
         admin.setCreatedAt(Instant.now());
         adminRepository.save(admin);
 

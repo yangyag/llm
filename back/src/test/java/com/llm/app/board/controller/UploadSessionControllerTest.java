@@ -14,7 +14,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.llm.app.auth.Admin;
+import com.llm.app.auth.AdminRepository;
 import com.llm.app.auth.JwtProvider;
+import com.llm.app.auth.UserRole;
 import com.llm.app.board.ai.AiReplyGenerator;
 import com.llm.app.board.dto.CreateUploadSessionRequest;
 import com.llm.app.board.dto.EncryptedUploadSessionCreateRequest;
@@ -32,11 +35,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -85,6 +90,12 @@ class UploadSessionControllerTest {
 	@Value("${app.upload-sessions.root-path}")
 	private String uploadSessionRootPath;
 
+	@Autowired
+	private AdminRepository adminRepository;
+
+	@Autowired
+	private PasswordEncoder passwordEncoder;
+
 	@MockBean
 	private AiReplyGenerator aiReplyGenerator;
 
@@ -97,8 +108,15 @@ class UploadSessionControllerTest {
 		boardPostRepository.deleteAll();
 		uploadSessionPartRepository.deleteAll();
 		uploadSessionRepository.deleteAll();
+		adminRepository.deleteAll();
 		deleteRecursively(Path.of(attachmentRootPath));
 		deleteRecursively(Path.of(uploadSessionRootPath));
+		Admin admin = new Admin();
+		admin.setUsername("admin");
+		admin.setPasswordHash(passwordEncoder.encode("adminpass"));
+		admin.setRole(UserRole.ADMIN);
+		admin.setCreatedAt(Instant.now());
+		adminRepository.saveAndFlush(admin);
 		token = jwtProvider.generateToken("admin");
 	}
 
@@ -142,6 +160,7 @@ class UploadSessionControllerTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
 			.andExpect(jsonPath("$.conversionReady").value(true))
+			.andExpect(jsonPath("$.authorUsername").value("admin"))
 			.andExpect(jsonPath("$.attachments", hasSize(1)))
 			.andExpect(jsonPath("$.attachments[0].originalFilename").value("bundle.zip"))
 			.andExpect(jsonPath("$.title").value("[bundle.zip] 업로드 완료"))

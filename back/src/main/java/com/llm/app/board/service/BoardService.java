@@ -1,5 +1,10 @@
 package com.llm.app.board.service;
 
+import com.llm.app.auth.Admin;
+import com.llm.app.auth.AdminRepository;
+import com.llm.app.auth.ForbiddenException;
+import com.llm.app.auth.InvalidCredentialsException;
+import com.llm.app.auth.UserRole;
 import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
 import java.util.List;
@@ -29,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -46,6 +52,7 @@ public class BoardService {
 	private final BoardPostRepository boardPostRepository;
 	private final BoardReplyRepository boardReplyRepository;
 	private final BoardAttachmentRepository boardAttachmentRepository;
+	private final AdminRepository adminRepository;
 	private final BoardContentCodec boardContentCodec;
 	private final BoardMapper boardMapper;
 	private final AiReplyGenerator aiReplyGenerator;
@@ -56,6 +63,7 @@ public class BoardService {
 		BoardPostRepository boardPostRepository,
 		BoardReplyRepository boardReplyRepository,
 		BoardAttachmentRepository boardAttachmentRepository,
+		AdminRepository adminRepository,
 		BoardContentCodec boardContentCodec,
 		BoardMapper boardMapper,
 		AiReplyGenerator aiReplyGenerator,
@@ -65,6 +73,7 @@ public class BoardService {
 		this.boardPostRepository = boardPostRepository;
 		this.boardReplyRepository = boardReplyRepository;
 		this.boardAttachmentRepository = boardAttachmentRepository;
+		this.adminRepository = adminRepository;
 		this.boardContentCodec = boardContentCodec;
 		this.boardMapper = boardMapper;
 		this.aiReplyGenerator = aiReplyGenerator;
@@ -88,13 +97,14 @@ public class BoardService {
 		return toDetailResponse(findPostWithReplies(id));
 	}
 
-	public BoardPostDetailResponse createPost(CreateBoardPostRequest request) {
+	public BoardPostDetailResponse createPost(String authorUsername, CreateBoardPostRequest request) {
 		Instant now = Instant.now();
 		BoardPostMode mode = request.getMode();
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
 			resolvePostBody(mode, request.getBodyBase64()),
 			mode,
+			authorUsername,
 			now,
 			now
 		));
@@ -102,8 +112,9 @@ public class BoardService {
 		return toDetailResponse(savedPost);
 	}
 
-	public BoardPostDetailResponse updatePost(Long id, UpdateBoardPostRequest request) {
+	public BoardPostDetailResponse updatePost(String actorUsername, Long id, UpdateBoardPostRequest request) {
 		BoardPost post = findPostWithReplies(id);
+		ensureCanManagePost(actorUsername, post);
 		ensurePostIsEditable(post);
 		BoardPostMode mode = request.getMode();
 		post.update(
@@ -116,12 +127,23 @@ public class BoardService {
 		return toDetailResponse(post);
 	}
 
-	public void deletePost(Long id) {
-		deletePostEntity(findPostWithReplies(id));
+	public void deletePost(String actorUsername, Long id) {
+		BoardPost post = findPostWithReplies(id);
+		ensureCanManagePost(actorUsername, post);
+		deletePostEntity(post);
 	}
 
-	public void batchDeletePosts(List<Long> ids) {
-		boardPostRepository.findAllById(ids).forEach(this::deletePostEntity);
+	public void batchDeletePosts(String actorUsername, List<Long> ids) {
+		Admin actor = requireExistingUser(actorUsername);
+		boolean admin = actor.getRole() == UserRole.ADMIN;
+		List<BoardPost> posts = boardPostRepository.findAllById(ids);
+		// 하나라도 권한이 없으면 어떤 글도 지우지 않는다.
+		for (BoardPost post : posts) {
+			if (!admin && !isOwner(actorUsername, post)) {
+				throw new ForbiddenException("작성자 본인 또는 관리자만 삭제할 수 있습니다.");
+			}
+		}
+		posts.forEach(this::deletePostEntity);
 	}
 
 	private void deletePostEntity(BoardPost post) {
@@ -213,6 +235,30 @@ public class BoardService {
 		if (post.getMode() == BoardPostMode.FILE_CONVERSION_REQUEST && !findAttachments(post.getId()).isEmpty()) {
 			throw new FileConversionLockedException(post.getId());
 		}
+	}
+
+	/**
+	 * 작성자 본인 또는 ADMIN만 게시글 수정/삭제 가능.
+	 * authorUsername 이 null 인 레거시 글은 ADMIN만 관리 가능.
+	 */
+	private void ensureCanManagePost(String actorUsername, BoardPost post) {
+		Admin actor = requireExistingUser(actorUsername);
+		if (actor.getRole() == UserRole.ADMIN) {
+			return;
+		}
+		if (!isOwner(actorUsername, post)) {
+			throw new ForbiddenException("작성자 본인 또는 관리자만 수정·삭제할 수 있습니다.");
+		}
+	}
+
+	private boolean isOwner(String actorUsername, BoardPost post) {
+		return post.getAuthorUsername() != null
+			&& Objects.equals(post.getAuthorUsername(), actorUsername);
+	}
+
+	private Admin requireExistingUser(String username) {
+		return adminRepository.findByUsername(username)
+			.orElseThrow(() -> new InvalidCredentialsException("User no longer exists"));
 	}
 
 	private BoardPostDetailResponse toDetailResponse(BoardPost post) {

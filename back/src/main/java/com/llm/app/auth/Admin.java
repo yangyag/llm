@@ -15,6 +15,10 @@ public class Admin {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserRole role;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -22,10 +26,12 @@ public class Admin {
     public Long getId() { return id; }
     public String getUsername() { return username; }
     public String getPasswordHash() { return passwordHash; }
+    public UserRole getRole() { return role; }
     public Instant getCreatedAt() { return createdAt; }
 
     // setters
     public void setUsername(String username) { this.username = username; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public void setRole(UserRole role) { this.role = role; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

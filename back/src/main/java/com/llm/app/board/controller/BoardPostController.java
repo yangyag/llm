@@ -60,8 +60,8 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@Valid @ModelAttribute CreateBoardPostRequest request
 	) {
-		jwtProvider.authenticate(authHeader);
-		return boardService.createPost(request);
+		String username = jwtProvider.authenticate(authHeader);
+		return boardService.createPost(username, request);
 	}
 
 	@PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -70,8 +70,8 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @ModelAttribute UpdateBoardPostRequest request
 	) {
-		jwtProvider.authenticate(authHeader);
-		return boardService.updatePost(id, request);
+		String username = jwtProvider.authenticate(authHeader);
+		return boardService.updatePost(username, id, request);
 	}
 
 	@DeleteMapping("/{id}")
@@ -80,8 +80,8 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long id
 	) {
-		jwtProvider.authenticate(authHeader);
-		boardService.deletePost(id);
+		String username = jwtProvider.authenticate(authHeader);
+		boardService.deletePost(username, id);
 	}
 
 	@PostMapping("/batch-delete")
@@ -90,8 +90,8 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@Valid @RequestBody BatchDeleteRequest request
 	) {
-		jwtProvider.authenticate(authHeader);
-		boardService.batchDeletePosts(request.ids());
+		String username = jwtProvider.authenticate(authHeader);
+		boardService.batchDeletePosts(username, request.ids());
 	}
 
 	@PostMapping("/{id}/replies")

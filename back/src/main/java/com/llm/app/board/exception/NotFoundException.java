@@ -22,4 +22,8 @@ public class NotFoundException extends RuntimeException {
     public static NotFoundException uploadSession(UUID sessionId) {
         return new NotFoundException("upload session not found: " + sessionId);
     }
+
+    public static NotFoundException user(Long id) {
+        return new NotFoundException("user not found: " + id);
+    }
 }

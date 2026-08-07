@@ -19,7 +19,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.llm.app.auth.Admin;
+import com.llm.app.auth.AdminRepository;
 import com.llm.app.auth.JwtProvider;
+import com.llm.app.auth.UserRole;
 import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
 import com.llm.app.board.dto.CreateUploadSessionRequest;
@@ -44,6 +47,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -87,18 +91,41 @@ class BoardPostControllerTest {
 	@Autowired
 	private JwtProvider jwtProvider;
 
+	@Autowired
+	private AdminRepository adminRepository;
+
+	@Autowired
+	private PasswordEncoder passwordEncoder;
+
 	@MockBean
 	private AiReplyGenerator aiReplyGenerator;
 
 	private String token;
+	private String memberToken;
+	private String otherMemberToken;
 
 	@BeforeEach
 	void setUp() throws IOException {
 		boardAttachmentRepository.deleteAll();
 		boardReplyRepository.deleteAll();
 		boardPostRepository.deleteAll();
+		adminRepository.deleteAll();
 		deleteRecursively(Path.of(attachmentRootPath));
+		saveUser("admin", "adminpass", UserRole.ADMIN);
+		saveUser("member1", "memberpass", UserRole.USER);
+		saveUser("member2", "memberpass", UserRole.USER);
 		token = jwtProvider.generateToken("admin");
+		memberToken = jwtProvider.generateToken("member1");
+		otherMemberToken = jwtProvider.generateToken("member2");
+	}
+
+	private Admin saveUser(String username, String password, UserRole role) {
+		Admin admin = new Admin();
+		admin.setUsername(username);
+		admin.setPasswordHash(passwordEncoder.encode(password));
+		admin.setRole(role);
+		admin.setCreatedAt(Instant.now());
+		return adminRepository.saveAndFlush(admin);
 	}
 
 	@Test
@@ -112,6 +139,7 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.title").value("첫 글"))
 			.andExpect(jsonPath("$.body").value("첫 번째 게시글 본문"))
 			.andExpect(jsonPath("$.mode").value("NORMAL"))
+			.andExpect(jsonPath("$.authorUsername").value("admin"))
 			.andExpect(jsonPath("$.conversionReady").value(false))
 			.andExpect(jsonPath("$.attachments", hasSize(0)))
 			.andReturn();
@@ -675,6 +703,7 @@ class BoardPostControllerTest {
 				"글 " + i,
 				"본문 " + i,
 				mode,
+				"admin",
 				baseTime.plusSeconds(i),
 				baseTime.plusSeconds(i)
 			));
@@ -822,6 +851,7 @@ class BoardPostControllerTest {
 			"변환 요청",
 			"자동 업로드 생성 게시글입니다.",
 			BoardPostMode.FILE_CONVERSION_REQUEST,
+			"admin",
 			now,
 			now
 		));
@@ -915,6 +945,161 @@ class BoardPostControllerTest {
 
 		mockMvc.perform(delete("/api/v1/posts/{id}", postId))
 			.andExpect(status().isUnauthorized());
+	}
+
+
+	@Test
+	void createPostShouldPersistAuthorUsername() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "멤버 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.authorUsername").value("member1"));
+
+		mockMvc.perform(get("/api/v1/posts"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.items[0].authorUsername").value("member1"));
+	}
+
+	@Test
+	void authorCanUpdateAndDeleteOwnPost() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "내 글")
+				.param("bodyBase64", encode("원본")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "수정된 내 글")
+				.param("bodyBase64", encode("수정 본문")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.title").value("수정된 내 글"))
+			.andExpect(jsonPath("$.authorUsername").value("member1"));
+
+		mockMvc.perform(delete("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + memberToken))
+			.andExpect(status().isNoContent());
+
+		mockMvc.perform(get("/api/v1/posts/{id}", postId))
+			.andExpect(status().isNotFound());
+	}
+
+	@Test
+	void nonAuthorCannotUpdateOrDeletePost() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "멤버1 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + otherMemberToken)
+				.param("title", "가로채기")
+				.param("bodyBase64", encode("불가")))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+		mockMvc.perform(delete("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + otherMemberToken))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+		mockMvc.perform(get("/api/v1/posts/{id}", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.title").value("멤버1 글"));
+	}
+
+	@Test
+	void adminCanUpdateAndDeleteOthersPost() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "멤버 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "관리자 수정")
+				.param("bodyBase64", encode("관리자 본문")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.title").value("관리자 수정"))
+			.andExpect(jsonPath("$.authorUsername").value("member1"));
+
+		mockMvc.perform(delete("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isNoContent());
+	}
+
+	@Test
+	void batchDeleteRejectsWhenNonOwnerIncludesOthersPost() throws Exception {
+		MvcResult ownResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "내 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		MvcResult otherResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + otherMemberToken)
+				.param("title", "남의 글")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long ownId = extractId(ownResult.getResponse().getContentAsString());
+		long otherId = extractId(otherResult.getResponse().getContentAsString());
+
+		mockMvc.perform(post("/api/v1/posts/batch-delete")
+				.header("Authorization", "Bearer " + memberToken)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "ids": [%d, %d]
+					}
+					""".formatted(ownId, otherId)))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+		// 트랜잭션 롤백으로 둘 다 남아야 한다.
+		mockMvc.perform(get("/api/v1/posts/{id}", ownId))
+			.andExpect(status().isOk());
+		mockMvc.perform(get("/api/v1/posts/{id}", otherId))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void legacyPostWithoutAuthorCanBeManagedOnlyByAdmin() throws Exception {
+		Instant now = Instant.parse("2026-03-11T00:00:00Z");
+		BoardPost legacy = boardPostRepository.save(new BoardPost(
+			"레거시 글",
+			"작성자 없음",
+			BoardPostMode.NORMAL,
+			null,
+			now,
+			now
+		));
+		boardPostRepository.flush();
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", legacy.getId())
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "멤버 수정 시도")
+				.param("bodyBase64", encode("불가")))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", legacy.getId())
+				.header("Authorization", "Bearer " + token)
+				.param("title", "관리자 레거시 수정")
+				.param("bodyBase64", encode("가능")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.title").value("관리자 레거시 수정"));
 	}
 
 	private String encode(String value) {

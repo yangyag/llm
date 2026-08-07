@@ -33,6 +33,10 @@ public class BoardPost {
 	@Column(nullable = false, length = 40)
 	private BoardPostMode mode;
 
+	/** 작성자 username. 레거시 글은 null일 수 있으며 그 경우 관리자만 수정/삭제 가능. */
+	@Column(name = "author_username", length = 100)
+	private String authorUsername;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -46,10 +50,18 @@ public class BoardPost {
 	protected BoardPost() {
 	}
 
-	public BoardPost(String title, String body, BoardPostMode mode, Instant createdAt, Instant updatedAt) {
+	public BoardPost(
+		String title,
+		String body,
+		BoardPostMode mode,
+		String authorUsername,
+		Instant createdAt,
+		Instant updatedAt
+	) {
 		this.title = title;
 		this.body = body;
 		this.mode = mode;
+		this.authorUsername = authorUsername;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
 	}
@@ -68,6 +80,10 @@ public class BoardPost {
 
 	public BoardPostMode getMode() {
 		return mode;
+	}
+
+	public String getAuthorUsername() {
+		return authorUsername;
 	}
 
 	public Instant getCreatedAt() {

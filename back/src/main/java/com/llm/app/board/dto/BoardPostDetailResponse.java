@@ -10,6 +10,7 @@ public record BoardPostDetailResponse(
 	String body,
 	BoardPostMode mode,
 	boolean conversionReady,
+	String authorUsername,
 	Instant createdAt,
 	Instant updatedAt,
 	List<BoardAttachmentDto> attachments,

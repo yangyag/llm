@@ -167,6 +167,7 @@ public class UploadSessionService {
 					session.getFileSha256()
 				),
 				BoardPostMode.FILE_CONVERSION_REQUEST,
+				username,
 				now,
 				now
 			));

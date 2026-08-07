@@ -32,7 +32,7 @@ public class AuthController {
         String token = authHeader.substring(7);
         try {
             String username = jwtProvider.validateAndGetUsername(token);
-            return ResponseEntity.ok(new AdminMeResponse(username));
+            return ResponseEntity.ok(authService.me(username));
         } catch (InvalidCredentialsException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }

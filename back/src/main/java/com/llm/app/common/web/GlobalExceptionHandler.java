@@ -1,6 +1,10 @@
 package com.llm.app.common.web;
 
+import com.llm.app.auth.DuplicateUsernameException;
+import com.llm.app.auth.ForbiddenException;
 import com.llm.app.auth.InvalidCredentialsException;
+import com.llm.app.auth.LastAdminProtectedException;
+import com.llm.app.auth.SelfDeleteNotAllowedException;
 import com.llm.app.board.exception.AiProviderNotConfiguredException;
 import com.llm.app.board.exception.AiReplyGenerationException;
 import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
@@ -31,6 +35,38 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+	@ExceptionHandler(ForbiddenException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleForbidden(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler(DuplicateUsernameException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleDuplicateUsername(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.CONFLICT, "DUPLICATE_USERNAME", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler(LastAdminProtectedException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleLastAdminProtected(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.CONFLICT, "LAST_ADMIN_PROTECTED", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler(SelfDeleteNotAllowedException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleSelfDeleteNotAllowed(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.CONFLICT, "SELF_DELETE_NOT_ALLOWED", exception.getMessage(), request);
+	}
 
 	@ExceptionHandler({ InvalidCredentialsException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidCredentials(

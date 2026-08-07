@@ -10,6 +10,7 @@ public record BoardPostSummaryDto(
 	boolean conversionReady,
 	int replyCount,
 	boolean hasAttachment,
+	String authorUsername,
 	Instant createdAt
 ) {
 }

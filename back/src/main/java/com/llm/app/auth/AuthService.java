@@ -25,6 +25,13 @@ public class AuthService {
         }
 
         String token = jwtProvider.generateToken(admin.getUsername());
-        return new LoginResponse(token, admin.getUsername());
+        return new LoginResponse(token, admin.getUsername(), admin.getRole());
+    }
+
+    /** 토큰 username 기준 현재 계정 정보. 계정이 삭제됐으면 401로 처리되게 InvalidCredentials. */
+    public AdminMeResponse me(String username) {
+        Admin admin = adminRepository.findByUsername(username)
+            .orElseThrow(() -> new InvalidCredentialsException("User no longer exists"));
+        return new AdminMeResponse(admin.getUsername(), admin.getRole());
     }
 }

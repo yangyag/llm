@@ -25,6 +25,7 @@ public class BoardMapper {
 					post.getConversionReady(),
 					Math.toIntExact(post.getReplyCount()),
 					post.getHasAttachment(),
+					post.getAuthorUsername(),
 					post.getCreatedAt()
 				))
 				.toList(),
@@ -53,6 +54,7 @@ public class BoardMapper {
 			post.getBody(),
 			post.getMode(),
 			post.getMode() == com.llm.app.board.model.BoardPostMode.FILE_CONVERSION_REQUEST && !safeAttachments.isEmpty(),
+			post.getAuthorUsername(),
 			post.getCreatedAt(),
 			post.getUpdatedAt(),
 			attachmentDtos,
