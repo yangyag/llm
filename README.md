@@ -149,13 +149,14 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 - EC2에서는 `/home/ubuntu/llm/.env` 하나만 관리하면 됩니다.
 - EC2 운영 시 기대값은 다음과 같습니다.
   - `APP_DB_HOST=auto-postgres`
+  - `APP_DB_NAME=llm`
   - `APP_DB_SCHEMA=llm`
   - `APP_CORS_ALLOWED_ORIGINS=https://<your-domain>`
   - `LLM_API_BASE_URL=https://<your-domain>`
   - `APP_JWT_SECRET`와 `APP_UPLOAD_SESSIONS_SECRET`는 배포 전에 반드시 설정해야 합니다.
   - `APP_UPLOAD_SESSIONS_ROOT_PATH=/var/lib/llm/upload-sessions`를 반드시 설정합니다. 없으면 백엔드가 `${java.io.tmpdir}/llm-upload-sessions`로 fallback해 upload-session volume이 무시되고 ZIP finalize 청크가 유실될 수 있습니다.
   - `APP_UPLOAD_SESSIONS_SECRET`는 backend와 `upload_zip_post.py`가 같은 값을 쓰도록 맞춰야 하며, `LLM_UPLOAD_SESSIONS_SECRET`를 바꾸면 스크립트도 같은 값을 사용해야 합니다.
-- EC2 운영 DB는 `auto-postgres` 컨테이너의 `auto` DB 안에 있는 `llm` schema를 사용합니다.
+- EC2 운영 DB는 `auto-postgres` 컨테이너의 전용 database `llm`(schema `llm`)을 사용합니다. 예전처럼 `auto` database에 스키마만 얹지 않습니다.
 - `auto-postgres`는 compose 외부 컨테이너이므로 LLM compose 네트워크에 연결되어 있어야 합니다. EC2에서는 `auto_default`를 수동 생성하지 마세요 — 이 네트워크는 auto-postgres 스택 소유이며, 빈 네트워크를 만들면 DB 누락을 가립니다. 배포 전 `docker network inspect auto_default`로 존재를 확인합니다.
 
 ## 프로젝트 규칙

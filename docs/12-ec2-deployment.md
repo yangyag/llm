@@ -74,7 +74,7 @@ curl -fsS http://127.0.0.1:8083/api/v1/health
 APP_CORS_ALLOWED_ORIGINS=http://43.202.113.123:8083,http://localhost:8083,https://yangyag.duckdns.org
 APP_DB_HOST=auto-postgres
 APP_DB_PORT=5432
-APP_DB_NAME=auto
+APP_DB_NAME=llm
 APP_DB_SCHEMA=llm
 APP_ATTACHMENTS_ROOT_PATH=/var/lib/llm/attachments
 OPENAI_MODEL=gpt-5.5
@@ -128,7 +128,7 @@ curl -fsS https://yangyag.duckdns.org/api/v1/health
 배포 전 확인:
 
 ```bash
-docker exec -e PGPASSWORD="$DB_PASS" auto-postgres psql -U llm -d auto   -c "select version, description, checksum from llm.flyway_schema_history order by installed_rank;"
+docker exec -e PGPASSWORD="$DB_PASS" auto-postgres psql -U llm -d llm   -c "select version, description, checksum from llm.flyway_schema_history order by installed_rank;"
 ```
 
 - 로컬 저장소의 마이그레이션 파일과 EC2 history의 description/checksum이 일치해야 합니다.

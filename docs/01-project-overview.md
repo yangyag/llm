@@ -56,7 +56,7 @@
 
 - EC2 운영 디렉터리: `/home/ubuntu/llm`
 - 실행 중인 LLM 컨테이너: `llm-front`, `llm-back`
-- 공용 PostgreSQL 컨테이너: `auto-postgres`
+- 공용 PostgreSQL 컨테이너: `auto-postgres` (전용 database `llm`, schema `llm`. 2026-08-27에 `auto` DB 스키마에서 이관)
 - `llm-front`, `llm-back`, `auto-postgres` 모두 Docker health 기준 `healthy`
 - 헬스체크 응답: `http://127.0.0.1:8083/api/v1/health`에서 `{"status":"UP",...}`
 - 백엔드 8080은 호스트에 직접 publish되어 있지 않고 front 컨테이너가 `/api/`를 proxy합니다.

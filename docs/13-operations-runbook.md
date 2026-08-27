@@ -97,7 +97,7 @@ docker logs -f llm-back
 ## DB 점검
 
 ```bash
-docker exec -it auto-postgres psql -U <db-user> -d auto
+docker exec -it auto-postgres psql -U <db-user> -d llm
 ```
 
 ```sql
@@ -124,7 +124,7 @@ docker volume ls | grep llm
 DB dump:
 
 ```bash
-docker exec auto-postgres pg_dump -U <db-user> -d auto -n llm > llm-$(date +%Y%m%d-%H%M%S).sql
+docker exec auto-postgres pg_dump -U <db-user> -d llm > llm-$(date +%Y%m%d-%H%M%S).sql
 ```
 
 첨부파일 volume backup 예시:

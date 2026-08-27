@@ -19,7 +19,7 @@ Browser
 | --- | --- | --- |
 | Frontend | `llm-front` | Nuxt 정적 산출물 제공, `/api/` 요청을 백엔드로 proxy |
 | Backend | `llm-back` | REST API, 인증, 게시판, 업로드 세션, AI 답변 생성 |
-| Database | `auto-postgres` 운영 기준 | PostgreSQL 데이터 저장 |
+| Database | `auto-postgres` 운영 기준 | PostgreSQL. 전용 database `llm`(schema `llm`) |
 | Volumes | `*-llm-back-attachments`, `*-llm-back-upload-sessions` | 첨부파일과 임시 청크 저장 |
 
 `docker-compose.yml`의 `back` 서비스는 `default` 네트워크와 외부 `auto_default` 네트워크에 동시에 연결됩니다. 운영 DB `auto-postgres`는 `auto_default` 네트워크를 통해 접근합니다.
