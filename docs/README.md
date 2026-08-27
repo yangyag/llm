@@ -26,8 +26,8 @@
 ## 현재 운영 기준
 
 - 로컬 저장소 루트: `/home/yangyag/llm`
-- EC2 접속 자료: 저장소 루트 `aws/` 폴더 (Git 제외)
-- EC2 접속 키: `aws/test-keypair.pem`
+- EC2 접속 자료: 저장소 루트 `aws/` (`connect.sh` / `connect.ps1` 커밋, PEM은 Git 제외)
+- EC2 접속 키: `aws/test-keypair.pem` (로컬 전용)
 - EC2 운영 디렉터리: `/home/ubuntu/llm`
 - EC2 운영 서비스: `llm-front`, `llm-back`, `yangyag-postgres`
 - EC2 운영 DB: `yangyag-postgres` 컨테이너의 database `llm` (schema `llm`)

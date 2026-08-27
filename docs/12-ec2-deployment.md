@@ -1,6 +1,6 @@
 # EC2 배포
 
-EC2 접속과 운영 파일 확인에는 이 저장소 루트의 `aws/` 폴더(Git 제외)를 사용합니다.
+EC2 접속과 운영 파일 확인에는 이 저장소 루트의 `aws/` 폴더를 사용합니다. 접속 스크립트(`connect.sh`, `connect.ps1`)는 Git에 포함되고, PEM 키만 Git에서 제외합니다.
 
 ## 접속 정보
 
@@ -8,7 +8,7 @@ EC2 접속과 운영 파일 확인에는 이 저장소 루트의 `aws/` 폴더(G
 
 | 항목 | 값 |
 | --- | --- |
-| PEM key | `aws/test-keypair.pem` (저장소 로컬, Git 제외) |
+| PEM key | `aws/test-keypair.pem` (로컬 전용, Git 제외) |
 | SSH user | `ubuntu` |
 | Host | `43.202.113.123` |
 | 운영 디렉터리 | `/home/ubuntu/llm` |
