@@ -21,7 +21,7 @@
 ```bash
 cp .env.example .env
 docker network inspect auto_default >/dev/null 2>&1 || docker network create auto_default
-docker compose pull
+docker compose pull back
 docker compose up -d --wait
 ```
 
@@ -39,7 +39,7 @@ docker compose down
 공통 compose는 `.env`에서 환경별 값을 읽습니다. 로컬과 EC2는 각각 자기 머신의 `.env`만 다르게 두고, 실제 `.env` 파일은 `.gitignore`로 관리 대상에서 제외합니다.
 
 - `NUXT_PUBLIC_API_BASE`: 프론트 이미지를 빌드할 때 사용할 API base URL (빌드 타임에 번들로 고정되어 런타임 변경 불가, 변경 시 front 이미지 재빌드 필요)
-- `LLM_BACK_IMAGE`, `LLM_FRONT_IMAGE`: compose가 실행할 Docker 이미지
+- `LLM_BACK_IMAGE`, `LLM_FRONT_IMAGE`: compose가 실행할 Docker 이미지. 프론트 기본값은 로컬 태그 `llm-front:1.0`
 - `LLM_FRONT_PORT`: 프론트 컨테이너를 호스트에 공개할 포트
 - `APP_CORS_ALLOWED_ORIGINS`: 허용 Origin 목록
 - `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SCHEMA`: 백엔드 DB 연결
@@ -115,6 +115,7 @@ docker compose up -d --wait
 로컬 소스 기준으로 이미지를 다시 만들 때:
 
 ```bash
+cd front && npm ci && npm run build && cd ..
 docker compose --profile build build back-build front-build
 docker compose up -d --wait
 ```
@@ -124,8 +125,8 @@ docker compose up -d --wait
 EC2 배포도 루트 [`docker-compose.yml`](/home/yangyag/llm/docker-compose.yml) 하나를 사용합니다. 운영 파일은 EC2의 `/home/ubuntu/llm` 아래에서 관리하고, 환경값은 `/home/ubuntu/llm/.env`에 둡니다. 시작점은 `/home/yangyag/llm/.env.example`입니다.
 
 사용 이미지:
-- `yangyag2/llm-front:latest`
-- `yangyag2/llm-back:latest`
+- `llm-front:1.0` (Windows에서 빌드 후 tar로 EC2 `docker load`. Hub에 없음)
+- `yangyag2/llm-back:latest` (Docker Hub)
 
 준비 절차:
 
@@ -138,7 +139,7 @@ cd /home/ubuntu/llm
 docker info >/dev/null
 docker network inspect auto_default >/dev/null
 export LLM_ENV_FILE=/home/ubuntu/llm/.env
-docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull back
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
@@ -171,10 +172,9 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 - `git commit` 메시지는 한글로 작성합니다.
 
 ### 배포
-- 기본 Docker Hub 네임스페이스는 `yangyag2`를 사용합니다.
-- 기본 push 대상 이미지는 `yangyag2/llm-front:latest`, `yangyag2/llm-back:latest`입니다.
-- Docker Hub 이미지 push는 기본적으로 `latest` 태그만 사용합니다.
-- 타임스탬프 등 추가 태그는 사용하지 않으며, 예외는 사용자가 명시적으로 요청한 경우만 허용합니다.
+- 백엔드는 Docker Hub 네임스페이스 `yangyag2`, 이미지 `yangyag2/llm-back:latest`입니다.
+- 프론트는 Hub에 올리지 않습니다. Windows에서 `nuxi generate` 후 `llm-front:1.0`을 만들고 tar로 EC2에 load합니다. 배포 스크립트는 `.\aws\deploy-front.ps1`입니다.
+- 백엔드 Hub push는 기본적으로 `latest` 태그만 사용합니다.
 
 ### 품질 게이트
 - 테스트 원칙: 백엔드 API JUnit(`MockMvc`) 중심

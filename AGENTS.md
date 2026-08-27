@@ -45,7 +45,7 @@
 - 업로드 세션 secret은 백엔드(`APP_UPLOAD_SESSIONS_SECRET`)와 스크립트가 **동일**해야 함 (alias A1~A11 + AES-GCM wire format, docs/08).
 - 게시글/댓글 본문은 `bodyBase64`(UTF-8→Base64, 보안 아님). 생성/수정은 `multipart/form-data`.
 - 운영에서 `docker compose down -v` / 무분별한 volume·prune 금지 (첨부 데이터 손실). 수동 compose는 `LLM_ENV_FILE=/home/ubuntu/llm/.env`를 설정하고 `--project-name ubuntu --env-file .env -f docker-compose.yml`을 명시.
-- 빌드/배포: Docker Hub namespace `yangyag2`, 태그 `latest`만 push (롤백 위해 시각/SHA/digest 기록). compose 이미지 빌드는 `docker compose --profile build build back-build front-build`.
+- 빌드/배포: 백엔드는 Docker Hub `yangyag2/llm-back:latest`. 프론트는 Hub에 올리지 않고 Windows에서 `nuxi generate` → `llm-front:1.0` 이미지 → `docker save` tar → EC2 `~/llm/`에 scp → `docker load` → compose up. EC2에서 front를 빌드하지 않는다(메모리). compose front는 `pull_policy: never`.
 
 ## 상세 문서 안내 (docs/)
 | 주제 | 경로 |

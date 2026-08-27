@@ -29,11 +29,12 @@ curl -fsS http://localhost:8083/api/v1/health
 
 ```bash
 cd /home/yangyag/llm
+cd front && npm ci && npm run build && cd ..
 docker compose --profile build build back-build front-build
 docker compose up -d --wait
 ```
 
-빌드 프로파일은 `back-build`, `front-build` 서비스로 이미지만 만들고 런타임 컨테이너는 `back`, `front`가 실행합니다.
+`front-build`는 이미 만들어 둔 `front/.output/public`을 nginx 이미지에 넣을 뿐입니다. `nuxi generate`를 건너뛰면 이미지 빌드가 실패합니다. 런타임 컨테이너는 `back`, `front`가 실행합니다.
 
 ## 백엔드 단독 실행
 

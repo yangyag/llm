@@ -24,10 +24,12 @@ services:
     restart: unless-stopped
 
   front:
-    image: ${LLM_FRONT_IMAGE:-yangyag2/llm-front:latest}
+    image: ${LLM_FRONT_IMAGE:-llm-front:1.0}
+    pull_policy: never
     container_name: llm-front
     ports:
       - "${LLM_FRONT_PORT:-8083}:80"
+    mem_limit: 64m
     depends_on:
       back:
         condition: service_healthy
@@ -50,12 +52,10 @@ services:
   front-build:
     profiles:
       - build
-    image: ${LLM_FRONT_IMAGE:-yangyag2/llm-front:latest}
+    image: ${LLM_FRONT_IMAGE:-llm-front:1.0}
     build:
       context: ./front
       dockerfile: Dockerfile
-      args:
-        NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-}
     entrypoint: ["true"]
 
 volumes:

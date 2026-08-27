@@ -37,7 +37,7 @@
 | Auth | 관리자 계정, BCrypt password hash, JWT HS256 |
 | Storage | Docker volume에 첨부파일과 업로드 세션 파일 저장 |
 | AI | OpenAI chat completions, Anthropic messages, xAI chat completions |
-| Deployment | Docker Compose, Docker Hub 이미지 `yangyag2/llm-front:latest`, `yangyag2/llm-back:latest` |
+| Deployment | Docker Compose. 백엔드 이미지 `yangyag2/llm-back:latest`(Hub). 프론트는 로컬 이미지 `llm-front:1.0`(Windows에서 빌드 후 tar로 EC2 load) |
 
 ## 사용자 흐름
 

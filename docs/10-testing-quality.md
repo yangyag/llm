@@ -62,7 +62,7 @@ curl -fsS http://localhost:8083/api/v1/health
 | 백엔드 controller/service/domain | `cd back && ./gradlew clean test` |
 | DB migration | 백엔드 테스트와 실제 PostgreSQL 연결 검증. 루트 compose에는 PostgreSQL 서비스가 없으므로 로컬/EC2의 외부 DB 또는 별도 PostgreSQL을 준비 |
 | 프론트 UI/API client | `cd front && npm run typecheck && npm run build` |
-| Dockerfile/compose | `docker compose --profile build build back-build front-build`, `docker compose up -d --wait` |
+| Dockerfile/compose | 프론트는 `cd front && npm run build` 후 `docker compose --profile build build front-build`. 백엔드는 `build back-build`. 이어서 `docker compose up -d --wait` |
 | EC2 배포 절차 | `auto_default` 존재와 `docker compose --project-name ubuntu --env-file .env -f docker-compose.yml config --quiet`를 확인하고 Compose pull/up/ps 및 8083 health 경로 검증 |
 | 운영 env 변경 | 컨테이너 재기동, `docker inspect`, health, 기능 smoke test |
 | AI provider 변경 | provider별 성공/오류 smoke test |

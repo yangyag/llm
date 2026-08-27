@@ -40,11 +40,13 @@ docker logs --tail 100 llm-front
 
 ## 배포
 
+프론트 배포는 Windows에서 `.\aws\deploy-front.ps1` (generate → 이미지 → tar → EC2 load → `up --force-recreate front`). 백엔드만 Hub pull이 필요할 때:
+
 ```bash
 cd /home/ubuntu/llm
 docker network inspect auto_default >/dev/null
 export LLM_ENV_FILE=/home/ubuntu/llm/.env
-docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull back
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 curl -fsS http://127.0.0.1:8083/api/v1/health
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
@@ -71,11 +73,15 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d
 
 ## 프론트만 재기동
 
+이미 load된 `llm-front:1.0`을 다시 띄울 때:
+
 ```bash
 cd /home/ubuntu/llm
 LLM_ENV_FILE=/home/ubuntu/llm/.env \
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --no-deps --wait --wait-timeout 180 front
 ```
+
+새 프론트 이미지를 올릴 때는 Windows에서 `.\aws\deploy-front.ps1`을 실행합니다.
 
 ## 로그 확인
 
@@ -163,7 +169,7 @@ docker logs --tail 200 llm-front
 cd /home/ubuntu/llm
 docker network inspect auto_default >/dev/null
 export LLM_ENV_FILE=/home/ubuntu/llm/.env
-docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull back
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 ```
 

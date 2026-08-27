@@ -7,7 +7,7 @@
 | 변수 | 기본/예시 | 설명 |
 | --- | --- | --- |
 | `LLM_BACK_IMAGE` | `yangyag2/llm-back:latest` | 백엔드 런타임 이미지 |
-| `LLM_FRONT_IMAGE` | `yangyag2/llm-front:latest` | 프론트 런타임 이미지 |
+| `LLM_FRONT_IMAGE` | `llm-front:1.0` | 프론트 런타임 이미지. Docker Hub에 올리지 않고 Windows에서 빌드한 뒤 tar로 EC2에 `docker load` |
 | `LLM_FRONT_PORT` | `8083` | 호스트에 공개할 front 포트 |
 | `LLM_ENV_FILE` | `./.env` | back 컨테이너 `env_file` 경로. EC2 배포 명령에서 `/home/ubuntu/llm/.env`로 export |
 | `COMPOSE_PROJECT_NAME` | `ubuntu` 운영 기준 | Compose project name |
@@ -16,7 +16,7 @@
 
 | 변수 | 설명 |
 | --- | --- |
-| `NUXT_PUBLIC_API_BASE` | 프론트 빌드 시 API base URL. 비어 있으면 상대 경로 `/api/...`를 사용. **빌드 타임에 번들로 굳어져 런타임 변경이 불가**하므로, 값을 바꾸려면 front 이미지를 재빌드해야 합니다 |
+| `NUXT_PUBLIC_API_BASE` | 프론트 빌드 시 API base URL. 비어 있으면 상대 경로 `/api/...`를 사용. **Windows에서 `nuxi generate` 할 때 번들로 굳어져 런타임 변경이 불가**하므로, 값을 바꾸려면 정적 산출물을 다시 만들고 front 이미지를 다시 빌드·load해야 합니다 |
 | `LLM_API_BASE_URL` | `upload_zip_post.py`가 사용할 API base URL. 없으면 도구가 `NUXT_PUBLIC_API_BASE`를 fallback으로 사용할 수 있음 |
 
 Nuxt dev server는 `front/nuxt.config.ts`의 `nitro.devProxy`로 `/api`를 `http://localhost:8082`에 proxy합니다.

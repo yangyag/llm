@@ -223,19 +223,19 @@ secret key 값은 출력하지 않습니다.
 
 가능 원인:
 
-- 새 front 이미지가 push되지 않음
-- EC2에서 pull하지 않음
+- Windows에서 새 `llm-front:1.0` tar를 만들지 않음
+- EC2에서 `docker load` 하지 않음
+- tar를 `/tmp`에 두어 snap Docker가 load하지 못함 (`/home/ubuntu/llm/`에 둘 것)
 - 브라우저 캐시
-- `NUXT_PUBLIC_API_BASE`가 빌드 시점에 잘못 들어감
+- `NUXT_PUBLIC_API_BASE`가 generate 시점에 잘못 들어감
 
 대응:
 
+```powershell
+.\aws\deploy-front.ps1
+```
+
 ```bash
-cd /home/ubuntu/llm
-docker network inspect auto_default >/dev/null
-export LLM_ENV_FILE=/home/ubuntu/llm/.env
-docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull
-docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 docker image ls | grep 'llm-front'
 docker logs --tail 100 llm-front
 ```

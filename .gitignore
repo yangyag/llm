@@ -43,6 +43,10 @@ back/.nb-gradle/
 # Local utility scripts
 etc/*.py
 
+# docker save 산출물 (이미지 tar — 커밋 금지)
+*.tar
+*.tar.gz
+
 # EC2 PEM 키 (로컬 전용 — 커밋 금지). 접속 스크립트 aws/connect.* 는 추적함.
 aws/*.pem
 /upload_zip_post.py
