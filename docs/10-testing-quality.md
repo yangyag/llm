@@ -80,6 +80,7 @@ curl -fsS http://localhost:8083/api/v1/health
 8. 검색 확인
 9. AI provider API key가 있다면 AI 답변 생성 확인
 10. `front/public/upload_zip_post.zip`에서 스크립트를 추출해 작은 ZIP 업로드 확인
+11. 일반 글 상세(로그인·공개)에서 본문 복사 → 붙여넣기 = 화면 본문; 변환글에서는 버튼 없음
 
 ## 실패 분석 기준
 

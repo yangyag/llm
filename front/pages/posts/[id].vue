@@ -4,7 +4,8 @@ import { useRoute } from "vue-router";
 import AttachmentPanel from "~/components/post/AttachmentPanel.vue";
 import { useAuthStore } from "~/stores/auth";
 import { getApiUrl, getPost } from "~/services/api";
-import { formatFileSize, getPostModeLabel, isFileConversionMode } from "~/utils/post";
+import { clipboardUserMessage, writeClipboardText } from "~/utils/clipboard";
+import { canCopyPostBody, formatFileSize, getPostModeLabel, isFileConversionMode } from "~/utils/post";
 import type { PostDetail } from "~/types/api";
 
 const auth = useAuthStore();
@@ -15,8 +16,35 @@ const postId = computed(() => Number.parseInt(route.params.id as string, 10));
 const post = ref<PostDetail | null>(null);
 const loading = ref(true);
 const error = ref("");
+const bodyCopied = ref(false);
+const copyError = ref("");
 
 let cancelled = false;
+let bodyCopyTimer: ReturnType<typeof setTimeout> | undefined;
+
+function resetCopyFeedback() {
+  bodyCopied.value = false;
+  copyError.value = "";
+  window.clearTimeout(bodyCopyTimer);
+  bodyCopyTimer = undefined;
+}
+
+async function handleCopyPostBody() {
+  copyError.value = "";
+  const current = post.value;
+  if (!current || !canCopyPostBody(current)) return;
+  try {
+    await writeClipboardText(current.body);
+    copyError.value = "";
+    bodyCopied.value = true;
+    window.clearTimeout(bodyCopyTimer);
+    bodyCopyTimer = window.setTimeout(() => {
+      bodyCopied.value = false;
+    }, 2000);
+  } catch (err) {
+    copyError.value = clipboardUserMessage(err, "게시글 본문을 클립보드에 복사하지 못했습니다.");
+  }
+}
 
 async function loadPost() {
   loading.value = true;
@@ -42,9 +70,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   cancelled = true;
+  resetCopyFeedback();
 });
 
 watch(postId, () => {
+  resetCopyFeedback();
   if (!cancelled) loadPost();
 });
 
@@ -104,7 +134,13 @@ function goToBoard() {
                   <time>{{ new Date(post.createdAt).toLocaleString() }}</time>
                 </div>
               </div>
+              <div v-if="canCopyPostBody(post)" class="inline-actions">
+                <button type="button" class="ghost-button" @click="handleCopyPostBody">
+                  {{ bodyCopied ? "복사됨!" : "본문 복사" }}
+                </button>
+              </div>
             </div>
+            <p v-if="copyError" class="message-banner error" role="alert">{{ copyError }}</p>
 
             <p v-if="isFileConversionMode(post.mode)" class="post-body-box">
               암호화 업로드 글입니다. 본문은 공개 상세 화면에서 표시되지 않습니다.

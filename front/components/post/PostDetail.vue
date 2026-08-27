@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useAuthStore } from "~/stores/auth";
 import { usePostDetailStore } from "~/stores/postDetail";
-import { canManagePost, getPostModeLabel, isFileConversionMode } from "~/utils/post";
+import { canCopyPostBody, canManagePost, getPostModeLabel, isFileConversionMode } from "~/utils/post";
 import AttachmentPanel from "./AttachmentPanel.vue";
 import ConversionSummary from "./ConversionSummary.vue";
 import PostEditPanel from "./PostEditPanel.vue";
@@ -49,6 +49,16 @@ async function onDelete() {
       <div class="inline-actions">
         <button type="button" class="ghost-button" @click="detail.handleCopyPostLink()">
           {{ detail.postLinkCopied ? "복사됨!" : "링크 복사" }}
+        </button>
+        <button
+          v-if="!isFileConversionMode(detail.selectedPost?.mode ?? '')"
+          type="button"
+          class="ghost-button"
+          :disabled="!canCopyPostBody(detail.selectedPost)"
+          :title="canCopyPostBody(detail.selectedPost) ? undefined : '본문이 없습니다'"
+          @click="detail.handleCopyPostBody()"
+        >
+          {{ detail.postBodyCopied ? "복사됨!" : "본문 복사" }}
         </button>
         <button
           v-if="manageable && !detail.selectedPost?.conversionReady"

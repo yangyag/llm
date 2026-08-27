@@ -11,10 +11,12 @@ import {
   updateReply
 } from "~/services/api";
 import type { AiProvider, ApiError, PostDetail } from "~/types/api";
+import { clipboardUserMessage, writeClipboardText } from "~/utils/clipboard";
 import {
   ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE,
   MAX_ATTACHMENTS,
   attachmentFileKey,
+  canCopyPostBody,
   mergeAttachmentFiles
 } from "~/utils/post";
 import { useAuthStore } from "./auth";
@@ -22,6 +24,16 @@ import { usePostsStore } from "./posts";
 
 const EMPTY_POST_FORM = { title: "", body: "" };
 const EMPTY_REPLY_FORM = { body: "" };
+
+let postLinkCopyTimer: ReturnType<typeof setTimeout> | undefined;
+let postBodyCopyTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearCopyFeedbackTimers(): void {
+  window.clearTimeout(postLinkCopyTimer);
+  window.clearTimeout(postBodyCopyTimer);
+  postLinkCopyTimer = undefined;
+  postBodyCopyTimer = undefined;
+}
 
 type View = "list" | "write" | "detail";
 type PostActionMode = "none" | "edit";
@@ -62,6 +74,7 @@ interface PostDetailState {
   replyActionError: string;
   aiReplyError: string;
   postLinkCopied: boolean;
+  postBodyCopied: boolean;
 }
 
 export const usePostDetailStore = defineStore("postDetail", {
@@ -90,7 +103,8 @@ export const usePostDetailStore = defineStore("postDetail", {
     postActionError: "",
     replyActionError: "",
     aiReplyError: "",
-    postLinkCopied: false
+    postLinkCopied: false,
+    postBodyCopied: false
   }),
   actions: {
     resetListViewState() {
@@ -103,6 +117,9 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.aiReplyError = "";
       this.message = "";
       this.error = "";
+      this.postLinkCopied = false;
+      this.postBodyCopied = false;
+      clearCopyFeedbackTimers();
     },
     async refreshListView() {
       const posts = usePostsStore();
@@ -138,6 +155,9 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.selectedAiProvider = "GPT";
       this.message = "";
       this.error = "";
+      this.postLinkCopied = false;
+      this.postBodyCopied = false;
+      clearCopyFeedbackTimers();
       this.loadPostDetail(postId);
     },
     async loadPostDetail(postId: number) {
@@ -452,16 +472,35 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.selectedAiProvider = provider;
     },
     async handleCopyPostLink() {
+      this.error = "";
       if (!this.selectedPost?.id) return;
       const postUrl = `${window.location.origin}/posts/${this.selectedPost.id}`;
       try {
-        await window.navigator.clipboard.writeText(postUrl);
+        await writeClipboardText(postUrl);
+        this.error = "";
         this.postLinkCopied = true;
-        window.setTimeout(() => {
+        window.clearTimeout(postLinkCopyTimer);
+        postLinkCopyTimer = window.setTimeout(() => {
           this.postLinkCopied = false;
         }, 2000);
-      } catch {
-        this.error = "게시글 링크를 클립보드에 복사하지 못했습니다.";
+      } catch (err) {
+        this.error = clipboardUserMessage(err, "게시글 링크를 클립보드에 복사하지 못했습니다.");
+      }
+    },
+    async handleCopyPostBody() {
+      this.error = "";
+      const post = this.selectedPost;
+      if (!post || !canCopyPostBody(post)) return;
+      try {
+        await writeClipboardText(post.body);
+        this.error = "";
+        this.postBodyCopied = true;
+        window.clearTimeout(postBodyCopyTimer);
+        postBodyCopyTimer = window.setTimeout(() => {
+          this.postBodyCopied = false;
+        }, 2000);
+      } catch (err) {
+        this.error = clipboardUserMessage(err, "게시글 본문을 클립보드에 복사하지 못했습니다.");
       }
     }
   }
