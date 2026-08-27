@@ -53,6 +53,7 @@ Frontend:
 - Windows 호스트: `npm ci`, `npm run typecheck`, `npm run build` (`nuxi generate`)
 - 이미지: `nginx:1.27-alpine`에 `.output/public`과 `nginx.conf`만 복사. Node는 이미지에 없음
 - 태그: `llm-front:1.0`
+- compose `mem_limit: 64m` (런타임 nginx 한도). EC2에서 Node generate를 하지 않는 것과 함께 호스트 메모리를 줄이기 위함
 - Nginx가 `/api/`를 `http://llm-back:8080`으로 proxy
 
 ## 릴리스 전 체크리스트

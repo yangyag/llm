@@ -51,8 +51,8 @@ ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 2026-08-08 KST 배포 후 확인:
 
 ```text
-llm-front      llm-front:1.0              healthy  0.0.0.0:8083->80/tcp
-llm-back       yangyag2/llm-back:latest   healthy  8080/tcp
+llm-front         llm-front:1.0              healthy  0.0.0.0:8083->80/tcp  mem_limit 64m
+llm-back          yangyag2/llm-back:latest   healthy  8080/tcp
 yangyag-postgres  postgres:18                healthy  127.0.0.1:5432->5432/tcp
 ```
 
@@ -68,10 +68,10 @@ curl -fsS http://127.0.0.1:8083/api/v1/health
 
 ## 운영 `.env` 핵심 확인값
 
-2026-05-31 KST 기준으로 secret이 아닌 값만 확인했습니다.
+2026-08-27 KST 기준으로 secret이 아닌 값만 확인했습니다.
 
 ```env
-APP_CORS_ALLOWED_ORIGINS=http://43.202.113.123:8083,http://localhost:8083,https://yangyag.duckdns.org
+APP_CORS_ALLOWED_ORIGINS=http://43.202.113.123:8083,https://yangyag.duckdns.org
 APP_DB_HOST=yangyag-postgres
 APP_DB_PORT=5432
 APP_DB_NAME=llm
@@ -80,7 +80,10 @@ APP_ATTACHMENTS_ROOT_PATH=/var/lib/llm/attachments
 OPENAI_MODEL=gpt-5.5
 ANTHROPIC_MODEL=claude-opus-4-7
 XAI_MODEL=grok-4.3
+LLM_FRONT_IMAGE=llm-front:1.0
 ```
+
+`localhost` origin은 운영 CORS에 없습니다.
 
 secret 값은 확인하거나 문서에 기록하지 않습니다.
 
@@ -121,7 +124,7 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
 
-`compose pull`은 백엔드만 합니다. front는 `pull_policy: never`이고 로컬 load 이미지 `llm-front:1.0`을 씁니다.
+`compose pull`은 백엔드만 합니다. front는 `pull_policy: never`이고 로컬 load 이미지 `llm-front:1.0`을 씁니다. 런타임은 `mem_limit: 64m`입니다.
 
 `auto_default`가 없으면 배포를 진행하지 말고 compose 프로젝트 `auto`와 네트워크 상태를 확인합니다. 이 네트워크는 auto 스택 소유이므로 EC2에서 빈 네트워크를 직접 만들면 DB 누락을 가릴 수 있습니다.
 

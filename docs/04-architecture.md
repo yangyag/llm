@@ -22,7 +22,24 @@ Browser
 | Database | `yangyag-postgres` 운영 기준 | PostgreSQL. 전용 database `llm`(schema `llm`) |
 | Volumes | `*-llm-back-attachments`, `*-llm-back-upload-sessions` | 첨부파일과 임시 청크 저장 |
 
-`docker-compose.yml`의 `back` 서비스는 `default` 네트워크와 외부 `auto_default` 네트워크에 동시에 연결됩니다. 운영 DB `yangyag-postgres`는 `auto_default` 네트워크를 통해 접근합니다. `APP_DB_HOST`는 컨테이너 이름(`yangyag-postgres`)입니다. 컨테이너 안의 `127.0.0.1`은 EC2 호스트가 아니라 백엔드 자신이라 호스트에 공개된 `127.0.0.1:5432`로 붙을 수 없습니다.
+운영 Postgres 관련 이름은 서로 다릅니다.
+
+| 이름 | 정체 |
+| --- | --- |
+| `yangyag-postgres` | Postgres **컨테이너** 이름이자 Docker DNS 호스트명. 예전 이름 `auto-postgres`. compose 프로젝트 `auto`의 `postgres` 서비스 |
+| `auto_default` | Docker **네트워크**. compose 프로젝트 `auto`의 default 네트워크 |
+| compose 프로젝트 `auto` | `/home/ubuntu/auto` 스택. LLM compose가 만든 것이 아님 |
+| database `llm` | 그 컨테이너 안의 LLM 전용 DB. 스키마 이름도 `llm` |
+| `APP_DB_HOST=yangyag-postgres` | `llm-back`이 `auto_default`에서 컨테이너를 찾는 이름 |
+
+`docker-compose.yml`의 `back` 서비스는 `default` 네트워크와 외부 `auto_default` 네트워크에 동시에 연결됩니다. 운영 DB는 `auto_default`를 통해 `yangyag-postgres:5432`로 접근합니다.
+
+Postgres는 호스트에 `127.0.0.1:5432`로만 publish되어 있습니다. `127.0.0.1`의 기준은 **그 프로세스가 도는 곳**입니다.
+
+- EC2 **호스트**에서 도는 프로그램(같은 머신의 Python 백엔드 등)의 `127.0.0.1:5432`는 EC2 자신이라 붙습니다.
+- `llm-back` **컨테이너 안**의 `127.0.0.1`은 백엔드 자신이라 Postgres가 없습니다. LLM은 `APP_DB_HOST=yangyag-postgres`로만 붙습니다.
+
+`llm-front`를 호스트 네트워크로 바꿔 `127.0.0.1` DB 접속을 맞추는 방식은 쓰지 않습니다. front Nginx가 `llm-back:8080`으로 proxy하는 구조가 깨집니다.
 
 ## 요청 흐름
 

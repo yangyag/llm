@@ -29,8 +29,8 @@
 - EC2 접속 자료: 저장소 루트 `aws/` (`connect.sh` / `connect.ps1` 커밋, PEM은 Git 제외)
 - EC2 접속 키: `aws/test-keypair.pem` (로컬 전용)
 - EC2 운영 디렉터리: `/home/ubuntu/llm`
-- EC2 운영 서비스: `llm-front`, `llm-back`, `yangyag-postgres`
-- EC2 운영 DB: `yangyag-postgres` 컨테이너의 database `llm` (schema `llm`)
+- EC2 운영 서비스: `llm-front`(이미지 `llm-front:1.0`, `mem_limit` 64m), `llm-back`, `yangyag-postgres`
+- EC2 운영 DB: 컨테이너 `yangyag-postgres` / 네트워크 `auto_default` / database `llm` (schema `llm`). 이름은 docs/04
 - EC2 외부 공개 포트: front `8083`
 - EC2 백엔드 헬스 확인: `http://127.0.0.1:8083/api/v1/health`
 

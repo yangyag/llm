@@ -27,7 +27,7 @@ Nuxt dev server는 `front/nuxt.config.ts`의 `nitro.devProxy`로 `/api`를 `http
 | --- | --- |
 | `APP_CORS_ALLOWED_ORIGINS` | 쉼표로 구분된 허용 origin 목록 |
 
-운영 EC2 확인값에는 `http://43.202.113.123:8083`, `http://localhost:8083`, `https://yangyag.duckdns.org`가 포함되어 있었습니다.
+운영 EC2 확인값(2026-08-27)은 `http://43.202.113.123:8083`, `https://yangyag.duckdns.org`입니다. `http://localhost:8083`은 운영 CORS에 없습니다.
 
 ## Database
 

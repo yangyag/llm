@@ -64,9 +64,8 @@
 읽기 전용으로 수행한 확인:
 
 ```bash
-ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no \
-  -i /home/yangyag/aws/test-keypair.pem ubuntu@43.202.113.123 \
-  'cd /home/ubuntu/llm && docker ps && curl -fsS http://127.0.0.1:8083/api/v1/health'
+# 저장소 루트. PEM은 aws/test-keypair.pem (Git 제외)
+./aws/connect.sh 'cd /home/ubuntu/llm && docker ps && curl -fsS http://127.0.0.1:8083/api/v1/health'
 ```
 
 확인 결과 요약:
