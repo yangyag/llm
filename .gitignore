@@ -42,6 +42,9 @@ back/.nb-gradle/
 
 # Local utility scripts
 etc/*.py
+
+# EC2 접속 정보·PEM 키 (로컬 전용 — 커밋 금지)
+aws/
 /upload_zip_post.py
 /__pycache__/
 
