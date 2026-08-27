@@ -5,9 +5,20 @@
 ## 접속
 
 ```bash
-chmod 600 /home/yangyag/aws/test-keypair.pem
-ssh -i /home/yangyag/aws/test-keypair.pem ubuntu@43.202.113.123
+# Git Bash / WSL (저장소 루트에서)
+./aws/connect.sh
 cd /home/ubuntu/llm
+```
+
+```powershell
+.\aws\connect.ps1
+cd /home/ubuntu/llm
+```
+
+직접 ssh 사용 시:
+
+```bash
+ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 ```
 
 ## 일일 점검

@@ -247,13 +247,18 @@ docker logs --tail 100 llm-front
 확인:
 
 ```bash
-chmod 600 /home/yangyag/aws/test-keypair.pem
-ssh -o ConnectTimeout=8 -i /home/yangyag/aws/test-keypair.pem ubuntu@43.202.113.123
+./aws/connect.sh 'echo CONNECTED'
+```
+
+또는 직접 ssh:
+
+```bash
+ssh -o ConnectTimeout=8 -i aws/test-keypair.pem ubuntu@43.202.113.123
 ```
 
 가능 원인:
 
-- PEM 권한 오류
+- PEM 권한 오류 (Windows는 `aws/connect.ps1` 사용 또는 `icacls <key> /inheritance:r`, `icacls <key> /grant:r "$($env:USERNAME):R"`)
 - 접속 사용자 오류
 - 보안그룹에서 SSH inbound 미허용
 - 접속 위치 공인 IP 변경
@@ -264,7 +269,7 @@ ssh -o ConnectTimeout=8 -i /home/yangyag/aws/test-keypair.pem ubuntu@43.202.113.
 운영 기준은 항상 EC2 실제 파일과 컨테이너 상태입니다.
 
 ```bash
-ssh -i /home/yangyag/aws/test-keypair.pem ubuntu@43.202.113.123
+ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 cd /home/ubuntu/llm
 ls -l
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'

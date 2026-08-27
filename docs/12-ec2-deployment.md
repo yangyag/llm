@@ -1,6 +1,6 @@
 # EC2 배포
 
-EC2 접속과 운영 파일 확인에는 `/home/yangyag/aws` 폴더를 사용합니다.
+EC2 접속과 운영 파일 확인에는 이 저장소 루트의 `aws/` 폴더(Git 제외)를 사용합니다.
 
 ## 접속 정보
 
@@ -8,16 +8,29 @@ EC2 접속과 운영 파일 확인에는 `/home/yangyag/aws` 폴더를 사용합
 
 | 항목 | 값 |
 | --- | --- |
-| PEM key | `/home/yangyag/aws/test-keypair.pem` |
+| PEM key | `aws/test-keypair.pem` (저장소 로컬, Git 제외) |
 | SSH user | `ubuntu` |
 | Host | `43.202.113.123` |
 | 운영 디렉터리 | `/home/ubuntu/llm` |
 
-접속:
+접속 스크립트:
 
 ```bash
-chmod 600 /home/yangyag/aws/test-keypair.pem
-ssh -i /home/yangyag/aws/test-keypair.pem ubuntu@43.202.113.123
+# Git Bash / WSL
+./aws/connect.sh            # 대화형 접속
+./aws/connect.sh 'docker ps' # 원격 명령 실행
+```
+
+```powershell
+# PowerShell
+.\aws\connect.ps1
+.\aws\connect.ps1 "docker ps"
+```
+
+스크립트는 키 권한(600/icacls)을 자동 정리합니다. 직접 ssh를 쓸 경우:
+
+```bash
+ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 ```
 
 처음 접속 시 host key 확인 질문이 나오면 fingerprint를 확인한 뒤 진행합니다.
@@ -31,7 +44,7 @@ ssh -i /home/yangyag/aws/test-keypair.pem ubuntu@43.202.113.123
 | `/home/ubuntu/llm/.env` | 존재 |
 | `/home/ubuntu/llm/docker-compose.yml` | 존재 |
 
-`/home/yangyag/aws`의 기존 메모에는 다른 프로젝트용 `/home/ubuntu/auto` 경로와 예전 LLM 경로인 `/home/ubuntu/llm.env`, `/home/ubuntu/docker-compose.ec2.yml`, `/home/yangyag/playground/test-keypair.pem`가 남아 있습니다. LLM 운영 작업의 우선 기준은 실제 EC2에서 확인한 `/home/ubuntu/llm` 경로와 `/home/yangyag/aws/test-keypair.pem`입니다.
+`/home/yangyag/aws`의 기존 메모에는 다른 프로젝트용 `/home/ubuntu/auto` 경로와 예전 LLM 경로인 `/home/ubuntu/llm.env`, `/home/ubuntu/docker-compose.ec2.yml`, `/home/yangyag/playground/test-keypair.pem`가 남아 있습니다. LLM 운영 작업의 우선 기준은 실제 EC2에서 확인한 `/home/ubuntu/llm` 경로이며, 접속 자료는 이 저장소 루트의 `aws/` 폴더를 사용합니다.
 
 ## 현재 LLM 관련 컨테이너 상태
 
