@@ -16,7 +16,7 @@ docker network ls | grep auto_default
 
 대응:
 
-- EC2에서는 `auto-postgres`가 붙은 기존 `auto_default` 네트워크가 있어야 합니다.
+- EC2에서는 `yangyag-postgres`가 붙은 기존 `auto_default` 네트워크가 있어야 합니다.
 - 로컬에서 DB를 다른 방식으로 쓰는 경우 compose network 구성을 조정하거나 외부 네트워크를 생성합니다.
 
 ```bash
@@ -57,7 +57,7 @@ APP_DB_HOST=localhost SERVER_PORT=8082 ./gradlew bootRun
 증상:
 
 - `Connection refused`
-- `UnknownHostException: auto-postgres`
+- `UnknownHostException: yangyag-postgres`
 - Flyway migration 실패
 
 확인:
@@ -70,7 +70,7 @@ grep -E '^(APP_DB_HOST|APP_DB_PORT|APP_DB_NAME|APP_DB_SCHEMA)=' .env
 
 대응:
 
-- 운영: `APP_DB_HOST=auto-postgres`, `APP_DB_NAME=llm`, `APP_DB_SCHEMA=llm`
+- 운영: `APP_DB_HOST=yangyag-postgres`, `APP_DB_NAME=llm`, `APP_DB_SCHEMA=llm`
 - 로컬: 실제 PostgreSQL 위치와 DB/schema가 있는지 확인
 - schema는 Flyway `create-schemas=true`로 생성 가능하지만 DB 자체와 권한은 먼저 있어야 합니다.
 
@@ -93,7 +93,7 @@ Migration checksum mismatch for migration version 13
 
 ```bash
 DB_PASS=$(grep "^APP_DB_PASSWORD=" /home/ubuntu/llm/.env | cut -d= -f2-)
-docker exec -e PGPASSWORD="$DB_PASS" auto-postgres psql -U llm -d llm   -c "select installed_rank, version, description, checksum, success from llm.flyway_schema_history order by installed_rank;"
+docker exec -e PGPASSWORD="$DB_PASS" yangyag-postgres psql -U llm -d llm   -c "select installed_rank, version, description, checksum, success from llm.flyway_schema_history order by installed_rank;"
 ls /home/yangyag/llm/back/src/main/resources/db/migration/
 ```
 
@@ -103,7 +103,7 @@ ls /home/yangyag/llm/back/src/main/resources/db/migration/
 2. 어긋난 버전이 현재 코드에 없는(제거된) 기능이면, DB 백업 후 해당 history 행만 제거합니다.
 
    ```bash
-   docker exec -e PGPASSWORD="$DB_PASS" auto-postgres psql -U llm -d llm      -c "delete from llm.flyway_schema_history where version='13';"
+   docker exec -e PGPASSWORD="$DB_PASS" yangyag-postgres psql -U llm -d llm      -c "delete from llm.flyway_schema_history where version='13';"
    ```
 
 3. `docker compose ... up -d --wait`로 재배포해 새 마이그레이션을 적용합니다.

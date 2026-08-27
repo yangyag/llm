@@ -29,8 +29,8 @@
 - EC2 접속 자료: 저장소 루트 `aws/` 폴더 (Git 제외)
 - EC2 접속 키: `aws/test-keypair.pem`
 - EC2 운영 디렉터리: `/home/ubuntu/llm`
-- EC2 운영 서비스: `llm-front`, `llm-back`, `auto-postgres`
-- EC2 운영 DB: `auto-postgres` 컨테이너의 database `llm` (schema `llm`)
+- EC2 운영 서비스: `llm-front`, `llm-back`, `yangyag-postgres`
+- EC2 운영 DB: `yangyag-postgres` 컨테이너의 database `llm` (schema `llm`)
 - EC2 외부 공개 포트: front `8083`
 - EC2 백엔드 헬스 확인: `http://127.0.0.1:8083/api/v1/health`
 

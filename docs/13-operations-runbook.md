@@ -26,7 +26,7 @@ ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 ```bash
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
 docker inspect --format '{{.Name}} {{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
-  llm-front llm-back auto-postgres
+  llm-front llm-back yangyag-postgres
 curl -fsS http://127.0.0.1:8083/api/v1/health
 docker logs --tail 100 llm-back
 docker logs --tail 100 llm-front
@@ -34,7 +34,7 @@ docker logs --tail 100 llm-front
 
 정상 기준:
 
-- `llm-front`, `llm-back`, `auto-postgres`가 `healthy`
+- `llm-front`, `llm-back`, `yangyag-postgres`가 `healthy`
 - health API가 `status=UP`
 - 백엔드 로그에 반복되는 `INTERNAL_ERROR`, DB connection error, AI provider error가 없음
 
@@ -50,7 +50,7 @@ curl -fsS http://127.0.0.1:8083/api/v1/health
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
 
-`auto_default`가 없으면 빈 네트워크를 생성하지 말고 auto-postgres 스택을 확인합니다.
+`auto_default`가 없으면 빈 네트워크를 생성하지 말고 compose 프로젝트 `auto` 스택을 확인합니다.
 
 배포 기록에 남길 것:
 
@@ -97,7 +97,7 @@ docker logs -f llm-back
 ## DB 점검
 
 ```bash
-docker exec -it auto-postgres psql -U <db-user> -d llm
+docker exec -it yangyag-postgres psql -U <db-user> -d llm
 ```
 
 ```sql
@@ -124,7 +124,7 @@ docker volume ls | grep llm
 DB dump:
 
 ```bash
-docker exec auto-postgres pg_dump -U <db-user> -d llm > llm-$(date +%Y%m%d-%H%M%S).sql
+docker exec yangyag-postgres pg_dump -U <db-user> -d llm > llm-$(date +%Y%m%d-%H%M%S).sql
 ```
 
 첨부파일 volume backup 예시:
@@ -172,7 +172,7 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d
 1. `docker inspect` health 상태 확인
 2. `docker logs llm-back` 확인
 3. DB 연결 오류인지 확인
-4. `auto-postgres` health 확인
+4. `yangyag-postgres` health 확인
 5. 최근 `.env` 변경을 되돌릴지 판단
 
 ### AI 답변 실패

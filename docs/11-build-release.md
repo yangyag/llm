@@ -92,7 +92,7 @@ Frontend:
    curl -fsS http://localhost:8083/api/v1/health
    ```
 
-   > EC2 운영에서는 docs/12의 명령처럼 `--project-name ubuntu`, `--env-file .env`, `-f docker-compose.yml`을 모두 명시합니다. **EC2에서는 `auto_default`를 직접 생성하지 마세요** — 이 네트워크는 auto-postgres 스택 소유이고, 빈 네트워크를 만들면 DB 누락을 가립니다. 배포 전에 `docker network inspect auto_default`로 존재를 확인합니다. 자세한 구분은 docs/15 참조.
+   > EC2 운영에서는 docs/12의 명령처럼 `--project-name ubuntu`, `--env-file .env`, `-f docker-compose.yml`을 모두 명시합니다. **EC2에서는 `auto_default`를 직접 생성하지 마세요** — 이 네트워크는 compose 프로젝트 `auto` 소유이고, 빈 네트워크를 만들면 DB 누락을 가립니다. 배포 전에 `docker network inspect auto_default`로 존재를 확인합니다. 자세한 구분은 docs/15 참조.
 
 ## 이미지 push
 

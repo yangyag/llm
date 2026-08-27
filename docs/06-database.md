@@ -7,13 +7,13 @@
 운영 기준:
 
 ```env
-APP_DB_HOST=auto-postgres
+APP_DB_HOST=yangyag-postgres
 APP_DB_PORT=5432
 APP_DB_NAME=llm
 APP_DB_SCHEMA=llm
 ```
 
-운영 PostgreSQL은 공용 컨테이너 `auto-postgres`를 쓰되, LLM 데이터는 전용 database `llm`(owner `llm`)에 둡니다. 스키마 이름은 그대로 `llm`입니다. 2026-08-27에 `auto` database의 `llm` 스키마에서 이관했고, 확인 후 구 스키마 `auto.llm`은 삭제했습니다. 런타임은 `APP_DB_NAME=llm`만 사용합니다.
+운영 PostgreSQL은 공용 컨테이너 `yangyag-postgres`(compose 프로젝트 `auto`, 예전 이름 `auto-postgres`)를 쓰되, LLM 데이터는 전용 database `llm`(owner `llm`)에 둡니다. 스키마 이름은 그대로 `llm`입니다. 2026-08-27에 `auto` database의 `llm` 스키마에서 이관했고, 확인 후 구 스키마 `auto.llm`은 삭제했습니다. 같은 날 컨테이너 이름을 `yangyag-postgres`로 바꿨고, LLM은 Docker 네트워크 DNS(`APP_DB_HOST=yangyag-postgres`)로 접속합니다. 런타임은 `APP_DB_NAME=llm`만 사용합니다.
 
 로컬 예시:
 
@@ -90,7 +90,7 @@ spring.flyway.create-schemas=true
 EC2에서 PostgreSQL 컨테이너 접속:
 
 ```bash
-docker exec -it auto-postgres psql -U <db-user> -d llm
+docker exec -it yangyag-postgres psql -U <db-user> -d llm
 ```
 
 스키마 확인:
@@ -139,7 +139,7 @@ order by status;
 예시:
 
 ```bash
-docker exec auto-postgres pg_dump -U <db-user> -d llm > llm-$(date +%Y%m%d-%H%M%S).sql
+docker exec yangyag-postgres pg_dump -U <db-user> -d llm > llm-$(date +%Y%m%d-%H%M%S).sql
 ```
 
 secret이 노출되지 않게 dump 파일 보관 위치와 권한을 제한합니다.

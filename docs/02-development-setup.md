@@ -69,13 +69,13 @@ cd back
 
 ## 빠른 통합 실행
 
-루트 `docker-compose.yml`은 PostgreSQL 컨테이너를 포함하지 않고 외부 네트워크 `auto_default`를 요구합니다. 운영에서는 기존 `auto-postgres`가 이 네트워크에 붙어 있습니다. 새 로컬 환경에서는 먼저 네트워크와 접근 가능한 PostgreSQL을 준비하고, `.env`의 `APP_DB_HOST`, `APP_DB_NAME`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SCHEMA`가 그 DB를 가리키게 해야 합니다.
+루트 `docker-compose.yml`은 PostgreSQL 컨테이너를 포함하지 않고 외부 네트워크 `auto_default`를 요구합니다. 운영에서는 기존 `yangyag-postgres`가 이 네트워크에 붙어 있습니다. 새 로컬 환경에서는 먼저 네트워크와 접근 가능한 PostgreSQL을 준비하고, `.env`의 `APP_DB_HOST`, `APP_DB_NAME`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SCHEMA`가 그 DB를 가리키게 해야 합니다.
 
 ```bash
 docker network inspect auto_default >/dev/null 2>&1 || docker network create auto_default
 ```
 
-로컬에서 `auto-postgres` 같은 별도 DB 컨테이너를 쓴다면 그 컨테이너를 `auto_default`에 연결합니다. DB 자체와 user/database/schema 권한이 준비되지 않으면 `docker compose up -d --wait`는 백엔드 health 확인 단계에서 실패합니다.
+로컬에서 `yangyag-postgres` 같은 별도 DB 컨테이너를 쓴다면 그 컨테이너를 `auto_default`에 연결합니다. DB 자체와 user/database/schema 권한이 준비되지 않으면 `docker compose up -d --wait`는 백엔드 health 확인 단계에서 실패합니다.
 
 ```bash
 cd /home/yangyag/llm

@@ -33,14 +33,14 @@ Nuxt dev server는 `front/nuxt.config.ts`의 `nitro.devProxy`로 `/api`를 `http
 
 | 변수 | 기본/예시 | 설명 |
 | --- | --- | --- |
-| `APP_DB_HOST` | `host.docker.internal` 로컬, `auto-postgres` 운영 | PostgreSQL host |
+| `APP_DB_HOST` | `host.docker.internal` 로컬, `yangyag-postgres` 운영 | PostgreSQL host |
 | `APP_DB_PORT` | `5432` | PostgreSQL port |
 | `APP_DB_NAME` | `yangyag` 로컬 예시, `llm` 운영 확인값 | database name |
 | `APP_DB_USER` | 환경별 값 | database user |
 | `APP_DB_PASSWORD` | secret | database password |
 | `APP_DB_SCHEMA` | `public` 로컬, `llm` 운영 확인값 | Flyway/JPA schema |
 
-이 표의 로컬 값은 `.env.example` 기준 예시입니다. 운영 EC2는 `APP_DB_HOST=auto-postgres`, `APP_DB_NAME=llm`, `APP_DB_SCHEMA=llm`입니다. 실제 실행 기준은 항상 대상 환경의 `.env`입니다.
+이 표의 로컬 값은 `.env.example` 기준 예시입니다. 운영 EC2는 `APP_DB_HOST=yangyag-postgres`, `APP_DB_NAME=llm`, `APP_DB_SCHEMA=llm`입니다. 실제 실행 기준은 항상 대상 환경의 `.env`입니다.
 
 백엔드 datasource URL:
 

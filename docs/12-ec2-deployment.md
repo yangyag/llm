@@ -53,14 +53,14 @@ ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 ```text
 llm-front      yangyag2/llm-front:latest  healthy  0.0.0.0:8083->80/tcp
 llm-back       yangyag2/llm-back:latest   healthy  8080/tcp
-auto-postgres  postgres:18                healthy  127.0.0.1:5432->5432/tcp
+yangyag-postgres  postgres:18                healthy  127.0.0.1:5432->5432/tcp
 ```
 
 이전 확인(2026-05-31 KST)도 동일한 3개 컨테이너였습니다.
 
 백엔드는 호스트 8080에 직접 공개되지 않습니다. 헬스체크는 front proxy를 경유합니다.
 
-EC2에는 LLM 외 다른 서비스 컨테이너도 함께 실행될 수 있습니다. 이 섹션은 `llm-front`, `llm-back`, `auto-postgres`처럼 LLM 운영에 직접 필요한 컨테이너만 다룹니다.
+EC2에는 LLM 외 다른 서비스 컨테이너도 함께 실행될 수 있습니다. 이 섹션은 `llm-front`, `llm-back`, `yangyag-postgres`처럼 LLM 운영에 직접 필요한 컨테이너만 다룹니다.
 
 ```bash
 curl -fsS http://127.0.0.1:8083/api/v1/health
@@ -72,7 +72,7 @@ curl -fsS http://127.0.0.1:8083/api/v1/health
 
 ```env
 APP_CORS_ALLOWED_ORIGINS=http://43.202.113.123:8083,http://localhost:8083,https://yangyag.duckdns.org
-APP_DB_HOST=auto-postgres
+APP_DB_HOST=yangyag-postgres
 APP_DB_PORT=5432
 APP_DB_NAME=llm
 APP_DB_SCHEMA=llm
@@ -98,13 +98,13 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
 
-`auto_default`가 없으면 배포를 진행하지 말고 auto-postgres 스택과 네트워크 상태를 확인합니다. 이 네트워크는 auto-postgres 스택 소유이므로 EC2에서 빈 네트워크를 직접 만들면 DB 누락을 가릴 수 있습니다.
+`auto_default`가 없으면 배포를 진행하지 말고 compose 프로젝트 `auto`와 네트워크 상태를 확인합니다. 이 네트워크는 auto 스택 소유이므로 EC2에서 빈 네트워크를 직접 만들면 DB 누락을 가릴 수 있습니다.
 
 ## 배포 후 검증
 
 ```bash
 docker inspect --format '{{.Name}} {{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
-  llm-front llm-back auto-postgres
+  llm-front llm-back yangyag-postgres
 
 curl -fsS http://127.0.0.1:8083/api/v1/health
 
@@ -128,7 +128,7 @@ curl -fsS https://yangyag.duckdns.org/api/v1/health
 배포 전 확인:
 
 ```bash
-docker exec -e PGPASSWORD="$DB_PASS" auto-postgres psql -U llm -d llm   -c "select version, description, checksum from llm.flyway_schema_history order by installed_rank;"
+docker exec -e PGPASSWORD="$DB_PASS" yangyag-postgres psql -U llm -d llm   -c "select version, description, checksum from llm.flyway_schema_history order by installed_rank;"
 ```
 
 - 로컬 저장소의 마이그레이션 파일과 EC2 history의 description/checksum이 일치해야 합니다.
@@ -137,7 +137,7 @@ docker exec -e PGPASSWORD="$DB_PASS" auto-postgres psql -U llm -d llm   -c "sele
 ## 네트워크 조건
 
 - `docker-compose.yml`은 외부 네트워크 `auto_default`를 요구합니다.
-- `auto-postgres`가 `auto_default` 네트워크에 연결되어 있어야 합니다.
+- `yangyag-postgres`가 `auto_default` 네트워크에 연결되어 있어야 합니다.
 - front는 호스트 `8083`만 publish합니다.
 - back은 호스트에 publish하지 않고 `8080`만 expose합니다. 다만 `default`와 외부 `auto_default` 네트워크에 모두 연결되므로 같은 Docker 네트워크의 컨테이너에서는 접근할 수 있습니다.
 
