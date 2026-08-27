@@ -223,7 +223,7 @@ secret key 값은 출력하지 않습니다.
 
 가능 원인:
 
-- Windows에서 새 `llm-front:1.0` tar를 만들지 않음
+- Windows에서 새 `llm-front:1.0` / `llm-back:1.0` tar를 만들지 않음
 - EC2에서 `docker load` 하지 않음
 - tar를 `/tmp`에 두어 snap Docker가 load하지 못함 (`/home/ubuntu/llm/`에 둘 것)
 - 브라우저 캐시
@@ -233,11 +233,13 @@ secret key 값은 출력하지 않습니다.
 
 ```powershell
 .\aws\deploy-front.ps1
+.\aws\deploy-back.ps1
 ```
 
 ```bash
-docker image ls | grep 'llm-front'
+docker image ls | grep 'llm-'
 docker logs --tail 100 llm-front
+docker logs --tail 100 llm-back
 ```
 
 브라우저 hard refresh도 확인합니다.

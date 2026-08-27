@@ -6,8 +6,8 @@
 
 | 변수 | 기본/예시 | 설명 |
 | --- | --- | --- |
-| `LLM_BACK_IMAGE` | `yangyag2/llm-back:latest` | 백엔드 런타임 이미지 |
-| `LLM_FRONT_IMAGE` | `llm-front:1.0` | 프론트 런타임 이미지. Docker Hub에 올리지 않고 Windows에서 빌드한 뒤 tar로 EC2에 `docker load` |
+| `LLM_BACK_IMAGE` | `llm-back:1.0` | 백엔드 런타임 이미지. Hub 없음. Windows에서 빌드 후 tar로 EC2 `docker load` |
+| `LLM_FRONT_IMAGE` | `llm-front:1.0` | 프론트 런타임 이미지. Hub 없음. Windows에서 빌드 후 tar로 EC2 `docker load` |
 | `LLM_FRONT_PORT` | `8083` | 호스트에 공개할 front 포트 |
 | `LLM_ENV_FILE` | `./.env` | back 컨테이너 `env_file` 경로. EC2 배포 명령에서 `/home/ubuntu/llm/.env`로 export |
 | `COMPOSE_PROJECT_NAME` | `ubuntu` 운영 기준 | Compose project name |

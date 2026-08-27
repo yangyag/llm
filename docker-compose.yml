@@ -1,6 +1,7 @@
 services:
   back:
-    image: ${LLM_BACK_IMAGE:-yangyag2/llm-back:latest}
+    image: ${LLM_BACK_IMAGE:-llm-back:1.0}
+    pull_policy: never
     container_name: llm-back
     env_file:
       - ${LLM_ENV_FILE:-./.env}
@@ -43,7 +44,7 @@ services:
   back-build:
     profiles:
       - build
-    image: ${LLM_BACK_IMAGE:-yangyag2/llm-back:latest}
+    image: ${LLM_BACK_IMAGE:-llm-back:1.0}
     build:
       context: ./back
       dockerfile: Dockerfile

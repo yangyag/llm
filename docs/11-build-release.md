@@ -1,15 +1,15 @@
 # 빌드와 릴리스
 
-백엔드 배포 산출물은 Docker Hub 이미지입니다. 프론트는 Hub에 올리지 않고, Windows에서 정적 파일을 만든 뒤 nginx 이미지를 tar로 EC2에 넣습니다.
+프론트와 백엔드 모두 Docker Hub에 올리지 않습니다. Windows에서 이미지를 만든 뒤 tar로 EC2에 `docker load`합니다.
 
 ## 이미지
 
 | 서비스 | 기본 이미지 | 배포 |
 | --- | --- | --- |
-| Backend | `yangyag2/llm-back:latest` | Docker Hub push/pull |
-| Frontend | `llm-front:1.0` | 로컬 `docker build` → `docker save` → EC2 `docker load` |
+| Backend | `llm-back:1.0` | Windows `docker build` → `docker save` → EC2 `docker load` |
+| Frontend | `llm-front:1.0` | Windows `nuxi generate` + `docker build` → `docker save` → EC2 `docker load` |
 
-백엔드 Hub push는 기본적으로 `latest` 태그만 사용합니다. 프론트는 레지스트리 네임스페이스가 없습니다.
+레지스트리 네임스페이스는 없습니다. compose는 둘 다 `pull_policy: never`입니다.
 
 ## 로컬 빌드
 
@@ -47,6 +47,7 @@ Backend:
 - runtime: `eclipse-temurin:25-jre-jammy`
 - build command: `./gradlew clean bootJar --no-daemon`
 - runtime entrypoint: `java -jar /app/app.jar`
+- 태그: `llm-back:1.0`. Gradle은 Windows Docker 빌드 안에서 돌리고 EC2에서는 load만 한다
 
 Frontend:
 
@@ -95,48 +96,41 @@ Frontend:
 
    > EC2 운영에서는 docs/12의 명령처럼 `--project-name ubuntu`, `--env-file .env`, `-f docker-compose.yml`을 모두 명시합니다. **EC2에서는 `auto_default`를 직접 생성하지 마세요** — 이 네트워크는 compose 프로젝트 `auto` 소유이고, 빈 네트워크를 만들면 DB 누락을 가립니다. 배포 전에 `docker network inspect auto_default`로 존재를 확인합니다. 자세한 구분은 docs/15 참조.
 
-## 백엔드 이미지 push
-
-```bash
-docker push yangyag2/llm-back:latest
-```
-
-## 프론트 이미지 배포 (Hub 없음)
+## EC2 이미지 배포 (Hub 없음)
 
 Windows 저장소 루트:
 
 ```powershell
 .\aws\deploy-front.ps1
+.\aws\deploy-back.ps1
 ```
 
- tar는 EC2 `/home/ubuntu/llm/`에 둡니다. snap Docker는 `/tmp`에서 `docker load`가 실패합니다.
+tar는 EC2 `/home/ubuntu/llm/`에 둡니다. snap Docker는 `/tmp`에서 `docker load`가 실패합니다.
 
-백엔드 pull + 기동만 EC2에서 할 때:
+이미 load된 이미지로만 기동할 때:
 
 ```bash
 cd /home/ubuntu/llm
 docker network inspect auto_default >/dev/null
 export LLM_ENV_FILE=/home/ubuntu/llm/.env
-docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull back
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
 
 ## 롤백 기준
 
-백엔드는 Hub `latest`라 태그 롤백이 어렵습니다. 프론트는 이전 tar를 다시 `docker load`하면 됩니다. 릴리스 기록에 남길 것:
+이전 tar를 다시 `docker load`하면 됩니다. 릴리스 기록에 남길 것:
 
 - 배포 시각
 - Git commit SHA
-- 백엔드 이미지 digest
-- 프론트 이미지 id/`llm-front:1.0` tar 보관 여부
+- 백엔드/프론트 이미지 id와 tar 보관 여부
 - 운영 `.env` 변경 여부
 - 배포 전후 health 결과
 
 이미지 확인:
 
 ```bash
-docker image inspect yangyag2/llm-back:latest --format '{{index .RepoDigests 0}}'
+docker image inspect llm-back:1.0 --format '{{.Id}} {{.Created}}'
 docker image inspect llm-front:1.0 --format '{{.Id}} {{.Created}}'
 ```
 

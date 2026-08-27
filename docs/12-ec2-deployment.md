@@ -52,7 +52,7 @@ ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 
 ```text
 llm-front         llm-front:1.0              healthy  0.0.0.0:8083->80/tcp  mem_limit 64m
-llm-back          yangyag2/llm-back:latest   healthy  8080/tcp
+llm-back          llm-back:1.0               healthy  8080/tcp
 yangyag-postgres  postgres:18                healthy  127.0.0.1:5432->5432/tcp
 ```
 
@@ -81,6 +81,7 @@ OPENAI_MODEL=gpt-5.5
 ANTHROPIC_MODEL=claude-opus-4-7
 XAI_MODEL=grok-4.3
 LLM_FRONT_IMAGE=llm-front:1.0
+LLM_BACK_IMAGE=llm-back:1.0
 ```
 
 `localhost` origin은 운영 CORS에 없습니다.
@@ -91,14 +92,15 @@ secret 값은 확인하거나 문서에 기록하지 않습니다.
 
 EC2에서 Docker 데몬과 외부 네트워크를 확인한 뒤, Compose를 직접 실행합니다.
 
-프론트는 Docker Hub에 올리지 않습니다. Windows에서 이미지를 만들어 tar로 EC2에 넣습니다. EC2(snap Docker)에서는 `/tmp`의 tar를 `docker load`하지 못하므로 `/home/ubuntu/llm/`에 둡니다.
+프론트와 백엔드 모두 Docker Hub에 올리지 않습니다. Windows에서 이미지를 만들어 tar로 EC2에 넣습니다. EC2(snap Docker)에서는 `/tmp`의 tar를 `docker load`하지 못하므로 `/home/ubuntu/llm/`에 둡니다.
 
 ```powershell
 # Windows 저장소 루트
 .\aws\deploy-front.ps1
+.\aws\deploy-back.ps1
 ```
 
-수동으로 할 때:
+수동으로 프론트를 올릴 때:
 
 ```powershell
 cd front
@@ -112,19 +114,21 @@ docker save -o llm-front-1.0.tar llm-front:1.0
 scp -i aws\test-keypair.pem llm-front-1.0.tar ubuntu@43.202.113.123:/home/ubuntu/llm/llm-front-1.0.tar
 ```
 
+백엔드는 `docker build -t llm-back:1.0 .\back` 후 같은 방식으로 save/scp/load 합니다. Gradle은 Windows Docker 빌드 안에서 실행됩니다.
+
 ```bash
-# EC2
+# EC2 (이미 load된 이미지로 기동)
 cd /home/ubuntu/llm
 docker load -i llm-front-1.0.tar
+docker load -i llm-back-1.0.tar
 docker info >/dev/null
 docker network inspect auto_default >/dev/null
 export LLM_ENV_FILE=/home/ubuntu/llm/.env
-docker compose --project-name ubuntu --env-file .env -f docker-compose.yml pull back
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --wait --wait-timeout 180 --remove-orphans
 docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 ```
 
-`compose pull`은 백엔드만 합니다. front는 `pull_policy: never`이고 로컬 load 이미지 `llm-front:1.0`을 씁니다. 런타임은 `mem_limit: 64m`입니다.
+front/back 모두 `pull_policy: never`이고 로컬 load 이미지 `llm-front:1.0`, `llm-back:1.0`을 씁니다. front 런타임은 `mem_limit: 64m`입니다.
 
 `auto_default`가 없으면 배포를 진행하지 말고 compose 프로젝트 `auto`와 네트워크 상태를 확인합니다. 이 네트워크는 auto 스택 소유이므로 EC2에서 빈 네트워크를 직접 만들면 DB 누락을 가릴 수 있습니다.
 
