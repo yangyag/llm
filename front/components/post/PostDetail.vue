@@ -61,7 +61,7 @@ async function onDelete() {
           {{ detail.postBodyCopied ? "복사됨!" : "본문 복사" }}
         </button>
         <button
-          v-if="manageable && !detail.selectedPost?.conversionReady"
+          v-if="manageable && !detail.selectedPost?.conversionReady && detail.postActionMode !== 'edit'"
           type="button"
           class="ghost-button"
           @click="detail.openPostEditPanel()"
