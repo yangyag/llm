@@ -166,7 +166,12 @@ public class BoardService {
 		return toDetailResponse(findPostWithReplies(postId));
 	}
 
+	/**
+	 * @deprecated 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 데이터 조회/보호용으로만 유지되며 신규 호출 금지.
+	 */
+	@Deprecated
 	public BoardPostDetailResponse createAiReply(Long postId, CreateAiReplyRequest request) {
+		// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 컨트롤러가 410 스텁으로 가로막으므로 도달 불가. 본문은 잔재로 유지.
 		BoardPost post = findPostWithReplies(postId);
 		if (post.getMode() == BoardPostMode.FILE_CONVERSION_REQUEST) {
 			throw new AiReplyNotAllowedException();
@@ -230,6 +235,7 @@ public class BoardService {
 	}
 
 	private void ensureReplyIsEditable(BoardReply reply) {
+		// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 AI 답변 행의 수정/삭제 잠금용으로 유지되며 삭제 금지.
 		if (reply.isAi()) {
 			throw new AiReplyModificationNotAllowedException();
 		}

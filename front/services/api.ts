@@ -137,6 +137,9 @@ export function createReply(postId: number, body: string, token: string): Promis
   });
 }
 
+/**
+ * @deprecated 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 표시/보호용 유지, 신규 호출 금지.
+ */
 export function createAiReply(postId: number, provider: AiProvider, token: string): Promise<PostDetail> {
   return requestJson<PostDetail>(`/api/v1/posts/${postId}/ai-replies`, {
     method: "POST",

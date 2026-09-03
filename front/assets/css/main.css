@@ -546,6 +546,7 @@ body {
   flex-wrap: wrap;
 }
 
+/* 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 AI 답변 뱃지 표시용으로 유지. */
 .ai-badge {
   display: inline-flex;
   align-items: center;
@@ -557,6 +558,7 @@ body {
   font-size: 0.82rem;
 }
 
+/* 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 패널용으로 유지. */
 .ai-reply-card {
   align-content: start;
 }

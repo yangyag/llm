@@ -9,6 +9,7 @@ import com.llm.app.board.dto.CreateBoardPostRequest;
 import com.llm.app.board.dto.CreateBoardReplyRequest;
 import com.llm.app.board.dto.UpdateBoardPostRequest;
 import com.llm.app.board.dto.UpdateBoardReplyRequest;
+import com.llm.app.board.exception.AiReplyDisabledException;
 import com.llm.app.board.service.BoardService;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
@@ -105,6 +106,11 @@ public class BoardPostController {
 		return boardService.createReply(username, id, request);
 	}
 
+	/**
+	 * @deprecated 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료.
+	 *             410 Gone을 반환하는 비활성 스텁. 매핑은 원인 파악용으로 유지되며 BoardService 호출은 하지 않는다.
+	 */
+	@Deprecated
 	@PostMapping("/{id}/ai-replies")
 	@ResponseStatus(HttpStatus.CREATED)
 	public BoardPostDetailResponse createAiReply(
@@ -113,7 +119,7 @@ public class BoardPostController {
 		@Valid @RequestBody CreateAiReplyRequest request
 	) {
 		jwtProvider.authenticate(authHeader);
-		return boardService.createAiReply(id, request);
+		throw new AiReplyDisabledException();
 	}
 
 	@GetMapping("/{id}/attachments/{attachmentId}")

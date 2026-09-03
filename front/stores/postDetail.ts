@@ -65,13 +65,16 @@ interface PostDetailState {
   removeAttachmentIds: Set<number>;
   replyForm: { body: string };
   replyEditState: ReplyEditState;
+  // 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 state로 유지, 신규 사용 금지.
   selectedAiProvider: AiProvider;
   submitting: boolean;
+  // 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 state로 유지, 신규 사용 금지.
   aiSubmitting: boolean;
   error: string;
   message: string;
   postActionError: string;
   replyActionError: string;
+  // 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 state로 유지, 신규 사용 금지.
   aiReplyError: string;
   postLinkCopied: boolean;
   postBodyCopied: boolean;
@@ -448,6 +451,7 @@ export const usePostDetailStore = defineStore("postDetail", {
       }
     },
     async handleCreateAiReply() {
+      // 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 메서드로 유지, 신규 호출 금지.
       const auth = useAuthStore();
       const posts = usePostsStore();
       if (!this.selectedPostId || !auth.token) return;
@@ -468,6 +472,7 @@ export const usePostDetailStore = defineStore("postDetail", {
       }
     },
     setAiProvider(provider: AiProvider) {
+      // 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 메서드로 유지, 신규 호출 금지.
       this.aiReplyError = "";
       this.selectedAiProvider = provider;
     },

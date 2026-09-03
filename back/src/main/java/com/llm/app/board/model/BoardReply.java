@@ -29,12 +29,24 @@ public class BoardReply {
 	@Column(name = "author_username", length = 100)
 	private String authorUsername;
 
+	/**
+	 * @deprecated 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료.
+	 *             레거시 AI 답변 행 조회/보호용으로만 유지되며 신규 생성 금지. 컬럼 제거 없음.
+	 */
 	@Column(name = "is_ai", nullable = false)
 	private boolean ai;
 
+	/**
+	 * @deprecated 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료.
+	 *             레거시 AI 답변 행 조회/보호용으로만 유지되며 신규 생성 금지. 컬럼 제거 없음.
+	 */
 	@Column(name = "ai_provider", length = 32)
 	private String aiProvider;
 
+	/**
+	 * @deprecated 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료.
+	 *             레거시 AI 답변 행 조회/보호용으로만 유지되며 신규 생성 금지. 컬럼 제거 없음.
+	 */
 	@Column(name = "ai_model", length = 64)
 	private String aiModel;
 

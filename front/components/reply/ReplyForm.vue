@@ -17,7 +17,7 @@ function onBody(event: Event) {
     <button
       type="submit"
       class="primary-button wide-button"
-      :disabled="detail.submitting || detail.aiSubmitting"
+      :disabled="detail.submitting"
     >
       답변 등록
     </button>

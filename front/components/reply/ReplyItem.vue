@@ -28,6 +28,7 @@ async function onDelete() {
     <div class="reply-top">
       <div class="reply-heading">
         <strong>답변 #{{ props.reply.id }}</strong>
+        <!-- 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 행 표시용으로 유지. -->
         <span v-if="props.reply.ai" class="ai-badge">AI · {{ props.reply.aiProvider }}</span>
         <span v-else-if="props.reply.authorUsername" class="author-badge">
           {{ props.reply.authorUsername }}
@@ -38,6 +39,7 @@ async function onDelete() {
     </div>
     <p class="detail-body">{{ props.reply.body }}</p>
 
+    <!-- 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. !reply.ai 가드는 레거시 행 보호용으로 유지. -->
     <div v-if="!props.reply.ai && manageable" class="inline-actions">
       <button
         type="button"
@@ -59,5 +61,6 @@ async function onDelete() {
     <ReplyEditPanel
       v-if="!props.reply.ai && manageable && detail.replyEditState.replyId === props.reply.id"
     />
+    <!-- 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 위 !reply.ai 가드는 레거시 행 보호용으로 유지. -->
   </article>
 </template>

@@ -374,6 +374,8 @@ Content-Type: `multipart/form-data`
 
 ## AI replies
 
+> 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. `POST /api/v1/posts/{id}/ai-replies`는 410 `AI_REPLY_DISABLED`를 반환하는 비활성 스텁으로만 유지됩니다. 아래 내용은 종료 이전 동작의 기록입니다.
+
 ### `POST /api/v1/posts/{id}/ai-replies`
 
 인증: 필요
@@ -392,7 +394,7 @@ Content-Type: `multipart/form-data`
 - `CLAUDE`
 - `GROK`
 
-응답: 게시글 상세, HTTP 201
+응답: 게시글 상세, HTTP 201 (2026-09-03 이후 종료되어 현재는 410 `AI_REPLY_DISABLED`)
 
 제약:
 

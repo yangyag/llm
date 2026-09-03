@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 어디서도 import하지 않는 잔재 파일로 유지.
 import { usePostDetailStore } from "~/stores/postDetail";
 import type { AiProvider } from "~/types/api";
 
@@ -13,6 +14,7 @@ const providers: { id: AiProvider; label: string }[] = [
 </script>
 
 <template>
+  <!-- 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 파일로 유지. -->
   <div class="card inset-card form-grid ai-reply-card">
     <div class="section-heading">
       <h3>AI가 답변달기</h3>

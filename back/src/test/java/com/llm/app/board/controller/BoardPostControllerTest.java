@@ -4,9 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -23,10 +20,7 @@ import com.llm.app.auth.Admin;
 import com.llm.app.auth.AdminRepository;
 import com.llm.app.auth.JwtProvider;
 import com.llm.app.auth.UserRole;
-import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
-import com.llm.app.board.exception.AiProviderNotConfiguredException;
-import com.llm.app.board.exception.AiReplyGenerationException;
 import com.llm.app.board.dto.CreateUploadSessionRequest;
 import com.llm.app.board.dto.UploadSessionStatusResponse;
 import com.llm.app.board.model.BoardAttachment;
@@ -99,6 +93,8 @@ class BoardPostControllerTest {
 	@Autowired
 	private PasswordEncoder passwordEncoder;
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. BoardService.createAiReply가 호출되지 않으므로
+	// MockBean은 외부 API 호출 없이 컨텍스트 로딩용으로만 유지.
 	@MockBean
 	private AiReplyGenerator aiReplyGenerator;
 
@@ -776,8 +772,9 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.hasNext").value(false));
 	}
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. POST .../ai-replies 는 410 비활성 스텁.
 	@Test
-	void aiReplyShouldBeStoredAndLocked() throws Exception {
+	void aiReplyShouldReturnGone() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
 				.header("Authorization", "Bearer " + token)
 				.param("title", "AI 테스트")
@@ -786,10 +783,8 @@ class BoardPostControllerTest {
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
-		given(aiReplyGenerator.generateReply(eq(AiProvider.GPT), anyString(), anyString()))
-			.willReturn(new AiReplyGenerator.AiReplyResult("AI 생성 답변", "gpt-5.5"));
 
-		MvcResult aiReplyResult = mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
+		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
 				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
@@ -797,14 +792,35 @@ class BoardPostControllerTest {
 					  "provider": "GPT"
 					}
 					"""))
-			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.replies", hasSize(1)))
-			.andExpect(jsonPath("$.replies[0].body").value("AI 생성 답변"))
-			.andExpect(jsonPath("$.replies[0].ai").value(true))
-			.andExpect(jsonPath("$.replies[0].aiProvider").value("GPT"))
-			.andReturn();
+			.andExpect(status().isGone())
+			.andExpect(jsonPath("$.code").value("AI_REPLY_DISABLED"));
+	}
 
-		long replyId = extractFirstReplyId(aiReplyResult.getResponse().getContentAsString());
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 AI 답변 행의 수정/삭제 잠금 회귀 테스트로 유지.
+	@Test
+	void legacyAiReplyShouldStayLocked() throws Exception {
+		Instant now = Instant.now();
+		BoardPost post = boardPostRepository.save(new BoardPost(
+			"AI 잠금 테스트",
+			"본문",
+			BoardPostMode.NORMAL,
+			"admin",
+			now,
+			now
+		));
+		BoardReply aiReply = new BoardReply(
+			post,
+			"AI 생성 답변",
+			null,
+			now,
+			now,
+			true,
+			"GPT",
+			"gpt-5.5"
+		);
+		post.getReplies().add(aiReply);
+		boardReplyRepository.saveAndFlush(aiReply);
+		long replyId = aiReply.getId();
 
 		mockMvc.perform(put("/api/v1/posts/replies/{id}", replyId)
 				.header("Authorization", "Bearer " + token)
@@ -823,8 +839,9 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.code").value("AI_REPLY_LOCKED"));
 	}
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. provider 값과 무관하게 410을 반환한다.
 	@Test
-	void invalidAiProviderShouldReturnBadRequest() throws Exception {
+	void invalidAiProviderShouldReturnGone() throws Exception {
 		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
 				.header("Authorization", "Bearer " + token)
 				.param("title", "AI 공급자 테스트")
@@ -842,10 +859,11 @@ class BoardPostControllerTest {
 					  "provider": "BARD"
 					}
 					"""))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("INVALID_AI_PROVIDER"));
+			.andExpect(status().isGone())
+			.andExpect(jsonPath("$.code").value("AI_REPLY_DISABLED"));
 	}
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 파일변환 글 여부와 무관하게 410을 반환한다.
 	@Test
 	void aiReplyShouldBeRejectedForFileConversionRequestPost() throws Exception {
 		Instant now = Instant.parse("2026-03-11T00:00:00Z");
@@ -876,8 +894,8 @@ class BoardPostControllerTest {
 					  "provider": "GPT"
 					}
 					"""))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("AI_REPLY_NOT_ALLOWED"));
+			.andExpect(status().isGone())
+			.andExpect(jsonPath("$.code").value("AI_REPLY_DISABLED"));
 	}
 
 	@Test
@@ -1117,55 +1135,7 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.code").value("NOT_FOUND"));
 	}
 
-	@Test
-	void aiReplyGenerationFailureShouldReturn502() throws Exception {
-		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
-				.header("Authorization", "Bearer " + memberToken)
-				.param("title", "AI 실패 글")
-				.param("bodyBase64", encode("본문")))
-			.andExpect(status().isCreated())
-			.andReturn();
-		long postId = extractId(createResult.getResponse().getContentAsString());
-
-		given(aiReplyGenerator.generateReply(eq(AiProvider.GPT), anyString(), anyString()))
-			.willThrow(new AiReplyGenerationException("external api boom"));
-
-		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
-				.header("Authorization", "Bearer " + memberToken)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "provider": "GPT"
-					}
-					"""))
-			.andExpect(status().isBadGateway())
-			.andExpect(jsonPath("$.code").value("AI_REPLY_GENERATION_FAILED"));
-	}
-
-	@Test
-	void aiReplyWhenProviderNotConfiguredShouldReturn503() throws Exception {
-		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
-				.header("Authorization", "Bearer " + memberToken)
-				.param("title", "AI 미설정 글")
-				.param("bodyBase64", encode("본문")))
-			.andExpect(status().isCreated())
-			.andReturn();
-		long postId = extractId(createResult.getResponse().getContentAsString());
-
-		given(aiReplyGenerator.generateReply(eq(AiProvider.GPT), anyString(), anyString()))
-			.willThrow(new AiProviderNotConfiguredException("GPT"));
-
-		mockMvc.perform(post("/api/v1/posts/{id}/ai-replies", postId)
-				.header("Authorization", "Bearer " + memberToken)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "provider": "GPT"
-					}
-					"""))
-			.andExpect(status().isServiceUnavailable())
-			.andExpect(jsonPath("$.code").value("AI_PROVIDER_NOT_CONFIGURED"));
-	}
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 외부 호출에 도달할 수 없어 502/503 케이스는 삭제됨.
 
 	@Test
 	void replyBodyLongerThanOneMillionShouldReturnBadRequest() throws Exception {

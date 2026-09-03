@@ -1,6 +1,7 @@
 // API 타입 정의 — docs/07-api-reference.md 기반 수동 정의.
 // 백엔드에 springdoc/OpenAPI가 없으므로 문서에서 도출.
 
+// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. Reply.ai/aiProvider/aiModel은 레거시 행 표시용으로 유지.
 export type AiProvider = "GPT" | "CLAUDE" | "GROK";
 
 export type PostMode = "NORMAL" | "FILE_CONVERSION_REQUEST";
@@ -37,8 +38,11 @@ export interface Attachment {
 export interface Reply {
   id: number;
   body: string;
+  /** 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 행 표시/보호용으로 유지. */
   ai: boolean;
+  /** 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 행 표시/보호용으로 유지. */
   aiProvider: AiProvider | null;
+  /** 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 행 표시/보호용으로 유지. */
   aiModel: string | null;
   /** 작성자 username. AI 답변은 null. 레거시 일반 댓글도 null일 수 있음. */
   authorUsername: string | null;

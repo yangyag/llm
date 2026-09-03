@@ -10,7 +10,6 @@ import { usePostDetailStore } from "~/stores/postDetail";
 import { getApiUrl } from "~/services/api";
 import { getListStateFromLocation } from "~/composables/useListUrlState";
 import { useIdleTimeout } from "~/composables/useIdleTimeout";
-import { isFileConversionMode } from "~/utils/post";
 
 const auth = useAuthStore();
 const posts = usePostsStore();
@@ -23,7 +22,7 @@ const message = computed(
   () => detail.message || posts.listMessage
 );
 const error = computed(
-  () => detail.error || detail.postActionError || detail.replyActionError || detail.aiReplyError || posts.listError
+  () => detail.error || detail.postActionError || detail.replyActionError || posts.listError
 );
 
 // 뒤로가기(popstate): URL → state 동기화 후 목록 뷰로.
@@ -142,10 +141,8 @@ function handleLogout() {
             <div class="section-heading">
               <h3>답변</h3>
             </div>
-            <div class="split-layout">
-              <ReplyForm />
-              <AiReplyPanel v-if="!isFileConversionMode(detail.selectedPost.mode)" />
-            </div>
+            <!-- 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. AI 패널 제거, 일반 답변폼 단독 1열. -->
+            <ReplyForm />
             <ReplyList />
           </section>
         </template>

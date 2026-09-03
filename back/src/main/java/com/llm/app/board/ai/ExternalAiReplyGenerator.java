@@ -14,6 +14,10 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
+/**
+ * @deprecated 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 데이터 조회/보호용으로만 유지되며 신규 호출 금지.
+ */
+@Deprecated
 public class ExternalAiReplyGenerator implements AiReplyGenerator {
 	private static final String ANTHROPIC_VERSION = "2023-06-01";
 	private static final String SYSTEM_PROMPT =

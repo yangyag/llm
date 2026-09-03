@@ -6,6 +6,7 @@ import com.llm.app.auth.InvalidCredentialsException;
 import com.llm.app.auth.LastAdminProtectedException;
 import com.llm.app.auth.SelfDeleteNotAllowedException;
 import com.llm.app.board.exception.AiProviderNotConfiguredException;
+import com.llm.app.board.exception.AiReplyDisabledException;
 import com.llm.app.board.exception.AiReplyGenerationException;
 import com.llm.app.board.exception.AiReplyModificationNotAllowedException;
 import com.llm.app.board.exception.AiReplyNotAllowedException;
@@ -92,6 +93,7 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.FORBIDDEN, "FILE_CONVERSION_LOCKED", exception.getMessage(), request);
 	}
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 AI 답변 행 보호용으로 유지.
 	@ExceptionHandler({ AiReplyModificationNotAllowedException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiReplyLocked(
 		RuntimeException exception,
@@ -100,6 +102,7 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.FORBIDDEN, "AI_REPLY_LOCKED", exception.getMessage(), request);
 	}
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 AI 답변 행 보호용으로 유지.
 	@ExceptionHandler({ AiReplyNotAllowedException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiReplyNotAllowed(
 		RuntimeException exception,
@@ -108,6 +111,7 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.BAD_REQUEST, "AI_REPLY_NOT_ALLOWED", exception.getMessage(), request);
 	}
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 AI 답변 행 보호용으로 유지.
 	@ExceptionHandler({ InvalidAiProviderException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidAiProvider(
 		RuntimeException exception,
@@ -148,6 +152,7 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.CONFLICT, "UPLOAD_SESSION_STATE_ERROR", exception.getMessage(), request);
 	}
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 AI 답변 행 보호용으로 유지.
 	@ExceptionHandler({ AiProviderNotConfiguredException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiProviderNotConfigured(
 		RuntimeException exception,
@@ -156,12 +161,21 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, "AI_PROVIDER_NOT_CONFIGURED", exception.getMessage(), request);
 	}
 
+	// 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 AI 답변 행 보호용으로 유지.
 	@ExceptionHandler({ AiReplyGenerationException.class })
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiReplyGeneration(
 		RuntimeException exception,
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.BAD_GATEWAY, "AI_REPLY_GENERATION_FAILED", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ AiReplyDisabledException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleAiReplyDisabled(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.GONE, "AI_REPLY_DISABLED", exception.getMessage(), request);
 	}
 
 	@ExceptionHandler({ NotFoundException.class })

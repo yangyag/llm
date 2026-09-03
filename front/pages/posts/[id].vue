@@ -170,6 +170,7 @@ function goToBoard() {
               <div class="reply-top">
                 <div class="reply-heading">
                   <strong>댓글 #{{ reply.id }}</strong>
+                  <!-- 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 행 표시용으로 유지. -->
                   <span v-if="reply.ai" class="ai-badge">
                     AI · {{ reply.aiProvider }} ({{ reply.aiModel }})
                   </span>
