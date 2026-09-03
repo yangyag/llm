@@ -95,6 +95,10 @@ APP_UPLOAD_SESSIONS_ROOT_PATH=/var/lib/llm/upload-sessions
 - 첨부파일 기본값: `${java.io.tmpdir}/llm-attachments`
 - 업로드 세션 기본값: `${java.io.tmpdir}/llm-upload-sessions`
 
+## 이미지 내장 DB로 로컬 기동 시 주의
+
+`yangyag2/postgres`처럼 PGDATA가 bake된 이미지는 컨테이너 시작 시 초기화가 건너뛰어지므로(`Skipping initialization`), 이미지 안 비밀번호·권한·Flyway 버전이 현재 코드와 다를 수 있습니다(2026-09-04 로컬에서 V12 상태 DB + V16 코드 조합 확인). `.env`의 `APP_DB_HOST/NAME/SCHEMA/USER/PASSWORD`를 맞춘 뒤에도 백엔드가 뜨지 않으면 백엔드 로그의 Flyway 에러(`password authentication failed` → `permission denied for schema` → `must be owner of table` 순서로 나타날 수 있음)를 보고 docs/15의 baked DB 항목대로 권한/owner를 정리한 뒤 백엔드를 재시작합니다.
+
 ## 자주 쓰는 명령
 
 ```bash

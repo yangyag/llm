@@ -15,6 +15,8 @@ APP_DB_SCHEMA=llm
 
 운영 PostgreSQL은 공용 컨테이너 `yangyag-postgres`(compose 프로젝트 `auto`, 예전 이름 `auto-postgres`)를 쓰되, LLM 데이터는 전용 database `llm`(owner `llm`)에 둡니다. 스키마 이름은 그대로 `llm`입니다. 2026-08-27에 `auto` database의 `llm` 스키마에서 이관했고, 확인 후 구 스키마 `auto.llm`은 삭제했습니다. 같은 날 컨테이너 이름을 `yangyag-postgres`로 바꿨고, LLM은 Docker 네트워크 DNS(`APP_DB_HOST=yangyag-postgres`)로 접속합니다. 런타임은 `APP_DB_NAME=llm`만 사용합니다.
 
+마이그레이션 실행 유저는 대상 스키마의 `USAGE, CREATE` 권한과 마이그레이션 대상 테이블의 owner여야 합니다. `GRANT ALL ON ALL TABLES`만으로는 `ALTER TABLE`이 안 되며, owner가 다른 롤이면 `must be owner of table`로 실패합니다. 운영 DB(`llm` database, owner `llm`)에서는 런타임 유저와 owner가 일치하므로 정상이지만, 이미지 내장(baked) DB나 이관된 DB를 로컬에서 그대로 쓰면 owner 불일치가 생길 수 있습니다. 대응 절차는 docs/15의 baked DB 항목을 참조합니다.
+
 로컬 예시:
 
 ```env

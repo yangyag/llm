@@ -59,20 +59,83 @@ APP_DB_HOST=localhost SERVER_PORT=8082 ./gradlew bootRun
 - `Connection refused`
 - `UnknownHostException: yangyag-postgres`
 - Flyway migration 실패
+- `FATAL: password authentication failed for user "<db-user>"` (백엔드 로그, Flyway 단계)
 
 확인:
 
 ```bash
 docker ps | grep postgres
 docker network inspect auto_default
-grep -E '^(APP_DB_HOST|APP_DB_PORT|APP_DB_NAME|APP_DB_SCHEMA)=' .env
+grep -E '^(APP_DB_HOST|APP_DB_PORT|APP_DB_NAME|APP_DB_SCHEMA|APP_DB_USER)=' .env
 ```
 
 대응:
 
 - 운영: `APP_DB_HOST=yangyag-postgres`, `APP_DB_NAME=llm`, `APP_DB_SCHEMA=llm`
 - 로컬: 실제 PostgreSQL 위치와 DB/schema가 있는지 확인
+- 비밀번호 실패 시 DB 컨테이너 안에서 해당 롤 비밀번호를 재설정하고 `.env`의 `APP_DB_PASSWORD`와 맞춥니다(값 자체는 문서·로그에 기록 금지).
 - schema는 Flyway `create-schemas=true`로 생성 가능하지만 DB 자체와 권한은 먼저 있어야 합니다.
+
+## 이미지 내장(baked) DB를 로컬에서 쓸 때 권한/owner 문제
+
+`yangyag2/postgres` 같은 이미지 내장 DB는 데이터 디렉터리(PGDATA)가 이미 들어 있어 컨테이너 시작 시 DB/롤/비밀번호 초기화가 건너뛰어집니다(`Skipping initialization`). 포함된 데이터가 예전 Flyway 버전(V12 등)까지만 적용된 상태라면, 현행 백엔드 기동 시 V13+ 마이그레이션을 시도하면서 아래 순서로 실패할 수 있습니다(2026-09-04 로컬 확인).
+
+증상(백엔드 로그 순서):
+
+1. `FATAL: password authentication failed for user "yangyag"` — 이미지 안 롤 비밀번호가 `.env`와 다름
+2. `ERROR: permission denied for schema llm` — 접속 유저에 스키마 `USAGE, CREATE` 권한 없음
+3. `ERROR: must be owner of table <table>` — 테이블 owner가 다른 롤(예: `llm_local`)이라 `ALTER TABLE` 불가
+
+확인:
+
+```bash
+docker logs yangyag-postgres --tail 20
+docker exec yangyag-postgres psql -U postgres -d llm_local -c "SELECT tablename, tableowner FROM pg_tables WHERE schemaname='llm';"
+```
+
+대응(로컬 전용, 운영 DB에는 적용 금지):
+
+```bash
+docker exec yangyag-postgres psql -U postgres -c "ALTER USER yangyag WITH PASSWORD '<db-password>';"
+docker exec yangyag-postgres psql -U postgres -d llm_local -v ON_ERROR_STOP=1 \
+  -c "GRANT USAGE, CREATE ON SCHEMA llm TO yangyag;"
+docker exec yangyag-postgres psql -U postgres -d llm_local -v ON_ERROR_STOP=1 \
+  -c "ALTER SCHEMA llm OWNER TO yangyag;" \
+  -c "ALTER TABLE llm.flyway_schema_history OWNER TO yangyag;" \
+  -c "ALTER TABLE llm.posts OWNER TO yangyag;" \
+  -c "ALTER TABLE llm.post_attachments OWNER TO yangyag;" \
+  -c "ALTER TABLE llm.upload_session_parts OWNER TO yangyag;" \
+  -c "ALTER TABLE llm.upload_sessions OWNER TO yangyag;" \
+  -c "ALTER TABLE llm.post_replies OWNER TO yangyag;" \
+  -c "ALTER TABLE llm.admins OWNER TO yangyag;"
+docker restart llm-back
+```
+
+주의:
+
+- `GRANT ALL ON ALL TABLES`만으로는 `ALTER TABLE`에 필요한 owner 권한이 해결되지 않습니다. owner 변경이 필요합니다.
+- 권한을 고친 뒤에는 `docker restart llm-back`(또는 `docker compose up -d --wait`)으로 백엔드를 재시작해야 마이그레이션이 다시 시도됩니다. 컨테이너 healthcheck 간격(10초) 때문에 판정까지 시간이 걸립니다.
+- 시드 데이터가 있는 테이블에 V13+를 적용하면 백필(V15 등)이 기존 행을 갱신할 수 있습니다. 로컬 확인용 DB에서만 수행합니다.
+
+## Git Bash에서 `docker exec`로 SQL 파일 넣기 실패
+
+Windows Git Bash에서 호스트 SQL 파일을 `docker exec -i`의 stdin 리다이렉션으로 psql에 넣으면 경로 자동 변환과 `search_path` 미적용으로 실패할 수 있습니다(2026-09-04 로컬 확인).
+
+실패 예:
+
+- `cat: 'C:/Program Files/Git/var/lib/postgresql/data/pg_hba.conf'` — 컨테이너 안 리눅스 경로가 Git Bash 경로 변환을 타서 생긴 오류. `docker exec <컨테이너> cat ...` 처럼 컨테이너 기준으로 실행해야 합니다.
+- `relation "admins" does not exist` — DB에는 `llm.admins`로 존재하지만 psql 기본 `search_path`(`"$user", public`)에 `llm`이 없어 생긴 오류. `--set search_path=...` 같은 접속 문자열 옵션으로는 해결되지 않았습니다.
+
+대응:
+
+- 컨테이너 안 파일은 `MSYS_NO_PATHCONV=1 docker exec <컨테이너> cat /리눅스/경로` 형태로 읽습니다.
+- 스키마 한정 테이블에는 SQL에서 스키마를 직접 지정(`llm.admins`)하거나, `PGOPTIONS="--search-path=llm"` 환경 변수를 `docker exec -e PGOPTIONS`로 전달합니다.
+
+```bash
+MSYS_NO_PATHCONV=1 docker exec yangyag-postgres cat /var/lib/postgresql/data/pg_hba.conf
+PGOPTIONS="--search-path=llm" MSYS_NO_PATHCONV=1 docker exec -i -e PGOPTIONS yangyag-postgres \
+  psql -U postgres -d llm_local -v ON_ERROR_STOP=1 < ./V13__add_role_to_admins.sql
+```
 
 ## Flyway checksum mismatch로 백엔드 시작 실패
 
