@@ -2,10 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import AttachmentPanel from "~/components/post/AttachmentPanel.vue";
+import PostBodyReader from "~/components/post/PostBodyReader.vue";
 import { useAuthStore } from "~/stores/auth";
-import { getApiUrl, getPost } from "~/services/api";
-import { clipboardUserMessage, writeClipboardText } from "~/utils/clipboard";
-import { canCopyPostBody, formatFileSize, getPostModeLabel, isFileConversionMode } from "~/utils/post";
+import { getPost } from "~/services/api";
+import { getPostModeLabel, isFileConversionMode } from "~/utils/post";
 import type { PostDetail } from "~/types/api";
 
 const auth = useAuthStore();
@@ -16,35 +16,8 @@ const postId = computed(() => Number.parseInt(route.params.id as string, 10));
 const post = ref<PostDetail | null>(null);
 const loading = ref(true);
 const error = ref("");
-const bodyCopied = ref(false);
-const copyError = ref("");
 
 let cancelled = false;
-let bodyCopyTimer: ReturnType<typeof setTimeout> | undefined;
-
-function resetCopyFeedback() {
-  bodyCopied.value = false;
-  copyError.value = "";
-  window.clearTimeout(bodyCopyTimer);
-  bodyCopyTimer = undefined;
-}
-
-async function handleCopyPostBody() {
-  copyError.value = "";
-  const current = post.value;
-  if (!current || !canCopyPostBody(current)) return;
-  try {
-    await writeClipboardText(current.body);
-    copyError.value = "";
-    bodyCopied.value = true;
-    window.clearTimeout(bodyCopyTimer);
-    bodyCopyTimer = window.setTimeout(() => {
-      bodyCopied.value = false;
-    }, 2000);
-  } catch (err) {
-    copyError.value = clipboardUserMessage(err, "게시글 본문을 클립보드에 복사하지 못했습니다.");
-  }
-}
 
 async function loadPost() {
   loading.value = true;
@@ -70,11 +43,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   cancelled = true;
-  resetCopyFeedback();
 });
 
 watch(postId, () => {
-  resetCopyFeedback();
   if (!cancelled) loadPost();
 });
 
@@ -110,42 +81,30 @@ function goToBoard() {
       </section>
 
       <template v-else-if="post">
-        <section class="card">
-          <div class="section-heading">
-            <h2>게시글 상세</h2>
-            <span>댓글 {{ post.replies.length }}개</span>
-          </div>
-
-          <article class="detail-panel">
-            <div class="detail-top">
-              <div>
-                <h3>{{ post.title }}</h3>
-                <div class="detail-meta-row">
-                  <span class="post-mode-badge" :class="{ file: isFileConversionMode(post.mode) }">
-                    {{ getPostModeLabel(post.mode) }}
-                  </span>
-                  <span v-if="post.conversionReady" class="post-mode-badge success">암호화 업로드 완료</span>
-                </div>
-                <div class="post-author-row">
-                  <span class="post-author-label">작성자</span>
-                  <strong class="post-author-name" :class="{ muted: !post.authorUsername }">
-                    {{ post.authorUsername || "작성자 없음" }}
-                  </strong>
-                  <time>{{ new Date(post.createdAt).toLocaleString() }}</time>
-                </div>
-              </div>
-              <div v-if="canCopyPostBody(post)" class="inline-actions">
-                <button type="button" class="ghost-button" @click="handleCopyPostBody">
-                  {{ bodyCopied ? "복사됨!" : "본문 복사" }}
-                </button>
-              </div>
+        <section class="card detail-card">
+          <article class="post-hero">
+            <div class="post-hero-badges">
+              <span class="post-mode-badge" :class="{ file: isFileConversionMode(post.mode) }">
+                {{ getPostModeLabel(post.mode) }}
+              </span>
+              <span v-if="post.conversionReady" class="post-mode-badge success">암호화 업로드 완료</span>
             </div>
-            <p v-if="copyError" class="message-banner error" role="alert">{{ copyError }}</p>
+
+            <h3 class="post-hero-title">{{ post.title }}</h3>
+
+            <div class="post-hero-byline">
+              <span class="post-avatar" aria-hidden="true">{{ (post.authorUsername || "익").slice(0, 1).toUpperCase() }}</span>
+              <strong class="post-hero-author">{{ post.authorUsername || "익명" }}</strong>
+              <span class="post-hero-dot" aria-hidden="true">·</span>
+              <time>{{ new Date(post.createdAt).toLocaleString("ko-KR") }}</time>
+              <span class="post-hero-dot" aria-hidden="true">·</span>
+              <span class="post-hero-replies">댓글 {{ post.replies.length }}</span>
+            </div>
 
             <p v-if="isFileConversionMode(post.mode)" class="post-body-box">
               암호화 업로드 글입니다. 본문은 공개 상세 화면에서 표시되지 않습니다.
             </p>
-            <p v-else class="post-body-box">{{ post.body }}</p>
+            <PostBodyReader v-else :body="post.body" :mode="post.mode" />
 
             <AttachmentPanel
               v-if="post.attachments.length > 0"
@@ -153,33 +112,29 @@ function goToBoard() {
               :mode="post.mode"
             />
           </article>
-        </section>
 
-        <section class="reply-section">
-          <div class="section-heading">
-            <h3>댓글</h3>
-          </div>
+          <section class="reply-thread">
+            <h3 class="reply-thread-title">
+              댓글
+              <span class="reply-count">{{ post.replies.length }}</span>
+            </h3>
 
-          <p v-if="post.replies.length === 0" class="empty-state">아직 댓글이 없습니다.</p>
-          <div v-else class="reply-list">
-            <article
-              v-for="reply in post.replies"
-              :key="reply.id"
-              class="card inset-card reply-card"
-            >
-              <div class="reply-top">
-                <div class="reply-heading">
-                  <strong>댓글 #{{ reply.id }}</strong>
+            <p v-if="post.replies.length === 0" class="empty-state">아직 댓글이 없습니다.</p>
+            <div v-else class="reply-list">
+              <article v-for="reply in post.replies" :key="reply.id" class="reply">
+                <div class="reply-head">
+                  <span class="reply-avatar" aria-hidden="true">{{ ((reply.authorUsername || "익") as string).slice(0, 1).toUpperCase() }}</span>
+                  <strong class="reply-author">{{ reply.authorUsername || "익명" }}</strong>
                   <!-- 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 레거시 행 표시용으로 유지. -->
                   <span v-if="reply.ai" class="ai-badge">
                     AI · {{ reply.aiProvider }} ({{ reply.aiModel }})
                   </span>
+                  <time>{{ new Date(reply.createdAt).toLocaleString("ko-KR") }}</time>
                 </div>
-                <time>{{ new Date(reply.createdAt).toLocaleString() }}</time>
-              </div>
-              <p class="detail-body">{{ reply.body }}</p>
-            </article>
-          </div>
+                <p class="reply-body">{{ reply.body }}</p>
+              </article>
+            </div>
+          </section>
         </section>
 
         <section class="card">

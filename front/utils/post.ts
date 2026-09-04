@@ -33,15 +33,6 @@ export function isFileConversionMode(mode: PostMode | string): boolean {
   return mode === "FILE_CONVERSION_REQUEST";
 }
 
-export function canCopyPostBody(
-  post: { mode: PostMode | string; body?: string | null } | null | undefined
-): boolean {
-  if (!post || isFileConversionMode(post.mode)) {
-    return false;
-  }
-  return (post.body ?? "").length > 0;
-}
-
 export function getPostModeLabel(mode: PostMode | string): string {
   return isFileConversionMode(mode) ? "암호화 업로드" : "일반";
 }

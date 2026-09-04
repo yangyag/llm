@@ -45,10 +45,6 @@ export const usePostsStore = defineStore("posts", {
       listMessage: ""
     };
   },
-  getters: {
-    pageNumbers: (state): number[] =>
-      Array.from({ length: state.pagination.totalPages }, (_, index) => index + 1)
-  },
   actions: {
     setSearchInput(value: string) {
       this.searchInput = value;

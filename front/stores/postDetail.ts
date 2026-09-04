@@ -16,7 +16,6 @@ import {
   ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE,
   MAX_ATTACHMENTS,
   attachmentFileKey,
-  canCopyPostBody,
   mergeAttachmentFiles
 } from "~/utils/post";
 import { useAuthStore } from "./auth";
@@ -26,13 +25,10 @@ const EMPTY_POST_FORM = { title: "", body: "" };
 const EMPTY_REPLY_FORM = { body: "" };
 
 let postLinkCopyTimer: ReturnType<typeof setTimeout> | undefined;
-let postBodyCopyTimer: ReturnType<typeof setTimeout> | undefined;
 
 function clearCopyFeedbackTimers(): void {
   window.clearTimeout(postLinkCopyTimer);
-  window.clearTimeout(postBodyCopyTimer);
   postLinkCopyTimer = undefined;
-  postBodyCopyTimer = undefined;
 }
 
 type View = "list" | "write" | "detail";
@@ -77,7 +73,6 @@ interface PostDetailState {
   // 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 state로 유지, 신규 사용 금지.
   aiReplyError: string;
   postLinkCopied: boolean;
-  postBodyCopied: boolean;
 }
 
 export const usePostDetailStore = defineStore("postDetail", {
@@ -106,8 +101,7 @@ export const usePostDetailStore = defineStore("postDetail", {
     postActionError: "",
     replyActionError: "",
     aiReplyError: "",
-    postLinkCopied: false,
-    postBodyCopied: false
+    postLinkCopied: false
   }),
   actions: {
     resetListViewState() {
@@ -121,7 +115,6 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.message = "";
       this.error = "";
       this.postLinkCopied = false;
-      this.postBodyCopied = false;
       clearCopyFeedbackTimers();
     },
     async refreshListView() {
@@ -159,7 +152,6 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.message = "";
       this.error = "";
       this.postLinkCopied = false;
-      this.postBodyCopied = false;
       clearCopyFeedbackTimers();
       this.loadPostDetail(postId);
     },
@@ -490,22 +482,6 @@ export const usePostDetailStore = defineStore("postDetail", {
         }, 2000);
       } catch (err) {
         this.error = clipboardUserMessage(err, "게시글 링크를 클립보드에 복사하지 못했습니다.");
-      }
-    },
-    async handleCopyPostBody() {
-      this.error = "";
-      const post = this.selectedPost;
-      if (!post || !canCopyPostBody(post)) return;
-      try {
-        await writeClipboardText(post.body);
-        this.error = "";
-        this.postBodyCopied = true;
-        window.clearTimeout(postBodyCopyTimer);
-        postBodyCopyTimer = window.setTimeout(() => {
-          this.postBodyCopied = false;
-        }, 2000);
-      } catch (err) {
-        this.error = clipboardUserMessage(err, "게시글 본문을 클립보드에 복사하지 못했습니다.");
       }
     }
   }

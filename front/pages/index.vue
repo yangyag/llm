@@ -91,21 +91,12 @@ function handleLogout() {
       <p v-if="error" class="message-banner error" role="alert">{{ error }}</p>
 
       <template v-if="detail.view === 'list'">
-        <div class="download-link-row">
-          <a class="download-link" :href="getApiUrl('/upload_zip_post.zip')" download="upload_zip_post.zip">
-            * 파일 업로드 프로그램
-          </a>
-        </div>
-
         <section class="card">
-          <div class="section-heading">
-            <div>
-              <h2>게시글 목록</h2>
-              <p class="section-meta">
-                {{ posts.searchQuery ? `검색 결과 ${posts.pagination.totalItems}개` : `총 ${posts.pagination.totalItems}개` }}, 페이지 {{ posts.pagination.page }}{{ posts.pagination.totalPages > 0 ? ` / ${posts.pagination.totalPages}` : "" }}
-              </p>
-            </div>
-            <button type="button" class="ghost-button" @click="detail.refreshListView()">새로고침</button>
+          <div class="list-head">
+            <p class="list-count">
+              {{ posts.searchQuery ? `“${posts.searchQuery}” 검색 결과 ${posts.pagination.totalItems}개` : `총 ${posts.pagination.totalItems}개` }}
+            </p>
+            <button type="button" class="list-refresh" @click="detail.refreshListView()">새로고침</button>
           </div>
 
           <SearchBar />
@@ -119,6 +110,12 @@ function handleLogout() {
 
           <Pagination v-if="posts.items.length > 0" />
         </section>
+
+        <p class="tool-note">
+          <a :href="getApiUrl('/upload_zip_post.zip')" download="upload_zip_post.zip">
+            파일 업로드 프로그램 다운로드
+          </a>
+        </p>
       </template>
 
       <section v-if="detail.view === 'write'" class="card">
@@ -128,19 +125,15 @@ function handleLogout() {
         <PostForm />
       </section>
 
-      <section v-if="detail.view === 'detail'" class="card">
-        <div class="section-heading">
-          <h2>게시글 상세</h2>
-          <span v-if="detail.selectedPost">답변 {{ detail.selectedPost.replies.length }}개</span>
-        </div>
-
+      <section v-if="detail.view === 'detail'" class="card detail-card">
         <p v-if="detail.detailLoading || !detail.selectedPost" class="empty-state">불러오는 중...</p>
         <template v-else>
           <PostDetail />
-          <section class="reply-section">
-            <div class="section-heading">
-              <h3>답변</h3>
-            </div>
+          <section class="reply-thread">
+            <h3 class="reply-thread-title">
+              답변
+              <span class="reply-count">{{ detail.selectedPost.replies.length }}</span>
+            </h3>
             <!-- 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. AI 패널 제거, 일반 답변폼 단독 1열. -->
             <ReplyForm />
             <ReplyList />

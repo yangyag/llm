@@ -40,23 +40,53 @@ async function onBatchDelete() {
 </script>
 
 <template>
-  <div v-if="manageableItems.length > 0" class="batch-action-bar">
-    <label class="checkbox-field batch-select-all">
-      <input
-        type="checkbox"
-        :checked="allManageableSelected"
-        @change="toggleSelectAllManageable()"
-      />
-      <span>전체 선택</span>
-    </label>
+  <div v-if="manageableItems.length > 0" class="select-row">
+    <button type="button" class="select-toggle" @click="toggleSelectAllManageable()">
+      {{ allManageableSelected ? "선택 해제" : "내 글 전체 선택" }}
+    </button>
     <button
       v-if="posts.selectedPostIds.size > 0"
       type="button"
-      class="danger-button"
+      class="select-delete"
       :disabled="deleting"
       @click="onBatchDelete"
     >
-      {{ deleting ? "삭제 중..." : `선택 삭제 (${posts.selectedPostIds.size})` }}
+      {{ deleting ? "삭제 중..." : `${posts.selectedPostIds.size}개 삭제` }}
     </button>
   </div>
 </template>
+
+<style scoped>
+.select-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.select-row button {
+  font: inherit;
+  font-size: 0.84rem;
+  padding: 7px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: #7f93ad;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.select-row button:hover:not(:disabled) {
+  color: #eef5ff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.select-delete {
+  color: #c57a7a !important;
+}
+
+.select-delete:hover:not(:disabled) {
+  color: #ffb3b3 !important;
+  background: rgba(255, 91, 91, 0.1) !important;
+}
+</style>
