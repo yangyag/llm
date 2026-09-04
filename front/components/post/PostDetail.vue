@@ -174,34 +174,38 @@ async function onDelete() {
 
 .post-hero-actions {
   display: flex;
-  gap: 4px;
-  margin-top: 4px;
-  padding: 6px 0 2px;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
 }
 
 .hero-action {
   font: inherit;
-  font-size: 0.86rem;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 10px;
-  background: none;
-  color: #9bb0ca;
+  font-size: 0.87rem;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef5ff;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .hero-action:hover {
-  color: #eef5ff;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(143, 183, 255, 0.16);
+  border-color: rgba(143, 183, 255, 0.4);
+  transform: translateY(-1px);
 }
 
 .hero-action.danger {
-  color: #c57a7a;
+  background: rgba(255, 91, 91, 0.14);
+  border-color: rgba(255, 91, 91, 0.35);
+  color: #ffd7d7;
 }
 
 .hero-action.danger:hover {
-  color: #ffb3b3;
-  background: rgba(255, 91, 91, 0.1);
+  background: rgba(255, 91, 91, 0.24);
+  border-color: rgba(255, 91, 91, 0.55);
 }
 </style>
