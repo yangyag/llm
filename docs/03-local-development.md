@@ -36,6 +36,8 @@ docker compose up -d --wait
 
 `front-build`는 이미 만들어 둔 `front/.output/public`을 nginx 이미지에 넣을 뿐입니다. `nuxi generate`를 건너뛰면 이미지 빌드가 실패합니다. 런타임 컨테이너는 `back`, `front`가 실행합니다.
 
+빌드 프로파일은 compose가 해석한 `LLM_FRONT_IMAGE`/`LLM_BACK_IMAGE` 값으로 이미지에 태그를 답니다. `.env`에서 이 값을 `yangyag2/*` 같은 다른 태그로 바꾸면 이후 `docker compose up`이 그 태그를 찾고, 문서·배포 스크립트 기준(`llm-*:1.0`)으로 빌드한 이미지는 실행 컨테이너에 반영되지 않습니다. 두 변수는 기본값(`llm-front:1.0`, `llm-back:1.0`)을 유지하고, 해석 결과는 `docker compose config`로 확인합니다(2026-09-04 로컬 확인).
+
 ## 백엔드 단독 실행
 
 백엔드 기본 포트는 `8080`입니다. 로컬 프론트의 Nitro dev proxy는 `http://localhost:8082`로 잡혀 있으므로, 백엔드를 단독 개발 서버로 붙일 때는 포트를 맞춰야 합니다.

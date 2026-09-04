@@ -66,8 +66,8 @@ function handleLogout() {
     <section class="board-shell">
       <header class="board-header">
         <div>
-          <p class="eyebrow">Anonymous Board</p>
-          <h1>답변 가능한 게시판</h1>
+          <p class="eyebrow">Secret Board</p>
+          <h1>비밀 게시판</h1>
         </div>
         <div class="board-actions">
           <span v-if="auth.username" class="auth-username">{{ auth.username }}</span>

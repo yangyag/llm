@@ -307,6 +307,26 @@ docker logs --tail 100 llm-back
 
 브라우저 hard refresh도 확인합니다.
 
+## 로컬에서 이미지 다시 빌드했는데 화면이 안 바뀜
+
+증상: `llm-front:1.0`(또는 `llm-back:1.0`)을 새로 빌드하고 컨테이너를 재시작해도 옛 화면/코드가 계속 보임.
+
+원인: 로컬 `.env`의 `LLM_FRONT_IMAGE`/`LLM_BACK_IMAGE`가 다른 태그(`yangyag2/llm-front:latest` 등)를 가리키면 compose가 그 태그의 이미지로 컨테이너를 실행합니다. 규약 태그(`llm-front:1.0` 등)로 빌드해도 실행 컨테이너에는 반영되지 않습니다(2026-09-04 로컬 확인).
+
+확인:
+
+```bash
+docker compose config | grep -E '^\s+image:'
+docker inspect --format '{{.Name}} image={{.Config.Image}}' llm-front llm-back
+docker images | grep -E 'llm-(front|back)'
+```
+
+대응:
+
+1. `.env`의 두 변수를 `llm-front:1.0`/`llm-back:1.0`으로 맞춥니다.
+2. 실행 중인 컨테이너가 참조하는 이미지가 태그에 없으면(prune 등으로 이미지가 사라졌으면) `docker commit <컨테이너> llm-back:1.0`처럼 실행 상태를 태그로 보존한 뒤 재생성합니다.
+3. `docker compose up -d --wait` 후 8083 health와 화면을 확인합니다.
+
 ## EC2 SSH 접속 실패
 
 확인:

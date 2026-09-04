@@ -59,7 +59,7 @@ function goToBoard() {
     <section class="board-shell">
       <header class="board-header">
         <div>
-          <p class="eyebrow">Anonymous Board</p>
+          <p class="eyebrow">Secret Board</p>
           <h1>게시글 보기</h1>
         </div>
         <div class="board-actions">
