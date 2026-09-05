@@ -65,10 +65,11 @@ public class UploadSessionController {
 		@PathVariable UUID sessionId,
 		@Valid @RequestBody EncryptedUploadSessionChunkUploadRequest request
 	) {
+		Long userId = jwtProvider.authenticate(authHeader);
 		var chunkRequest = uploadSessionWireCodec.decodeChunkRequest(request);
 		return uploadSessionWireCodec.encodeStatus(
 			uploadSessionService.uploadChunk(
-				jwtProvider.authenticate(authHeader),
+				userId,
 				sessionId,
 				chunkRequest.chunkNumber(),
 				chunkRequest.chunkDataBase64()

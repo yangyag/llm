@@ -1,3 +1,3 @@
 package com.llm.app.auth;
 
-public record AdminMeResponse(String username, UserRole role) {}
+public record AdminMeResponse(Long userId, String username, UserRole role) {}

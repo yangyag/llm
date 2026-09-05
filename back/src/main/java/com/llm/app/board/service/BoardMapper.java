@@ -26,6 +26,7 @@ public class BoardMapper {
 					Math.toIntExact(post.getReplyCount()),
 					post.getHasAttachment(),
 					post.getAuthorUsername(),
+					post.getAuthorUserId(),
 					post.getCreatedAt()
 				))
 				.toList(),
@@ -55,6 +56,7 @@ public class BoardMapper {
 			post.getMode(),
 			post.getMode() == com.llm.app.board.model.BoardPostMode.FILE_CONVERSION_REQUEST && !safeAttachments.isEmpty(),
 			post.getAuthorUsername(),
+			post.getAuthorUserId(),
 			post.getCreatedAt(),
 			post.getUpdatedAt(),
 			attachmentDtos,
@@ -81,6 +83,7 @@ public class BoardMapper {
 			reply.getAiProvider(),
 			reply.getAiModel(),
 			reply.getAuthorUsername(),
+			reply.getAuthorUserId(),
 			reply.getCreatedAt(),
 			reply.getUpdatedAt()
 		);

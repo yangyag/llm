@@ -49,6 +49,7 @@ public class AttachmentStorageService {
 			Files.createDirectories(this.rootPath);
 			attachment.transferTo(targetPath);
 		} catch (IOException exception) {
+			cleanupPartial(targetPath, exception);
 			throw new AttachmentStorageException("Failed to store attachment", exception);
 		}
 
@@ -82,6 +83,7 @@ public class AttachmentStorageService {
 			Files.createDirectories(this.rootPath);
 			Files.copy(sourceFile, targetPath);
 		} catch (IOException exception) {
+			cleanupPartial(targetPath, exception);
 			throw new AttachmentStorageException("Failed to store generated attachment", exception);
 		}
 
@@ -115,8 +117,20 @@ public class AttachmentStorageService {
 		}
 	}
 
+	private void cleanupPartial(Path target, IOException original) {
+		try {
+			Files.deleteIfExists(target);
+		} catch (IOException cleanupFailure) {
+			original.addSuppressed(cleanupFailure);
+		}
+	}
+
 	private Path resolve(String storagePath) {
-		return rootPath.resolve(storagePath).normalize();
+		Path resolved = rootPath.resolve(storagePath).normalize();
+		if (!resolved.startsWith(rootPath) || resolved.equals(rootPath)) {
+			throw new AttachmentStorageException("Invalid attachment storage path", new IOException("Path outside attachment root"));
+		}
+		return resolved;
 	}
 
 	private String extractOriginalFilename(MultipartFile attachment) {

@@ -14,6 +14,7 @@ public record BoardReplyDto(
 	String aiProvider,
 	String aiModel,
 	String authorUsername,
+	Long authorUserId,
 	Instant createdAt,
 	Instant updatedAt
 ) {

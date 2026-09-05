@@ -11,6 +11,7 @@ public record BoardPostDetailResponse(
 	BoardPostMode mode,
 	boolean conversionReady,
 	String authorUsername,
+	Long authorUserId,
 	Instant createdAt,
 	Instant updatedAt,
 	List<BoardAttachmentDto> attachments,

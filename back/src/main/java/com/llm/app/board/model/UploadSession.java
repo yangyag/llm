@@ -39,6 +39,9 @@ public class UploadSession {
 	@Column(name = "created_by", nullable = false, length = 100)
 	private String createdBy;
 
+	@Column(name = "created_by_user_id")
+	private Long createdByUserId;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -75,6 +78,18 @@ public class UploadSession {
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
 		this.expiresAt = expiresAt;
+	}
+
+	public UploadSession(UUID id, String archiveName, long fileSizeBytes, long chunkSizeBase64Chars,
+		int totalChunks, String fileSha256, UploadSessionStatus status, String createdBy,
+		Instant createdAt, Instant updatedAt, Instant expiresAt, Long createdByUserId) {
+		this(id, archiveName, fileSizeBytes, chunkSizeBase64Chars, totalChunks, fileSha256,
+			status, createdBy, createdAt, updatedAt, expiresAt);
+		this.createdByUserId = createdByUserId;
+	}
+
+	public Long getCreatedByUserId() {
+		return createdByUserId;
 	}
 
 	public UUID getId() {

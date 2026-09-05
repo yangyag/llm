@@ -108,6 +108,7 @@ class BoardPostControllerTest {
 		boardReplyRepository.deleteAll();
 		boardPostRepository.deleteAll();
 		adminRepository.deleteAll();
+		adminRepository.flush();
 		deleteRecursively(Path.of(attachmentRootPath));
 		saveUser("admin", "adminpass", UserRole.ADMIN);
 		saveUser("member1", "memberpass", UserRole.USER);
@@ -299,6 +300,9 @@ class BoardPostControllerTest {
 			.andExpect(status().isNoContent());
 
 		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).isEmpty();
+		assertThat(Files.exists(attachmentPath)).isTrue();
+		org.springframework.test.context.transaction.TestTransaction.flagForCommit();
+		org.springframework.test.context.transaction.TestTransaction.end();
 		assertThat(Files.exists(attachmentPath)).isFalse();
 	}
 

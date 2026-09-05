@@ -12,7 +12,7 @@ const auth = useAuthStore();
 const detail = usePostDetailStore();
 
 const manageable = computed(() =>
-  canManagePost(detail.selectedPost?.authorUsername, auth.username, auth.role)
+  canManagePost(detail.selectedPost?.authorUserId, auth.userId, auth.role)
 );
 
 const editable = computed(

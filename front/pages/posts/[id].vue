@@ -18,20 +18,24 @@ const loading = ref(true);
 const error = ref("");
 
 let cancelled = false;
+let requestVersion = 0;
 
 async function loadPost() {
+  const version = ++requestVersion;
+  const requestedId = postId.value;
+  post.value = null;
   loading.value = true;
   error.value = "";
   try {
-    const payload = await getPost(postId.value);
-    if (cancelled) return;
+    const payload = await getPost(requestedId);
+    if (cancelled || version !== requestVersion) return;
     post.value = payload;
   } catch (loadError) {
-    if (cancelled) return;
+    if (cancelled || version !== requestVersion) return;
     post.value = null;
     error.value = (loadError as Error).message;
   } finally {
-    if (!cancelled) {
+    if (!cancelled && version === requestVersion) {
       loading.value = false;
     }
   }
@@ -43,6 +47,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   cancelled = true;
+  requestVersion += 1;
 });
 
 watch(postId, () => {

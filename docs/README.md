@@ -23,6 +23,7 @@
 | 문제 해결 | [15-troubleshooting.md](./15-troubleshooting.md) |
 | 문서 담당 에이전트와 리뷰 결과 | [16-document-agents.md](./16-document-agents.md) |
 | 게시글 본문 복사 설계 | [17-copy-post-body-design.md](./17-copy-post-body-design.md) |
+| 계정 ID 전환·첨부 일관성 개선 및 검증 | [18-integrity-hardening.md](./18-integrity-hardening.md) |
 
 ## 현재 운영 기준
 

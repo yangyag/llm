@@ -373,7 +373,8 @@ class UploadSessionControllerTest {
 			"admin",
 			now.minusSeconds(3600),
 			now.minusSeconds(3600),
-			now.minusSeconds(10)
+			now.minusSeconds(10),
+			adminRepository.findByUsername("admin").orElseThrow().getId()
 		));
 
 		mockMvc.perform(get("/api/v1/upload-sessions/{sessionId}", sessionId)
@@ -431,7 +432,8 @@ class UploadSessionControllerTest {
 			"admin",
 			now.minusSeconds(60),
 			now.minusSeconds(10),
-			now.plusSeconds(3600)
+			now.plusSeconds(3600),
+			adminRepository.findByUsername("admin").orElseThrow().getId()
 		));
 
 		mockMvc.perform(get("/api/v1/upload-sessions/{sessionId}", sessionId)

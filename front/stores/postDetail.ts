@@ -49,6 +49,7 @@ interface PostDetailState {
   selectedPostId: number | null;
   selectedPost: PostDetail | null;
   detailLoading: boolean;
+  detailRequestVersion: number;
   postActionMode: PostActionMode;
   postForm: PostFormState;
   postEditForm: PostFormState;
@@ -81,6 +82,7 @@ export const usePostDetailStore = defineStore("postDetail", {
     selectedPostId: null,
     selectedPost: null,
     detailLoading: false,
+    detailRequestVersion: 0,
     postActionMode: "none",
     postForm: { ...EMPTY_POST_FORM },
     postEditForm: { ...EMPTY_POST_FORM },
@@ -105,6 +107,8 @@ export const usePostDetailStore = defineStore("postDetail", {
   }),
   actions: {
     resetListViewState() {
+      this.detailRequestVersion += 1;
+      this.detailLoading = false;
       this.view = "list";
       this.selectedPostId = null;
       this.selectedPost = null;
@@ -123,6 +127,10 @@ export const usePostDetailStore = defineStore("postDetail", {
       await posts.loadPosts(posts.currentPage, posts.searchQuery);
     },
     openWrite() {
+      this.detailRequestVersion += 1;
+      this.selectedPost = null;
+      this.selectedPostId = null;
+      this.detailLoading = false;
       this.view = "write";
       this.postForm = { ...EMPTY_POST_FORM };
       this.postAttachmentFiles = [];
@@ -156,10 +164,15 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.loadPostDetail(postId);
     },
     async loadPostDetail(postId: number) {
+      if (this.view !== "detail" || this.selectedPostId !== postId) return;
+      const version = ++this.detailRequestVersion;
+      this.selectedPost = null;
       this.detailLoading = true;
       this.error = "";
       try {
         const payload = await getPost(postId);
+        if (!this.isCurrentDetailRequest(postId, version)) return;
+        if (payload.id !== postId) throw new Error("요청한 게시글과 응답이 일치하지 않습니다.");
         this.selectedPost = payload;
         this.postEditForm = { title: payload.title, body: payload.body };
         this.postEditAttachmentFiles = [];
@@ -167,13 +180,22 @@ export const usePostDetailStore = defineStore("postDetail", {
         this.postEditAttachmentInputKey += 1;
         this.removeAttachmentIds = new Set();
       } catch (loadError) {
+        if (!this.isCurrentDetailRequest(postId, version)) return;
+        this.selectedPost = null;
         this.error = (loadError as Error).message;
       } finally {
-        this.detailLoading = false;
+        if (this.isCurrentDetailRequest(postId, version)) this.detailLoading = false;
       }
     },
+    isCurrentDetailRequest(postId: number, version: number): boolean {
+      return this.view === "detail" && this.selectedPostId === postId && this.detailRequestVersion === version;
+    },
+    canActOnSelectedPost(): boolean {
+      return this.view === "detail" && !this.detailLoading && !this.submitting &&
+        this.selectedPost != null && this.selectedPost.id === this.selectedPostId;
+    },
     openPostEditPanel() {
-      if (!this.selectedPost || this.selectedPost.conversionReady || this.selectedPost.mode === "FILE_CONVERSION_REQUEST") {
+      if (!this.canActOnSelectedPost() || !this.selectedPost || this.selectedPost.conversionReady || this.selectedPost.mode === "FILE_CONVERSION_REQUEST") {
         return;
       }
       this.postEditForm = { title: this.selectedPost.title, body: this.selectedPost.body };
@@ -250,6 +272,7 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.removeAttachmentIds = next;
     },
     openReplyEditPanel(replyId: number, body: string) {
+      if (!this.canActOnSelectedPost() || !this.selectedPost?.replies.some(reply => reply.id === replyId)) return;
       this.replyActionError = "";
       this.replyEditState = { replyId, body };
     },
@@ -296,7 +319,9 @@ export const usePostDetailStore = defineStore("postDetail", {
     async handleUpdatePost() {
       const auth = useAuthStore();
       const posts = usePostsStore();
-      if (!this.selectedPostId || !auth.token) return;
+      const postId = this.selectedPost?.id;
+      const version = this.detailRequestVersion;
+      if (!postId || !auth.token || !this.canActOnSelectedPost()) return;
 
       if (this.postEditAttachmentFiles.length > 0 && !this.postEditAttachmentConfirmed && !this.confirmAttachmentUploadEnvironment()) {
         return;
@@ -317,7 +342,7 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.postActionError = "";
       try {
         const updated = await updatePost(
-          this.selectedPostId,
+          postId,
           {
             ...this.postEditForm,
             attachments: this.postEditAttachmentFiles,
@@ -325,6 +350,7 @@ export const usePostDetailStore = defineStore("postDetail", {
           },
           auth.token
         );
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         this.selectedPost = updated;
         this.postActionMode = "none";
         this.postActionError = "";
@@ -335,6 +361,7 @@ export const usePostDetailStore = defineStore("postDetail", {
         await posts.loadPosts(posts.currentPage);
         this.message = "게시글을 수정했습니다.";
       } catch (submitError) {
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         const err = submitError as ApiError;
         if (err.code === "FILE_CONVERSION_LOCKED") {
           this.error = "암호화 업로드 완료된 글은 수정할 수 없습니다.";
@@ -352,17 +379,21 @@ export const usePostDetailStore = defineStore("postDetail", {
     async handleDeletePost() {
       const auth = useAuthStore();
       const posts = usePostsStore();
-      if (!this.selectedPostId || !auth.token) return;
+      const postId = this.selectedPost?.id;
+      const version = this.detailRequestVersion;
+      if (!postId || !auth.token || !this.canActOnSelectedPost()) return;
 
       this.submitting = true;
       this.error = "";
       this.message = "";
       try {
-        await deletePost(this.selectedPostId, auth.token);
+        await deletePost(postId, auth.token);
         await posts.loadPosts(posts.currentPage);
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         this.resetListViewState();
         this.message = "게시글을 삭제했습니다.";
       } catch (submitError) {
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         const err = submitError as ApiError;
         if (err.code === "FORBIDDEN") {
           this.error = "작성자 본인 또는 관리자만 삭제할 수 있습니다.";
@@ -376,18 +407,22 @@ export const usePostDetailStore = defineStore("postDetail", {
     async handleCreateReply() {
       const auth = useAuthStore();
       const posts = usePostsStore();
-      if (!this.selectedPostId || !auth.token) return;
+      const postId = this.selectedPost?.id;
+      const version = this.detailRequestVersion;
+      if (!postId || !auth.token || !this.canActOnSelectedPost()) return;
 
       this.submitting = true;
       this.error = "";
       this.message = "";
       try {
-        const detail = await createReply(this.selectedPostId, this.replyForm.body, auth.token);
+        const detail = await createReply(postId, this.replyForm.body, auth.token);
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         this.selectedPost = detail;
         this.replyForm = { ...EMPTY_REPLY_FORM };
         await posts.loadPosts(posts.currentPage);
         this.message = "답변을 등록했습니다.";
       } catch (submitError) {
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         this.error = (submitError as Error).message;
       } finally {
         this.submitting = false;
@@ -396,20 +431,26 @@ export const usePostDetailStore = defineStore("postDetail", {
     async handleUpdateReply() {
       const auth = useAuthStore();
       const posts = usePostsStore();
-      if (!this.replyEditState.replyId || !auth.token) return;
+      const postId = this.selectedPost?.id;
+      const version = this.detailRequestVersion;
+      if (!postId || !auth.token || !this.canActOnSelectedPost()) return;
 
+      if (!this.selectedPost?.replies.some(reply => reply.id === this.replyEditState.replyId)) return;
+      if (!this.replyEditState.replyId) return;
       this.submitting = true;
       this.error = "";
       this.message = "";
       this.replyActionError = "";
       try {
         const detail = await updateReply(this.replyEditState.replyId, this.replyEditState.body, auth.token);
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         this.selectedPost = detail;
         this.replyActionError = "";
         this.replyEditState = { replyId: null, body: "" };
         await posts.loadPosts(posts.currentPage);
         this.message = "답변을 수정했습니다.";
       } catch (submitError) {
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         const err = submitError as { code?: string; message?: string };
         this.error =
           err.code === "FORBIDDEN"
@@ -422,17 +463,22 @@ export const usePostDetailStore = defineStore("postDetail", {
     async handleDeleteReply(replyId: number) {
       const auth = useAuthStore();
       const posts = usePostsStore();
-      if (!replyId || !this.selectedPostId || !auth.token) return;
+      const postId = this.selectedPost?.id;
+      const version = this.detailRequestVersion;
+      if (!postId || !auth.token || !this.canActOnSelectedPost()) return;
 
+      if (!this.selectedPost?.replies.some(reply => reply.id === replyId)) return;
       this.submitting = true;
       this.error = "";
       this.message = "";
       try {
         await deleteReply(replyId, auth.token);
-        await this.loadPostDetail(this.selectedPostId);
+        if (!this.isCurrentDetailRequest(postId, version)) return;
+        await this.loadPostDetail(postId);
         await posts.loadPosts(posts.currentPage);
         this.message = "답변을 삭제했습니다.";
       } catch (submitError) {
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         const err = submitError as { code?: string; message?: string };
         this.error =
           err.code === "FORBIDDEN"
@@ -446,18 +492,22 @@ export const usePostDetailStore = defineStore("postDetail", {
       // 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. 잔재 메서드로 유지, 신규 호출 금지.
       const auth = useAuthStore();
       const posts = usePostsStore();
-      if (!this.selectedPostId || !auth.token) return;
+      const postId = this.selectedPost?.id;
+      const version = this.detailRequestVersion;
+      if (!postId || !auth.token || !this.canActOnSelectedPost()) return;
 
       this.aiSubmitting = true;
       this.aiReplyError = "";
       this.error = "";
       this.message = "";
       try {
-        const detail = await createAiReply(this.selectedPostId, this.selectedAiProvider, auth.token);
+        const detail = await createAiReply(postId, this.selectedAiProvider, auth.token);
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         this.selectedPost = detail;
         await posts.loadPosts(posts.currentPage);
         this.message = "AI 답변을 등록했습니다.";
       } catch (submitError) {
+        if (!this.isCurrentDetailRequest(postId, version)) return;
         this.aiReplyError = (submitError as Error).message;
       } finally {
         this.aiSubmitting = false;

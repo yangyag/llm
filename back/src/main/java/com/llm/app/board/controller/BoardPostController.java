@@ -61,8 +61,8 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@Valid @ModelAttribute CreateBoardPostRequest request
 	) {
-		String username = jwtProvider.authenticate(authHeader);
-		return boardService.createPost(username, request);
+		Long userId = jwtProvider.authenticate(authHeader);
+		return boardService.createPost(userId, request);
 	}
 
 	@PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -71,8 +71,8 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @ModelAttribute UpdateBoardPostRequest request
 	) {
-		String username = jwtProvider.authenticate(authHeader);
-		return boardService.updatePost(username, id, request);
+		Long userId = jwtProvider.authenticate(authHeader);
+		return boardService.updatePost(userId, id, request);
 	}
 
 	@DeleteMapping("/{id}")
@@ -81,8 +81,8 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long id
 	) {
-		String username = jwtProvider.authenticate(authHeader);
-		boardService.deletePost(username, id);
+		Long userId = jwtProvider.authenticate(authHeader);
+		boardService.deletePost(userId, id);
 	}
 
 	@PostMapping("/batch-delete")
@@ -91,8 +91,8 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@Valid @RequestBody BatchDeleteRequest request
 	) {
-		String username = jwtProvider.authenticate(authHeader);
-		boardService.batchDeletePosts(username, request.ids());
+		Long userId = jwtProvider.authenticate(authHeader);
+		boardService.batchDeletePosts(userId, request.ids());
 	}
 
 	@PostMapping("/{id}/replies")
@@ -102,8 +102,8 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @RequestBody CreateBoardReplyRequest request
 	) {
-		String username = jwtProvider.authenticate(authHeader);
-		return boardService.createReply(username, id, request);
+		Long userId = jwtProvider.authenticate(authHeader);
+		return boardService.createReply(userId, id, request);
 	}
 
 	/**
@@ -151,8 +151,8 @@ public class BoardPostController {
 		@PathVariable Long replyId,
 		@Valid @RequestBody UpdateBoardReplyRequest request
 	) {
-		String username = jwtProvider.authenticate(authHeader);
-		return boardService.updateReply(username, replyId, request);
+		Long userId = jwtProvider.authenticate(authHeader);
+		return boardService.updateReply(userId, replyId, request);
 	}
 
 	@DeleteMapping("/replies/{replyId}")
@@ -161,7 +161,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long replyId
 	) {
-		String username = jwtProvider.authenticate(authHeader);
-		boardService.deleteReply(username, replyId);
+		Long userId = jwtProvider.authenticate(authHeader);
+		boardService.deleteReply(userId, replyId);
 	}
 }

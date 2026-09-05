@@ -98,7 +98,7 @@ AAD는 alias 이름입니다. 예를 들어 `A1` 값을 다른 alias로 옮기�
 finalize 성공 시 서버는 다음을 생성합니다.
 
 - `posts.mode=FILE_CONVERSION_REQUEST`
-- 제목: 업로드 ZIP 기반 자동 제목
+- 제목: 업로드 ZIP 기반 자동 제목. 200자 이내로 제한하며 UTF-16 surrogate pair를 나누지 않습니다. 원본 파일명은 첨부 메타데이터에 보존합니다.
 - 본문: 원본 파일명, 크기, chunk 수, SHA-256 정보
 - 첨부파일: 원본 ZIP
 

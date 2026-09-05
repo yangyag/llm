@@ -12,8 +12,8 @@ function open(postId: number) {
   detail.openDetail(postId);
 }
 
-function canSelect(post: { authorUsername: string | null }): boolean {
-  return canManagePost(post.authorUsername, auth.username, auth.role);
+function canSelect(post: { authorUserId: number | null }): boolean {
+  return canManagePost(post.authorUserId, auth.userId, auth.role);
 }
 
 function formatListDate(raw: string): string {

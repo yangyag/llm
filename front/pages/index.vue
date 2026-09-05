@@ -31,7 +31,7 @@ function handlePopState() {
   posts.currentPage = next.page;
   posts.searchQuery = next.query;
   posts.searchInput = next.query;
-  detail.view = "list";
+  detail.resetListViewState();
 }
 
 onMounted(() => {
@@ -126,8 +126,8 @@ function handleLogout() {
       </section>
 
       <section v-if="detail.view === 'detail'" class="card detail-card">
-        <p v-if="detail.detailLoading || !detail.selectedPost" class="empty-state">불러오는 중...</p>
-        <template v-else>
+        <p v-if="detail.detailLoading" class="empty-state">불러오는 중...</p>
+        <template v-else-if="detail.selectedPost">
           <PostDetail />
           <section class="reply-thread">
             <h3 class="reply-thread-title">
@@ -139,6 +139,7 @@ function handleLogout() {
             <ReplyList />
           </section>
         </template>
+        <p v-else class="empty-state">게시글을 불러오지 못했습니다. 목록에서 다시 선택해 주세요.</p>
       </section>
     </section>
   </main>

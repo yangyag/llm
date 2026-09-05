@@ -18,5 +18,7 @@ public interface BoardPostSummaryProjection {
 
 	String getAuthorUsername();
 
+	Long getAuthorUserId();
+
 	Instant getCreatedAt();
 }

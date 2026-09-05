@@ -9,7 +9,7 @@ const posts = usePostsStore();
 const deleting = ref(false);
 
 const manageableItems = computed(() =>
-  posts.items.filter((post) => canManagePost(post.authorUsername, auth.username, auth.role))
+  posts.items.filter((post) => canManagePost(post.authorUserId, auth.userId, auth.role))
 );
 
 const allManageableSelected = computed(

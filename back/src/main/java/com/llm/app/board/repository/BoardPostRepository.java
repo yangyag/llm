@@ -24,13 +24,14 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
 				count(distinct r.id) as replyCount,
 				case when count(distinct a.id) > 0 then true else false end as hasAttachment,
 				p.authorUsername as authorUsername,
+				p.authorUserId as authorUserId,
 				p.createdAt as createdAt
 			from BoardPost p
 			left join p.replies r
 			left join BoardAttachment a on a.post = p
 			where :keywordPattern is null
 				or lower(p.title) like :keywordPattern
-			group by p.id, p.title, p.mode, p.authorUsername, p.createdAt
+			group by p.id, p.title, p.mode, p.authorUsername, p.authorUserId, p.createdAt
 			order by p.createdAt desc
 			""",
 		countQuery = """

@@ -37,6 +37,9 @@ public class BoardPost {
 	@Column(name = "author_username", length = 100)
 	private String authorUsername;
 
+	@Column(name = "author_user_id")
+	private Long authorUserId;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -64,6 +67,16 @@ public class BoardPost {
 		this.authorUsername = authorUsername;
 		this.createdAt = createdAt;
 		this.updatedAt = updatedAt;
+	}
+
+	public BoardPost(String title, String body, BoardPostMode mode, String authorUsername,
+		Instant createdAt, Instant updatedAt, Long authorUserId) {
+		this(title, body, mode, authorUsername, createdAt, updatedAt);
+		this.authorUserId = authorUserId;
+	}
+
+	public Long getAuthorUserId() {
+		return authorUserId;
 	}
 
 	public Long getId() {

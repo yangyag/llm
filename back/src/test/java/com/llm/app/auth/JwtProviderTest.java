@@ -8,6 +8,8 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.util.Date;
 import javax.crypto.SecretKey;
+import java.util.Optional;
+import static org.mockito.Mockito.*;
 import org.junit.jupiter.api.Test;
 
 class JwtProviderTest {
@@ -15,42 +17,42 @@ class JwtProviderTest {
 	private static final String SECRET = "testSecretKeyForUnitTestsOnlyMustBeAtLeast256BitsLong!!";
 
 	@Test
-	void generateAndValidateShouldRoundTripUsername() {
-		JwtProvider provider = new JwtProvider(SECRET, 3600000);
+	void generateAndValidateShouldRoundTripUserId() {
+		JwtProvider provider = provider(SECRET, 3600000);
 		String token = provider.generateToken("member1");
-		assertThat(provider.validateAndGetUsername(token)).isEqualTo("member1");
-		assertThat(provider.authenticate("Bearer " + token)).isEqualTo("member1");
+		assertThat(provider.validateAndGetUserId(token)).isEqualTo(1L);
+		assertThat(provider.authenticate("Bearer " + token)).isEqualTo(1L);
 	}
 
 	@Test
 	void expiredTokenShouldBeRejected() {
-		JwtProvider provider = new JwtProvider(SECRET, -1000);
+		JwtProvider provider = provider(SECRET, -1000);
 		String token = provider.generateToken("member1");
-		assertThatThrownBy(() -> provider.validateAndGetUsername(token))
+		assertThatThrownBy(() -> provider.validateAndGetUserId(token))
 			.isInstanceOf(InvalidCredentialsException.class);
 	}
 
 	@Test
 	void tokenSignedWithDifferentSecretShouldBeRejected() {
-		JwtProvider provider = new JwtProvider(SECRET, 3600000);
-		JwtProvider otherProvider = new JwtProvider("anotherSecretForWrongKeySimulationMustBeAtLeast256Bits!!", 3600000);
+		JwtProvider provider = provider(SECRET, 3600000);
+		JwtProvider otherProvider = provider("anotherSecretForWrongKeySimulationMustBeAtLeast256Bits!!", 3600000);
 		String token = otherProvider.generateToken("member1");
-		assertThatThrownBy(() -> provider.validateAndGetUsername(token))
+		assertThatThrownBy(() -> provider.validateAndGetUserId(token))
 			.isInstanceOf(InvalidCredentialsException.class);
 	}
 
 	@Test
 	void tamperedTokenShouldBeRejected() {
-		JwtProvider provider = new JwtProvider(SECRET, 3600000);
+		JwtProvider provider = provider(SECRET, 3600000);
 		String token = provider.generateToken("member1");
 		String tampered = token.substring(0, token.length() - 3) + "abc";
-		assertThatThrownBy(() -> provider.validateAndGetUsername(tampered))
+		assertThatThrownBy(() -> provider.validateAndGetUserId(tampered))
 			.isInstanceOf(InvalidCredentialsException.class);
 	}
 
 	@Test
 	void authenticateShouldRequireBearerPrefix() {
-		JwtProvider provider = new JwtProvider(SECRET, 3600000);
+		JwtProvider provider = provider(SECRET, 3600000);
 		String token = provider.generateToken("member1");
 		assertThatThrownBy(() -> provider.authenticate(null))
 			.isInstanceOf(InvalidCredentialsException.class);
@@ -63,9 +65,9 @@ class JwtProviderTest {
 	@Test
 	void shortSecretShouldStillProduceValidToken() {
 		// 프로덕션에서도 SecretKeyDerivation으로 32바이트로 확장되므로 짧은 secret도 동작해야 한다.
-		JwtProvider provider = new JwtProvider("short", 3600000);
+		JwtProvider provider = provider("short", 3600000);
 		String token = provider.generateToken("admin");
-		assertThat(provider.validateAndGetUsername(token)).isEqualTo("admin");
+		assertThat(provider.validateAndGetUserId(token)).isEqualTo(1L);
 	}
 
 	@Test
@@ -73,7 +75,7 @@ class JwtProviderTest {
 		SecretKey key = Keys.hmacShaKeyFor(SecretKeyDerivation.derive32Bytes(SECRET));
 		long issuedAt = 1_000_000L;
 		long expirationMs = 60_000L;
-		JwtProvider provider = new JwtProvider(SECRET, expirationMs);
+		JwtProvider provider = provider(SECRET, expirationMs);
 		String token = provider.generateToken("member1");
 		Date exp = Jwts.parser()
 			.verifyWith(key)
@@ -88,5 +90,42 @@ class JwtProviderTest {
 			.getPayload()
 			.getIssuedAt();
 		assertThat(exp.getTime() - iat.getTime()).isEqualTo(expirationMs);
+	}
+
+	private JwtProvider provider(String secret, long expirationMs) {
+		AdminRepository repository = mock(AdminRepository.class);
+		Admin user = mock(Admin.class);
+		when(user.getId()).thenReturn(1L);
+		when(repository.findByUsername(anyString())).thenReturn(Optional.of(user));
+		when(repository.existsById(1L)).thenReturn(true);
+		return new JwtProvider(secret, expirationMs, repository);
+	}
+
+	@Test
+	void loginMustBindTokenToTheAccountWhosePasswordWasChecked() {
+		AdminRepository repository = mock(AdminRepository.class);
+		Admin verified = mock(Admin.class);
+		Admin replacement = mock(Admin.class);
+		when(verified.getId()).thenReturn(1L);
+		when(verified.getUsername()).thenReturn("reused");
+		when(verified.getRole()).thenReturn(UserRole.USER);
+		when(replacement.getId()).thenReturn(2L);
+		when(repository.findByUsername("reused")).thenReturn(Optional.of(verified), Optional.of(replacement));
+		var encoder = mock(org.springframework.security.crypto.password.PasswordEncoder.class);
+		when(encoder.matches(any(), any())).thenReturn(true);
+		var provider = new JwtProvider(SECRET, 3600000, repository);
+		var response = new AuthService(repository, encoder, provider).login(new LoginRequest("reused", "test-input"));
+		var key = Keys.hmacShaKeyFor(SecretKeyDerivation.derive32Bytes(SECRET));
+		assertThat(Jwts.parser().verifyWith(key).build().parseSignedClaims(response.token()).getPayload().getSubject())
+			.isEqualTo("1");
+	}
+
+	@Test
+	void legacyTokenMustBeRejectedEvenWhenUsernameIsNumeric() {
+		SecretKey key = Keys.hmacShaKeyFor(SecretKeyDerivation.derive32Bytes(SECRET));
+		String legacyToken = Jwts.builder().subject("1")
+			.expiration(new Date(System.currentTimeMillis() + 60000)).signWith(key).compact();
+		assertThatThrownBy(() -> provider(SECRET, 3600000).authenticate("Bearer " + legacyToken))
+			.isInstanceOf(InvalidCredentialsException.class);
 	}
 }

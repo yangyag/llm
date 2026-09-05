@@ -1,6 +1,8 @@
 package com.llm.app.board.service;
 
 import com.llm.app.auth.InvalidCredentialsException;
+import com.llm.app.auth.AdminRepository;
+import java.util.Objects;
 import com.llm.app.board.dto.BoardPostDetailResponse;
 import com.llm.app.board.dto.CreateUploadSessionRequest;
 import com.llm.app.board.exception.InvalidUploadSessionRequestException;
@@ -46,38 +48,45 @@ public class UploadSessionService {
 	private final UploadSessionPartRepository uploadSessionPartRepository;
 	private final UploadSessionStorageService uploadSessionStorageService;
 	private final AttachmentStorageService attachmentStorageService;
+	private final AttachmentFileLifecycle attachmentFileLifecycle;
 	private final BoardPostRepository boardPostRepository;
 	private final BoardAttachmentRepository boardAttachmentRepository;
 	private final BoardMapper boardMapper;
 	private final UploadSessionFailureService uploadSessionFailureService;
 	private final Validator validator;
 	private final long expirationMs;
+	private final AdminRepository adminRepository;
 
 	public UploadSessionService(
 		UploadSessionRepository uploadSessionRepository,
 		UploadSessionPartRepository uploadSessionPartRepository,
 		UploadSessionStorageService uploadSessionStorageService,
 		AttachmentStorageService attachmentStorageService,
+		AttachmentFileLifecycle attachmentFileLifecycle,
 		BoardPostRepository boardPostRepository,
 		BoardAttachmentRepository boardAttachmentRepository,
 		BoardMapper boardMapper,
 		UploadSessionFailureService uploadSessionFailureService,
 		Validator validator,
+		AdminRepository adminRepository,
 		@org.springframework.beans.factory.annotation.Value("${app.upload-sessions.expiration-ms:86400000}") long expirationMs
 	) {
 		this.uploadSessionRepository = uploadSessionRepository;
 		this.uploadSessionPartRepository = uploadSessionPartRepository;
 		this.uploadSessionStorageService = uploadSessionStorageService;
 		this.attachmentStorageService = attachmentStorageService;
+		this.attachmentFileLifecycle = attachmentFileLifecycle;
 		this.boardPostRepository = boardPostRepository;
 		this.boardAttachmentRepository = boardAttachmentRepository;
 		this.boardMapper = boardMapper;
 		this.uploadSessionFailureService = uploadSessionFailureService;
 		this.validator = validator;
+		this.adminRepository = adminRepository;
 		this.expirationMs = expirationMs;
 	}
 
-	public UploadSessionStatusSnapshot createSession(String username, CreateUploadSessionRequest request) {
+	public UploadSessionStatusSnapshot createSession(Long userId, CreateUploadSessionRequest request) {
+		String username = requireUsername(userId);
 		validateDecodedRequest(request);
 		validateCreateRequest(request);
 
@@ -94,19 +103,20 @@ public class UploadSessionService {
 			username,
 			now,
 			now,
-			now.plusMillis(expirationMs)
+			now.plusMillis(expirationMs),
+			userId
 		));
 		return toStatusSnapshot(session, List.of());
 	}
 
 	@Transactional(readOnly = true)
-	public UploadSessionStatusSnapshot getSession(String username, UUID sessionId) {
-		UploadSession session = findActiveSession(sessionId, username);
+	public UploadSessionStatusSnapshot getSession(Long userId, UUID sessionId) {
+		UploadSession session = findActiveSession(sessionId, userId);
 		return toStatusSnapshot(session, uploadedChunkNumbers(sessionId));
 	}
 
-	public UploadSessionStatusSnapshot uploadChunk(String username, UUID sessionId, int chunkNumber, String chunkDataBase64) {
-		UploadSession session = findActiveSession(sessionId, username);
+	public UploadSessionStatusSnapshot uploadChunk(Long userId, UUID sessionId, int chunkNumber, String chunkDataBase64) {
+		UploadSession session = findActiveSession(sessionId, userId);
 		validateChunkRequest(session, chunkNumber, chunkDataBase64);
 
 		Instant now = Instant.now();
@@ -140,15 +150,14 @@ public class UploadSessionService {
 		return toStatusSnapshot(session, uploadedChunkNumbers(sessionId));
 	}
 
-	public BoardPostDetailResponse finalizeSession(String username, UUID sessionId) {
-		UploadSession session = findActiveSession(sessionId, username);
+	public BoardPostDetailResponse finalizeSession(Long userId, UUID sessionId) {
+		UploadSession session = findActiveSession(sessionId, userId);
 		List<UploadSessionPart> chunks = uploadSessionPartRepository.findBySession_IdOrderByChunkNumberAsc(sessionId);
 		validateChunks(session, chunks);
 
 		Instant now = Instant.now();
 		session.markFinalizing(now);
 		Path assembledPath = uploadSessionStorageService.createAssembledTarget(sessionId, session.getArchiveName());
-		String storedAttachmentPath = null;
 
 		try {
 			uploadSessionStorageService.concatenate(
@@ -167,9 +176,10 @@ public class UploadSessionService {
 					session.getFileSha256()
 				),
 				BoardPostMode.FILE_CONVERSION_REQUEST,
-				username,
+				requireUsername(userId),
 				now,
-				now
+				now,
+				userId
 			));
 
 			AttachmentStorageService.StoredAttachment storedAttachment = attachmentStorageService.store(
@@ -177,7 +187,7 @@ public class UploadSessionService {
 				session.getArchiveName(),
 				"application/zip"
 			);
-			storedAttachmentPath = storedAttachment.storagePath();
+			attachmentFileLifecycle.trackCreated(storedAttachment.storagePath());
 
 			BoardAttachment attachment = boardAttachmentRepository.save(new BoardAttachment(
 				post,
@@ -190,19 +200,11 @@ public class UploadSessionService {
 			));
 
 			session.markCompleted(now);
-			String finalStoredAttachmentPath = storedAttachmentPath;
 			deleteSessionRows(session);
 			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 				@Override
 				public void afterCommit() {
 					uploadSessionStorageService.deleteSessionDirectory(session.getId());
-				}
-
-				@Override
-				public void afterCompletion(int status) {
-					if (status != STATUS_COMMITTED && finalStoredAttachmentPath != null) {
-						attachmentStorageService.deleteIfExists(finalStoredAttachmentPath);
-					}
 				}
 			});
 
@@ -214,9 +216,6 @@ public class UploadSessionService {
 				// session may have been concurrently removed / DB hiccup; never mask the original failure
 			}
 			deleteAssembledFileIfExists(assembledPath);
-			if (storedAttachmentPath != null) {
-				attachmentStorageService.deleteIfExists(storedAttachmentPath);
-			}
 			throw exception;
 		}
 	}
@@ -230,10 +229,16 @@ public class UploadSessionService {
 		}
 	}
 
-	private UploadSession findActiveSession(UUID sessionId, String username) {
+	private String requireUsername(Long userId) {
+		return adminRepository.findById(userId)
+			.orElseThrow(() -> new InvalidCredentialsException("User no longer exists")).getUsername();
+	}
+
+	private UploadSession findActiveSession(UUID sessionId, Long userId) {
+		requireUsername(userId);
 		UploadSession session = uploadSessionRepository.findById(sessionId)
 			.orElseThrow(() -> NotFoundException.uploadSession(sessionId));
-		if (!session.getCreatedBy().equals(username)) {
+		if (session.getCreatedByUserId() == null || !Objects.equals(session.getCreatedByUserId(), userId)) {
 			throw new InvalidCredentialsException("upload session access denied");
 		}
 		if (session.isExpired(Instant.now())) {
@@ -418,7 +423,11 @@ public class UploadSessionService {
 	}
 
 	private String buildTitle(String archiveName) {
-		return "[" + archiveName + "] 업로드 완료";
+		String suffix = "] 업로드 완료";
+		int limit = 200 - 1 - suffix.length();
+		int end = Math.min(limit, archiveName.length());
+		if (end > 0 && Character.isHighSurrogate(archiveName.charAt(end - 1))) end--;
+		return "[" + archiveName.substring(0, end) + suffix;
 	}
 
 	private String buildBody(String archiveName, long fileSizeBytes, int totalChunks, String fileSha256) {

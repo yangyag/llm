@@ -1,3 +1,3 @@
 package com.llm.app.auth;
 
-public record LoginResponse(String token, String username, UserRole role) {}
+public record LoginResponse(String token, Long userId, String username, UserRole role) {}

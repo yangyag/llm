@@ -55,7 +55,7 @@ Postgres는 호스트에 `127.0.0.1:5432`로만 publish되어 있습니다. `127
 
 1. 사용자가 `POST /api/v1/auth/login`으로 JWT를 받습니다.
 2. 프론트는 쓰기 API에 `Authorization: Bearer <token>`을 보냅니다.
-3. 각 컨트롤러가 `JwtProvider.validateAndGetUsername`으로 직접 토큰을 검증하고 JWT subject(username)를 서비스에 전달합니다.
+3. 각 보호 컨트롤러가 공통 `JwtProvider.authenticate`로 토큰과 현재 계정 존재 여부를 검증하고 고유 계정 ID를 서비스에 전달합니다. JWT subject는 계정 ID이며 `tokenVersion=2`가 필요합니다.
 4. 서비스 계층이 게시글 생성 시 `author_username`을 기록하고, 수정/삭제 시 **작성자 본인 또는 ADMIN 여부**(`admins.role`)를 검증한 뒤 게시글, 댓글, 첨부파일을 처리합니다.
 
 ### ZIP 청크 업로드

@@ -61,6 +61,7 @@ Authorization: Bearer <jwt>
 ```json
 {
   "token": "<jwt>",
+  "userId": 1,
   "username": "admin",
   "role": "ADMIN"
 }
@@ -72,12 +73,13 @@ Authorization: Bearer <jwt>
 
 인증: 필요
 
-토큰 누락 또는 무효 토큰이면 body 없이 HTTP 401을 반환합니다. me는 토큰의 username으로 DB를 조회하므로 계정이 삭제된 경우에도 body 없이 HTTP 401을 반환합니다.
+토큰 누락·만료·구형 토큰·삭제된 계정이면 공통 오류 JSON과 함께 HTTP 401 `INVALID_CREDENTIALS`를 반환합니다. JWT subject는 계정 ID이며 `tokenVersion=2`가 필요합니다.
 
 응답:
 
 ```json
 {
+  "userId": 1,
   "username": "admin",
   "role": "ADMIN"
 }
@@ -174,7 +176,9 @@ Authorization: Bearer <jwt>
 
 - 마지막 남은 ADMIN은 삭제할 수 없습니다. 위반 시 409 `LAST_ADMIN_PROTECTED`입니다.
 - 자기 자신의 계정은 삭제할 수 없습니다. 위반 시 409 `SELF_DELETE_NOT_ALLOWED`입니다.
-- 삭제된 계정의 기존 JWT는 이후 `GET /api/v1/auth/me`와 사용자 관리 API에서 DB 조회 시 거부됩니다.
+- 삭제된 계정의 기존 JWT는 모든 보호 API에서 거부됩니다. 같은 username으로 재등록해도 이전 토큰 및 작성자 권한을 물려받지 않습니다.
+
+글·댓글 응답의 `authorUserId`는 nullable 계정 ID입니다. 권한 판정에는 이 ID를 사용하고, `authorUsername`은 표시용으로만 사용합니다. 삭제된 계정이나 연결을 확정하지 못한 레거시 데이터는 `authorUserId=null`일 수 있습니다.
 
 ## Posts
 
@@ -205,6 +209,7 @@ Authorization: Bearer <jwt>
   "replyCount": 0,
   "hasAttachment": false,
   "authorUsername": "member1",
+  "authorUserId": 2,
   "createdAt": "2026-05-31T00:00:00Z"
 }
 ```
@@ -223,6 +228,7 @@ Authorization: Bearer <jwt>
   "mode": "NORMAL",
   "conversionReady": false,
   "authorUsername": "member1",
+  "authorUserId": 2,
   "createdAt": "2026-05-31T00:00:00Z",
   "updatedAt": "2026-05-31T00:00:00Z",
   "attachments": [],
@@ -252,6 +258,7 @@ Authorization: Bearer <jwt>
   "aiProvider": null,
   "aiModel": null,
   "authorUsername": "member1",
+  "authorUserId": 2,
   "createdAt": "2026-05-31T00:00:00Z",
   "updatedAt": "2026-05-31T00:00:00Z"
 }
@@ -272,13 +279,13 @@ Content-Type: `multipart/form-data`
 | `mode` | 아니오 | 기본 `NORMAL`. 수동 `FILE_CONVERSION_REQUEST` 생성은 거부 |
 | `attachments` | 아니오 | 첨부파일. 같은 이름 `attachments`로 여러 개 전송 가능(최대 5개, 파일당 100MB) |
 
-응답: 게시글 상세(`authorUsername`은 요청 JWT의 subject), HTTP 201
+응답: 게시글 상세(`authorUserId`는 계정 ID, `authorUsername`은 작성 시점의 표시 이름), HTTP 201
 
 ### `PUT /api/v1/posts/{id}`
 
 인증: 필요
 
-권한: 작성자 본인 또는 `ADMIN`. `authorUsername`이 없는 레거시 글은 `ADMIN`만 수정 가능. 그 외는 `403 FORBIDDEN`.
+권한: 작성자 본인 또는 `ADMIN`. `authorUserId`가 없는 레거시 글은 `ADMIN`만 수정 가능. 그 외는 `403 FORBIDDEN`.
 
 Content-Type: `multipart/form-data`
 
@@ -306,7 +313,7 @@ Content-Type: `multipart/form-data`
 
 인증: 필요
 
-권한: 작성자 본인 또는 `ADMIN`. `authorUsername`이 없는 레거시 글은 `ADMIN`만 삭제 가능. 그 외는 `403 FORBIDDEN`.
+권한: 작성자 본인 또는 `ADMIN`. `authorUserId`가 없는 레거시 글은 `ADMIN`만 삭제 가능. 그 외는 `403 FORBIDDEN`.
 
 응답: HTTP 204
 
@@ -348,7 +355,7 @@ Content-Type: `multipart/form-data`
 
 인증: 필요
 
-권한: 댓글 작성자 본인 또는 `ADMIN`. `authorUsername`이 없는 레거시 일반 댓글은 `ADMIN`만 수정 가능. 그 외는 `403 FORBIDDEN`.
+권한: 댓글 작성자 본인 또는 `ADMIN`. `authorUserId`가 없는 레거시 일반 댓글은 `ADMIN`만 수정 가능. 그 외는 `403 FORBIDDEN`.
 
 요청:
 
@@ -366,7 +373,7 @@ Content-Type: `multipart/form-data`
 
 인증: 필요
 
-권한: 댓글 작성자 본인 또는 `ADMIN`. `authorUsername`이 없는 레거시 일반 댓글은 `ADMIN`만 삭제 가능. 그 외는 `403 FORBIDDEN`.
+권한: 댓글 작성자 본인 또는 `ADMIN`. `authorUserId`가 없는 레거시 일반 댓글은 `ADMIN`만 삭제 가능. 그 외는 `403 FORBIDDEN`.
 
 응답: HTTP 204
 
@@ -446,7 +453,7 @@ Content-Type: `multipart/form-data`
 
 ### `GET /api/v1/upload-sessions/{sessionId}`
 
-해당 세션의 암호화된 status를 반환합니다. 세션 생성자와 같은 JWT subject만 접근할 수 있습니다.
+해당 세션의 암호화된 status를 반환합니다. 세션의 `created_by_user_id`와 JWT의 계정 ID가 일치해야 접근할 수 있습니다.
 
 ### `POST /api/v1/upload-sessions/{sessionId}/chunks`
 

@@ -46,6 +46,7 @@ export interface Reply {
   aiModel: string | null;
   /** 작성자 username. AI 답변은 null. 레거시 일반 댓글도 null일 수 있음. */
   authorUsername: string | null;
+  authorUserId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,6 +59,7 @@ export interface Post {
   conversionReady: boolean;
   /** 작성자 username. 레거시 글은 null일 수 있음. */
   authorUsername: string | null;
+  authorUserId: number | null;
   createdAt: string;
 }
 
@@ -96,11 +98,13 @@ export interface ApiError {
 
 export interface LoginResponse {
   token: string;
+  userId: number;
   username: string;
   role: UserRole;
 }
 
 export interface MeResponse {
+  userId: number;
   username: string;
   role: UserRole;
 }

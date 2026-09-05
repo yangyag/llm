@@ -26,7 +26,7 @@ public class UserManagementService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserResponse> listUsers(String requester, String query) {
+    public List<UserResponse> listUsers(Long requester, String query) {
         requireAdmin(requester);
         List<Admin> users = adminRepository.findAll();
         if (query != null && !query.isBlank()) {
@@ -42,7 +42,7 @@ public class UserManagementService {
     }
 
     @Transactional
-    public UserResponse createUser(String requester, CreateUserRequest request) {
+    public UserResponse createUser(Long requester, CreateUserRequest request) {
         requireAdmin(requester);
         if (adminRepository.findByUsername(request.username()).isPresent()) {
             throw new DuplicateUsernameException("username already exists: " + request.username());
@@ -56,7 +56,7 @@ public class UserManagementService {
     }
 
     @Transactional
-    public UserResponse updateUser(String requester, Long id, UpdateUserRequest request) {
+    public UserResponse updateUser(Long requester, Long id, UpdateUserRequest request) {
         requireAdmin(requester);
         Admin target = adminRepository.findById(id)
             .orElseThrow(() -> NotFoundException.user(id));
@@ -74,7 +74,7 @@ public class UserManagementService {
     }
 
     @Transactional
-    public void deleteUser(String requester, Long id) {
+    public void deleteUser(Long requester, Long id) {
         Admin requesterAdmin = requireAdmin(requester);
         Admin target = adminRepository.findById(id)
             .orElseThrow(() -> NotFoundException.user(id));
@@ -89,8 +89,8 @@ public class UserManagementService {
         adminRepository.delete(target);
     }
 
-    private Admin requireAdmin(String username) {
-        Admin admin = adminRepository.findByUsername(username)
+    private Admin requireAdmin(Long userId) {
+        Admin admin = adminRepository.findById(userId)
             .orElseThrow(() -> new InvalidCredentialsException("User no longer exists"));
         if (admin.getRole() != UserRole.ADMIN) {
             throw new ForbiddenException("admin role is required");

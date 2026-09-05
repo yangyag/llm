@@ -33,8 +33,8 @@ public class UserManagementController {
         @RequestHeader(value = "Authorization", required = false) String authHeader,
         @RequestParam(required = false) String query
     ) {
-        String username = jwtProvider.authenticate(authHeader);
-        return userManagementService.listUsers(username, query);
+        Long userId = jwtProvider.authenticate(authHeader);
+        return userManagementService.listUsers(userId, query);
     }
 
     @PostMapping
@@ -43,8 +43,8 @@ public class UserManagementController {
         @RequestHeader(value = "Authorization", required = false) String authHeader,
         @Valid @RequestBody CreateUserRequest request
     ) {
-        String username = jwtProvider.authenticate(authHeader);
-        return userManagementService.createUser(username, request);
+        Long userId = jwtProvider.authenticate(authHeader);
+        return userManagementService.createUser(userId, request);
     }
 
     @PutMapping("/{id}")
@@ -53,8 +53,8 @@ public class UserManagementController {
         @PathVariable Long id,
         @Valid @RequestBody UpdateUserRequest request
     ) {
-        String username = jwtProvider.authenticate(authHeader);
-        return userManagementService.updateUser(username, id, request);
+        Long userId = jwtProvider.authenticate(authHeader);
+        return userManagementService.updateUser(userId, id, request);
     }
 
     @DeleteMapping("/{id}")
@@ -63,7 +63,7 @@ public class UserManagementController {
         @RequestHeader(value = "Authorization", required = false) String authHeader,
         @PathVariable Long id
     ) {
-        String username = jwtProvider.authenticate(authHeader);
-        userManagementService.deleteUser(username, id);
+        Long userId = jwtProvider.authenticate(authHeader);
+        userManagementService.deleteUser(userId, id);
     }
 }

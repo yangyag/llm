@@ -16,6 +16,7 @@ cd /home/yangyag/llm/back
 ```bash
 cd /home/yangyag/llm/front
 npm ci
+npm test
 npm run typecheck
 npm run build
 ```
@@ -54,6 +55,12 @@ curl -fsS http://localhost:8083/api/v1/health
 | `BoardContentCodecTest` | bodyBase64 디코딩 경계(blank/100만자/오류) |
 | `UploadSessionWireCodecTest` | 암호화 라운드트립, AAD alias 바인딩, 변조/타 secret 거부 |
 | `ExternalAiReplyGeneratorDefaultsTest` | AI provider 기본값 |
+
+## 추가 회귀 검증
+
+`SecurityAndStorageRegressionTest`는 삭제 계정의 모든 쓰기·업로드 차단, username 재사용 시 토큰/소유권 분리, 첨부 롤백·삭제 재시도, 긴 ZIP 제목을 검증합니다. `front/tests/postDetail.test.cjs`는 실제 Pinia store에서 응답 순서 역전·조회 실패·저장 중 이동·ID 불일치·계정 ID 권한 표시를 검증합니다.
+
+`PostgresMigrationTest`는 `LLM_TEST_POSTGRES_URL=jdbc:postgresql://127.0.0.1:<임시포트>/postgres`가 있을 때 실행합니다. 별도 일회용 PostgreSQL의 postgres 사용자와 빈 비밀번호를 사용하며 무작위 schema에 V1~V16 → V17~V18을 적용하고 소유권 백필·삭제 FK·Hibernate validate를 확인합니다. 운영 DB를 지정하지 않습니다. 변수가 없으면 해당 테스트는 건너뜁니다. 준비·실행 명령은 [18-integrity-hardening.md](./18-integrity-hardening.md)를 참조합니다.
 
 ## 변경별 권장 게이트
 

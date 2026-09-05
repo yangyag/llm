@@ -24,14 +24,14 @@ public class AuthService {
             throw new InvalidCredentialsException("Invalid username or password");
         }
 
-        String token = jwtProvider.generateToken(admin.getUsername());
-        return new LoginResponse(token, admin.getUsername(), admin.getRole());
+        String token = jwtProvider.generateToken(admin);
+        return new LoginResponse(token, admin.getId(), admin.getUsername(), admin.getRole());
     }
 
-    /** 토큰 username 기준 현재 계정 정보. 계정이 삭제됐으면 401로 처리되게 InvalidCredentials. */
-    public AdminMeResponse me(String username) {
-        Admin admin = adminRepository.findByUsername(username)
+    /** 검증된 계정 ID 기준 현재 정보. 계정이 삭제됐으면 401로 거부한다. */
+    public AdminMeResponse me(Long userId) {
+        Admin admin = adminRepository.findById(userId)
             .orElseThrow(() -> new InvalidCredentialsException("User no longer exists"));
-        return new AdminMeResponse(admin.getUsername(), admin.getRole());
+        return new AdminMeResponse(admin.getId(), admin.getUsername(), admin.getRole());
     }
 }

@@ -11,6 +11,7 @@ public record BoardPostSummaryDto(
 	int replyCount,
 	boolean hasAttachment,
 	String authorUsername,
+	Long authorUserId,
 	Instant createdAt
 ) {
 }

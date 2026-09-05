@@ -57,15 +57,15 @@ export function formatFileSize(size: number): string {
 
 /** 작성자 본인 또는 ADMIN만 수정/삭제 가능. author 없는 레거시 글은 ADMIN만. */
 export function canManagePost(
-  authorUsername: string | null | undefined,
-  currentUsername: string | null | undefined,
+  authorUserId: number | null | undefined,
+  currentUserId: number | null | undefined,
   role: UserRole | null | undefined
 ): boolean {
-  if (!currentUsername) {
+  if (!currentUserId) {
     return false;
   }
   if (role === "ADMIN") {
     return true;
   }
-  return Boolean(authorUsername) && authorUsername === currentUsername;
+  return authorUserId != null && authorUserId === currentUserId;
 }

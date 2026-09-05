@@ -5,6 +5,7 @@ import type { UserRole } from "~/types/api";
 
 const TOKEN_KEY = "auth_token";
 const USERNAME_KEY = "auth_username";
+const USER_ID_KEY = "auth_user_id";
 const ROLE_KEY = "auth_role";
 // 유휴 타임아웃용 마지막 활동 시각 키 — useIdleTimeout과 공유.
 export const LAST_ACTIVITY_KEY = "auth_last_activity";
@@ -12,6 +13,7 @@ export const LAST_ACTIVITY_KEY = "auth_last_activity";
 interface AuthState {
   token: string | null;
   username: string | null;
+  userId: number | null;
   role: UserRole | null;
   checked: boolean;
 }
@@ -20,6 +22,7 @@ export const useAuthStore = defineStore("auth", {
   state: (): AuthState => ({
     token: null,
     username: null,
+    userId: null,
     role: null,
     checked: false
   }),
@@ -35,17 +38,21 @@ export const useAuthStore = defineStore("auth", {
       if (!import.meta.client) return;
       this.token = localStorage.getItem(TOKEN_KEY);
       this.username = localStorage.getItem(USERNAME_KEY);
+      const storedId = Number(localStorage.getItem(USER_ID_KEY));
+      this.userId = Number.isSafeInteger(storedId) && storedId > 0 ? storedId : null;
       const storedRole = localStorage.getItem(ROLE_KEY);
       this.role = storedRole === "ADMIN" || storedRole === "USER" ? storedRole : null;
     },
-    setAuth(token: string, username: string, role: UserRole) {
+    setAuth(token: string, userId: number, username: string, role: UserRole) {
       this.token = token;
       this.username = username;
+      this.userId = userId;
       this.role = role;
       this.checked = true;
       if (import.meta.client) {
         localStorage.setItem(TOKEN_KEY, token);
         localStorage.setItem(USERNAME_KEY, username);
+        localStorage.setItem(USER_ID_KEY, String(userId));
         localStorage.setItem(ROLE_KEY, role);
         // 새 로그인 시점을 유휴 타이머 기준 활동으로 시드 (이전 세션 잔여 값 무시).
         localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
@@ -55,13 +62,14 @@ export const useAuthStore = defineStore("auth", {
       if (import.meta.client) {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USERNAME_KEY);
+        localStorage.removeItem(USER_ID_KEY);
         localStorage.removeItem(ROLE_KEY);
         localStorage.removeItem(LAST_ACTIVITY_KEY);
       }
     },
     async login(username: string, password: string) {
       const result = await apiLogin(username, password);
-      this.setAuth(result.token, result.username, result.role);
+      this.setAuth(result.token, result.userId, result.username, result.role);
       return result;
     },
     async fetchMe() {
@@ -72,6 +80,8 @@ export const useAuthStore = defineStore("auth", {
       try {
         const result = await getMe(this.token);
         this.username = result.username;
+        this.userId = result.userId;
+        if (import.meta.client) localStorage.setItem(USER_ID_KEY, String(result.userId));
         this.role = result.role;
         this.checked = true;
       } catch {
@@ -83,6 +93,7 @@ export const useAuthStore = defineStore("auth", {
       this.clearStoredAuth();
       this.token = null;
       this.username = null;
+      this.userId = null;
       this.role = null;
       this.checked = true;
     }

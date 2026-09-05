@@ -46,6 +46,7 @@ spring.flyway.create-schemas=true
 | `admins` | 사용자 계정(ADMIN/USER 역할) |
 | `upload_sessions` | ZIP 청크 업로드 세션 |
 | `upload_session_parts` | 세션별 청크 파일 메타데이터 |
+| `attachment_file_deletions` | 커밋된 첨부 파일 삭제 작업과 재시도 대기열 |
 
 ## 마이그레이션 목록
 
@@ -67,6 +68,8 @@ spring.flyway.create-schemas=true
 | `V14__add_author_to_posts.sql` | `posts.author_username` 추가. 작성자 본인/관리자 수정·삭제 권한 기준. 기존 글은 null |
 | `V15__backfill_post_author_as_admin.sql` | 기존 게시글 중 `author_username`이 null인 글을 전부 `admin`으로 백필 |
 | `V16__add_author_to_replies.sql` | `post_replies.author_username` 추가. 작성자 본인/관리자 수정·삭제 권한 기준. 기존 일반 댓글은 `admin`으로 백필(AI 답변 제외) |
+| `V17__bind_ownership_to_user_ids.sql` | 글·댓글·업로드에 계정 ID 연결. 표시 이름과 계정 생성 시점이 맞는 행만 백필하며 계정 삭제 시 ID를 null로 설정 |
+| `V18__create_attachment_file_deletions.sql` | 첨부파일 삭제를 커밋 후 처리하기 위한 영속 대기열 |
 
 ## 도메인 제약
 
@@ -76,8 +79,10 @@ spring.flyway.create-schemas=true
 - `upload_session_parts`는 `(session_id, chunk_number)` unique 제약을 가집니다.
 - `admins.username`은 unique입니다.
 - `admins.role`은 `varchar(20) not null default 'ADMIN'`이며 `check (role in ('ADMIN', 'USER'))` 제약으로 `ADMIN`/`USER`만 허용합니다(V13). V13 이전 생성 계정은 전부 기본값 `ADMIN`으로 승계됩니다.
-- `posts.author_username`은 작성자 username이며 nullable입니다(V14). null인 레거시 글은 관리자만 수정/삭제할 수 있습니다. 새 글은 작성 시점의 JWT subject(로그인 username)가 저장됩니다. 기존 레거시 글은 `V15`에서 `admin`으로 백필됩니다.
-- `post_replies.author_username`은 댓글 작성자 username이며 nullable입니다(V16). AI 답변(`is_ai=true`)은 null이고, 일반 댓글은 작성 시점의 JWT subject가 저장됩니다. 기존 일반 댓글은 `V16`에서 `admin`으로 백필됩니다. 댓글 수정/삭제도 작성자 본인 또는 ADMIN만 가능하며, null인 레거시 일반 댓글은 ADMIN만 수정/삭제할 수 있습니다.
+- `posts.author_username`과 `post_replies.author_username`은 작성 시점의 표시 이름입니다. 소유권 기준은 V17의 nullable `author_user_id`이며, 새 글·댓글은 현재 계정 ID를 기록합니다. 미연결 레거시 데이터는 ADMIN만 관리할 수 있습니다.
+- V17은 username이 일치하고 계정 생성 시점이 글·댓글·세션 생성 시점보다 늦지 않은 행에만 계정 ID를 연결합니다. AI 댓글은 연결하지 않습니다. 계정 삭제 시 FK의 `ON DELETE SET NULL`이 동작하며 이름을 재사용해도 권한을 승계하지 않습니다.
+- `upload_sessions.created_by_user_id`가 현재 계정 ID와 일치해야 세션을 사용할 수 있습니다. 미연결 세션은 만료 시 정리됩니다.
+- 첨부 metadata 삭제와 `attachment_file_deletions` 등록은 같은 트랜잭션에서 처리합니다. 실제 파일 삭제는 커밋 후 실행하고 실패한 작업은 1분마다 최대 100건 재시도합니다. 새 파일은 롤백 시 정리하며, 파일 정리 실패도 대기열에 등록합니다.
 
 ## 기본 관리자 계정
 

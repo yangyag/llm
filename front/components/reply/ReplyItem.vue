@@ -14,7 +14,7 @@ const auth = useAuthStore();
 const detail = usePostDetailStore();
 
 const manageable = computed(() =>
-  canManagePost(props.reply.authorUsername, auth.username, auth.role)
+  canManagePost(props.reply.authorUserId, auth.userId, auth.role)
 );
 
 const authorLabel = computed(() => props.reply.authorUsername || "익명");

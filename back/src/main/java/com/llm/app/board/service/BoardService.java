@@ -30,7 +30,6 @@ import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
 import com.llm.app.board.repository.BoardPostSummaryProjection;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Locale;
@@ -57,6 +56,7 @@ public class BoardService {
 	private final BoardMapper boardMapper;
 	private final AiReplyGenerator aiReplyGenerator;
 	private final AttachmentStorageService attachmentStorageService;
+	private final AttachmentFileLifecycle attachmentFileLifecycle;
 	private final int maxAttachmentsPerPost;
 
 	public BoardService(
@@ -68,6 +68,7 @@ public class BoardService {
 		BoardMapper boardMapper,
 		AiReplyGenerator aiReplyGenerator,
 		AttachmentStorageService attachmentStorageService,
+		AttachmentFileLifecycle attachmentFileLifecycle,
 		@Value("${app.attachments.max-count:5}") int maxAttachmentsPerPost
 	) {
 		this.boardPostRepository = boardPostRepository;
@@ -78,6 +79,7 @@ public class BoardService {
 		this.boardMapper = boardMapper;
 		this.aiReplyGenerator = aiReplyGenerator;
 		this.attachmentStorageService = attachmentStorageService;
+		this.attachmentFileLifecycle = attachmentFileLifecycle;
 		this.maxAttachmentsPerPost = maxAttachmentsPerPost;
 	}
 
@@ -97,24 +99,26 @@ public class BoardService {
 		return toDetailResponse(findPostWithReplies(id));
 	}
 
-	public BoardPostDetailResponse createPost(String authorUsername, CreateBoardPostRequest request) {
+	public BoardPostDetailResponse createPost(Long authorUserId, CreateBoardPostRequest request) {
+		Admin author = requireExistingUser(authorUserId);
 		Instant now = Instant.now();
 		BoardPostMode mode = request.getMode();
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
 			resolvePostBody(mode, request.getBodyBase64()),
 			mode,
-			authorUsername,
+			author.getUsername(),
 			now,
-			now
+			now,
+			author.getId()
 		));
 		syncAttachments(savedPost, request.getAttachments(), null, now);
 		return toDetailResponse(savedPost);
 	}
 
-	public BoardPostDetailResponse updatePost(String actorUsername, Long id, UpdateBoardPostRequest request) {
+	public BoardPostDetailResponse updatePost(Long actorUserId, Long id, UpdateBoardPostRequest request) {
 		BoardPost post = findPostWithReplies(id);
-		ensureCanManagePost(actorUsername, post);
+		ensureCanManagePost(actorUserId, post);
 		ensurePostIsEditable(post);
 		BoardPostMode mode = request.getMode();
 		post.update(
@@ -127,19 +131,19 @@ public class BoardService {
 		return toDetailResponse(post);
 	}
 
-	public void deletePost(String actorUsername, Long id) {
+	public void deletePost(Long actorUserId, Long id) {
 		BoardPost post = findPostWithReplies(id);
-		ensureCanManagePost(actorUsername, post);
+		ensureCanManagePost(actorUserId, post);
 		deletePostEntity(post);
 	}
 
-	public void batchDeletePosts(String actorUsername, List<Long> ids) {
-		Admin actor = requireExistingUser(actorUsername);
+	public void batchDeletePosts(Long actorUserId, List<Long> ids) {
+		Admin actor = requireExistingUser(actorUserId);
 		boolean admin = actor.getRole() == UserRole.ADMIN;
 		List<BoardPost> posts = boardPostRepository.findAllById(ids);
 		// 하나라도 권한이 없으면 어떤 글도 지우지 않는다.
 		for (BoardPost post : posts) {
-			if (!admin && !isOwner(actorUsername, post.getAuthorUsername())) {
+			if (!admin && !isOwner(actorUserId, post.getAuthorUserId())) {
 				throw new ForbiddenException("작성자 본인 또는 관리자만 삭제할 수 있습니다.");
 			}
 		}
@@ -151,15 +155,17 @@ public class BoardService {
 		boardPostRepository.delete(post);
 	}
 
-	public BoardPostDetailResponse createReply(String authorUsername, Long postId, CreateBoardReplyRequest request) {
+	public BoardPostDetailResponse createReply(Long authorUserId, Long postId, CreateBoardReplyRequest request) {
+		Admin author = requireExistingUser(authorUserId);
 		BoardPost post = findPostWithReplies(postId);
 		Instant now = Instant.now();
 		BoardReply reply = new BoardReply(
 			post,
 			boardContentCodec.decodeBody(request.bodyBase64()),
-			authorUsername,
+			author.getUsername(),
 			now,
-			now
+			now,
+			author.getId()
 		);
 		post.getReplies().add(reply);
 		boardReplyRepository.saveAndFlush(reply);
@@ -194,18 +200,18 @@ public class BoardService {
 		return toDetailResponse(findPostWithReplies(postId));
 	}
 
-	public BoardPostDetailResponse updateReply(String actorUsername, Long replyId, UpdateBoardReplyRequest request) {
+	public BoardPostDetailResponse updateReply(Long actorUserId, Long replyId, UpdateBoardReplyRequest request) {
 		BoardReply reply = findReply(replyId);
 		ensureReplyIsEditable(reply);
-		ensureCanManageReply(actorUsername, reply);
+		ensureCanManageReply(actorUserId, reply);
 		reply.update(boardContentCodec.decodeBody(request.bodyBase64()), Instant.now());
 		return toDetailResponse(findPostWithReplies(reply.getPost().getId()));
 	}
 
-	public void deleteReply(String actorUsername, Long replyId) {
+	public void deleteReply(Long actorUserId, Long replyId) {
 		BoardReply reply = findReply(replyId);
 		ensureReplyIsEditable(reply);
-		ensureCanManageReply(actorUsername, reply);
+		ensureCanManageReply(actorUserId, reply);
 		reply.getPost().getReplies().remove(reply);
 		boardReplyRepository.delete(reply);
 		boardReplyRepository.flush();
@@ -249,40 +255,40 @@ public class BoardService {
 
 	/**
 	 * 작성자 본인 또는 ADMIN만 게시글 수정/삭제 가능.
-	 * authorUsername 이 null 인 레거시 글은 ADMIN만 관리 가능.
+	 * authorUserId가 null인 레거시 글은 ADMIN만 관리 가능.
 	 */
-	private void ensureCanManagePost(String actorUsername, BoardPost post) {
-		Admin actor = requireExistingUser(actorUsername);
+	private void ensureCanManagePost(Long actorUserId, BoardPost post) {
+		Admin actor = requireExistingUser(actorUserId);
 		if (actor.getRole() == UserRole.ADMIN) {
 			return;
 		}
-		if (!isOwner(actorUsername, post.getAuthorUsername())) {
+		if (!isOwner(actorUserId, post.getAuthorUserId())) {
 			throw new ForbiddenException("작성자 본인 또는 관리자만 수정·삭제할 수 있습니다.");
 		}
 	}
 
 	/**
 	 * 작성자 본인 또는 ADMIN만 댓글 수정/삭제 가능.
-	 * authorUsername 이 null 인 댓글(AI 답변 등)은 앞선 ensureReplyIsEditable 에서 이미 차단되며,
-	 * null 이 남아있는 레거시 일반 댓글은 ADMIN 만 관리 가능.
+	 * AI 답변은 앞선 ensureReplyIsEditable에서 차단된다.
+	 * authorUserId가 null인 레거시 일반 댓글은 ADMIN만 관리 가능.
 	 */
-	private void ensureCanManageReply(String actorUsername, BoardReply reply) {
-		Admin actor = requireExistingUser(actorUsername);
+	private void ensureCanManageReply(Long actorUserId, BoardReply reply) {
+		Admin actor = requireExistingUser(actorUserId);
 		if (actor.getRole() == UserRole.ADMIN) {
 			return;
 		}
-		if (!isOwner(actorUsername, reply.getAuthorUsername())) {
+		if (!isOwner(actorUserId, reply.getAuthorUserId())) {
 			throw new ForbiddenException("작성자 본인 또는 관리자만 수정·삭제할 수 있습니다.");
 		}
 	}
 
-	private boolean isOwner(String actorUsername, String authorUsername) {
-		return authorUsername != null
-			&& Objects.equals(authorUsername, actorUsername);
+	private boolean isOwner(Long actorUserId, Long authorUserId) {
+		return authorUserId != null
+			&& Objects.equals(authorUserId, actorUserId);
 	}
 
-	private Admin requireExistingUser(String username) {
-		return adminRepository.findByUsername(username)
+	private Admin requireExistingUser(Long userId) {
+		return adminRepository.findById(userId)
 			.orElseThrow(() -> new InvalidCredentialsException("User no longer exists"));
 	}
 
@@ -354,34 +360,22 @@ public class BoardService {
 			return;
 		}
 
-		// 4) 신규 파일을 먼저 저장한다. 저장 중 실패하면 이번에 저장한 파일만 정리하고 중단하므로
-		//    기존 첨부(toRemove 포함)는 그대로 보존되어 트랜잭션 롤백과 디스크 상태가 일관된다.
-		List<String> storedPaths = new ArrayList<>();
-		try {
-			for (MultipartFile upload : newUploads) {
-				AttachmentStorageService.StoredAttachment stored = attachmentStorageService.store(upload);
-				storedPaths.add(stored.storagePath());
-				boardAttachmentRepository.save(new BoardAttachment(
-					post,
-					stored.originalFilename(),
-					stored.storedFilename(),
-					stored.storagePath(),
-					stored.contentType(),
-					stored.size(),
-					now
-				));
-			}
-		} catch (RuntimeException exception) {
-			storedPaths.forEach(attachmentStorageService::deleteIfExists);
-			throw exception;
+		// Every new file is registered before its DB row is saved, including commit-time failures.
+		for (MultipartFile upload : newUploads) {
+			AttachmentStorageService.StoredAttachment stored = attachmentStorageService.store(upload);
+			attachmentFileLifecycle.trackCreated(stored.storagePath());
+			boardAttachmentRepository.save(new BoardAttachment(
+				post, stored.originalFilename(), stored.storedFilename(), stored.storagePath(),
+				stored.contentType(), stored.size(), now
+			));
 		}
 
-		// 5) 신규 저장이 모두 끝난 뒤에야 기존 첨부를 삭제한다.
+		// 기존 metadata 삭제와 파일 삭제 예약은 같은 트랜잭션에 참여한다.
 		toRemove.forEach(this::deleteAttachment);
 	}
 
 	private void deleteAttachment(BoardAttachment attachment) {
-		attachmentStorageService.deleteIfExists(attachment.getStoragePath());
+		attachmentFileLifecycle.deleteAfterCommit(attachment.getStoragePath());
 		boardAttachmentRepository.delete(attachment);
 		boardAttachmentRepository.flush();
 	}

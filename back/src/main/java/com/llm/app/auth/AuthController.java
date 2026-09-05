@@ -1,7 +1,6 @@
 package com.llm.app.auth;
 
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,16 +24,7 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<AdminMeResponse> me(@RequestHeader(value = "Authorization", required = false) String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        String token = authHeader.substring(7);
-        try {
-            String username = jwtProvider.validateAndGetUsername(token);
-            return ResponseEntity.ok(authService.me(username));
-        } catch (InvalidCredentialsException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        Long userId = jwtProvider.authenticate(authHeader);
+        return ResponseEntity.ok(authService.me(userId));
     }
 }
