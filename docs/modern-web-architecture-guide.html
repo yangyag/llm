@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Spring 개발자를 위한 현대 웹 아키텍처 기술 7가지: 탄생 배경, 등장 시기, 적용 사례, 현재 적합성과 필수 여부.">
+<title>웹 아키텍처 기술 가이드 · 7가지 확장 기술</title>
+<style>
+:root{--ink:#172a36;--muted:#536773;--accent:#006e64;--line:#d9e3e5;--paper:#fff;--bg:#f3f6f5}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.8 system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;word-break:keep-all;overflow-wrap:anywhere}a{color:var(--accent);text-underline-offset:4px}a:focus-visible,button:focus-visible{outline:3px solid #dc8b20;outline-offset:5px}header{background:#112e36;color:#fff;padding:64px max(24px,calc((100vw - 1100px)/2)) 52px}.eyebrow{font-size:12px;font-weight:700;letter-spacing:2px;color:#95ddd0}h1{font-size:clamp(30px,5vw,50px);letter-spacing:-2px;line-height:1.25;margin:15px 0 22px}header p{max-width:730px;color:#d3e3e5}header .meta{font-size:13px;color:#a7c4c8}main{max-width:1150px;margin:auto;padding:32px 24px 64px}h2{font-size:26px;line-height:1.4;margin:0 0 12px;letter-spacing:-.6px}h3{font-size:17px;margin:0 0 8px}p{margin:0 0 14px}.intro,.overview,.roadmap{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:28px;margin-bottom:24px}.intro strong{color:var(--accent)}nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 0}nav a{font-size:13px;text-decoration:none;background:#eaf3f0;border:1px solid #cfe1da;border-radius:24px;padding:7px 13px}nav a:hover{background:#d6eae3}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:720px;font-size:14px}caption{text-align:left;color:var(--muted);margin-bottom:14px}th,td{text-align:left;padding:13px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#f0f5f3;font-weight:650}td:first-child{font-weight:650}.note{font-size:13px;color:var(--muted);margin-top:14px}.tech{background:var(--paper);border:1px solid var(--line);border-radius:18px;margin:26px 0;overflow:hidden}.tech-head{padding:27px 30px 22px;border-bottom:1px solid var(--line);background:linear-gradient(110deg,#edf6f2,#fff)}.number{font-size:12px;font-weight:750;letter-spacing:1px;color:var(--accent);margin-bottom:8px}.tech-head p{color:var(--muted);margin:0}.tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.tag{border-radius:6px;padding:3px 9px;font-size:12px;background:#e1efe9;color:#205649}.tag.choice{background:#fff0d7;color:#745013}.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px 32px;padding:28px 30px}.item p{font-size:15px;margin:0}.wide{grid-column:1/-1}.item h3 span{display:inline-block;color:var(--accent);font-size:12px;margin-right:9px}.example{margin:0 30px 24px;padding:17px 20px;border-left:3px solid #239885;background:#f1f7f4;font-size:14px}.example strong{display:block;margin-bottom:5px}.sources{border-top:1px solid var(--line);padding:17px 30px;font-size:12px;color:var(--muted)}.sources a{display:inline-block;margin-right:15px}.flow{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap;margin:22px 0}.flow div{flex:1;min-width:180px;background:#edf5f1;border-radius:10px;padding:16px}.flow small{display:block;color:var(--muted)}footer{font-size:13px;color:var(--muted);display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}button{font:inherit;cursor:pointer;background:var(--accent);color:white;border:0;border-radius:8px;padding:9px 16px}.skip{position:absolute;left:16px;top:-80px;background:white;padding:10px;z-index:10}.skip:focus{top:16px}ul{padding-left:22px;margin:10px 0}li{margin:8px 0}@media(max-width:650px){header{padding:40px 24px}main{padding:20px 14px}.grid{grid-template-columns:1fr;padding:22px;gap:23px}.wide{grid-column:auto}.intro,.overview,.roadmap{padding:22px}.tech-head{padding:24px 22px}.example{margin:0 22px 22px}.sources{padding:15px 22px}h2{font-size:23px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:white;font-size:11pt}header{background:white;color:#172a36;padding:0 0 20px}header p,header .meta,.eyebrow{color:#536773}main{max-width:none;padding:0}nav,button,.skip{display:none}.tech,.intro,.overview,.roadmap{border-radius:0;margin:16px 0}.grid{display:block;padding:16px}.item{margin-bottom:16px;break-inside:avoid}.tech-head{break-after:avoid}.sources{break-inside:avoid}.table-wrap{overflow:visible}table{min-width:0;font-size:9pt}a{color:#172a36}.flow div{min-width:0}h1{font-size:28pt}}
+</style>
+</head>
+<body>
+<a class="skip" href="#content">본문으로 이동</a>
+<header>
+<div class="eyebrow">WEB ARCHITECTURE · FIELD GUIDE</div>
+<h1>알고 있는 스택에서,<br>한 단계 더 넓게.</h1>
+<p>Spring Boot · JPA · React/Next.js · Vue/Nuxt · PostgreSQL · Kafka · Docker · Kubernetes를 알고 있는 개발자를 위한 7가지 기술 안내서.</p>
+<div class="meta">자료 확인: 2026.09.07 · 탄생 배경 / 등장 시기 / 적용 상황 / 현재 적합성 / 필수 여부</div>
+</header>
+<main id="content">
+<section class="intro" aria-labelledby="reading">
+<h2 id="reading">새 프로젝트에 모두 넣어야 할까요?</h2>
+<p><strong>이 7가지 중 모든 웹 프로젝트에 공통으로 필수인 제품은 없습니다.</strong> 해결해야 할 문제와 사용 중인 생태계에 따라 가치가 달라집니다. 관측성 같은 역량은 중요하지만, 이를 구현하는 특정 제품까지 반드시 정해지는 것은 아닙니다.</p>
+<p>아래의 ‘현재 적합성’과 ‘필수 여부’는 공식 기능·설계 자료를 바탕으로 한 실무적 판단입니다. 전체 신규 프로젝트의 채택률을 조사한 순위가 아닙니다. 등장 시기는 개념의 발명 시점과 제품 공개·정식 출시를 구분합니다.</p>
+<nav aria-label="기술 바로가기"><a href="#modulith">01 Modulith</a><a href="#threads">02 Virtual Threads</a><a href="#otel">03 OpenTelemetry</a><a href="#temporal">04 Temporal</a><a href="#rsc">05 Server Components</a><a href="#gitops">06 GitOps / Argo CD</a><a href="#vector">07 pgvector</a><a href="#learning">학습 순서</a></nav>
+</section>
+<section class="overview" aria-labelledby="comparison">
+<h2 id="comparison">먼저, 한눈에 비교</h2>
+<div class="table-wrap" role="region" aria-label="기술 비교표" tabindex="0"><table>
+<caption>시기는 대표 이정표 기준입니다. 상세 근거는 각 기술의 출처에서 확인할 수 있습니다.</caption>
+<thead><tr><th scope="col">기술</th><th scope="col">등장·정식화</th><th scope="col">주로 해결하는 문제</th><th scope="col">신규 프로젝트에서의 위치</th></tr></thead>
+<tbody>
+<tr><td><a href="#modulith">Spring Modulith</a></td><td>2022 공개 / 2023 GA</td><td>한 앱 안의 모듈 간 결합</td><td>Spring 모듈 설계에 선택</td></tr>
+<tr><td><a href="#threads">Virtual Threads</a></td><td>2023 JDK 21 정식화</td><td>I/O 대기 시 스레드 비용</td><td>Java 서버에서 부하에 따라 선택</td></tr>
+<tr><td><a href="#otel">OpenTelemetry</a></td><td>2019 프로젝트 출범</td><td>흩어진 요청·성능 정보</td><td>분산 운영 환경에서 우선 검토</td></tr>
+<tr><td><a href="#temporal">Temporal</a></td><td>2020 첫 운영용 릴리스 발표</td><td>장기 작업의 상태·재시도·복구</td><td>복잡한 비동기 업무에서 선택</td></tr>
+<tr><td><a href="#rsc">React Server Components</a></td><td>2020 연구 공개 / 2024 React 19 안정화</td><td>클라이언트 JS와 데이터 조회 부담</td><td>Next.js App Router의 기본 모델</td></tr>
+<tr><td><a href="#gitops">GitOps / Argo CD</a></td><td>Argo CD: 2018</td><td>배포 설정과 실제 환경의 차이</td><td>Kubernetes 지속 배포에 선택</td></tr>
+<tr><td><a href="#vector">pgvector</a></td><td>2021 첫 릴리스</td><td>PostgreSQL에서의 벡터 검색</td><td>의미 검색·RAG 요구 시 선택</td></tr>
+</tbody></table></div>
+</section>
+
+<article class="tech" id="modulith">
+<div class="tech-head"><div class="number">01 / APPLICATION STRUCTURE</div><h2>Spring Modulith</h2><p>하나의 Spring 애플리케이션을 업무별로 잘 나누는 도구.</p><div class="tags"><span class="tag">Spring Boot 확장</span><span class="tag choice">필수 아님 · 구조가 복잡해질 때</span></div></div>
+<div class="grid">
+<section class="item"><h3><span>01</span>탄생 배경</h3><p>앱이 커지면 회원·주문·결제 코드가 서로 얽힙니다. 이를 모두 별도 서버로 나누면 배포와 통신의 복잡도도 커집니다. Spring Modulith는 한 배포 단위 안에서 업무 모듈의 경계, 의존성, 이벤트 협력을 관리하도록 등장했습니다.</p></section>
+<section class="item"><h3><span>02</span>대략 언제?</h3><p>Spring 프로젝트로 2022년 10월 소개되었고, 2023년 8월 21일 1.0 GA가 출시되었습니다. 모듈형 모놀리스라는 설계 개념 자체는 그보다 오래되었습니다.</p></section>
+<section class="item"><h3><span>03</span>주로 적용하는 상황</h3><p>업무 영역이 여러 개인 Spring Boot 서비스, 작은 팀이 운영하는 중규모 시스템, 향후 서비스 분리를 고려하는 앱에 어울립니다. 모듈 의존성 검증, 모듈별 통합 테스트, 구조 문서화에 활용합니다.</p></section>
+<section class="item"><h3><span>04</span>현재 트렌드에 적합한가?</h3><p><strong>적합합니다.</strong> 도메인 경계를 명확히 하면서 운영 부담을 관리하려는 설계에 맞습니다. 다만 이 도구를 쓴다고 독립 배포나 장애 격리가 자동으로 생기지는 않습니다.</p></section>
+<section class="item wide"><h3><span>05</span>최신 프로젝트에 필수인가?</h3><p><strong>아닙니다.</strong> 패키지 규칙과 아키텍처 검증으로도 경계를 관리할 수 있습니다. 모듈 간 의존성이 자주 무너지고 이를 자동 검증할 필요가 생길 때 도입 가치가 커집니다.</p></section>
+</div><div class="example"><strong>현재 프로젝트에 연결하면</strong>계정·게시판·첨부·업로드 세션의 경계를 정의하고, 업로드 코드가 게시판의 내부 구현을 직접 참조하는지 검증하는 연습부터 시작할 수 있습니다.</div>
+<div class="sources">공식 근거: <a href="https://spring.io/blog/2022/10/21/introducing-spring-modulith/">2022 소개</a><a href="https://spring.io/blog/2023/08/21/spring-modulith-1-0-ga-released/">1.0 GA 발표</a><a href="https://spring.io/projects/spring-modulith/">기능과 목적</a></div>
+</article>
+
+<article class="tech" id="threads">
+<div class="tech-head"><div class="number">02 / JAVA CONCURRENCY</div><h2>Java Virtual Threads</h2><p>I/O 응답을 기다리는 동시 작업을 가벼운 스레드로 처리.</p><div class="tags"><span class="tag">Java 런타임 기능</span><span class="tag choice">필수 아님 · 측정 후 선택</span></div></div>
+<div class="grid">
+<section class="item"><h3><span>01</span>탄생 배경</h3><p>요청마다 OS 스레드를 사용하는 방식은 많은 요청이 DB·네트워크를 기다릴 때 자원 부담이 커집니다. 비동기 코드의 복잡도를 늘리지 않고 익숙한 순차 코드로 높은 동시성을 다루려는 목표에서 나왔습니다.</p></section>
+<section class="item"><h3><span>02</span>대략 언제?</h3><p>Project Loom에서 발전했으며 JDK 19·20에서 미리보기로 제공되었습니다. 2023년 JDK 21에서 정식 기능이 되었습니다. Spring Boot에서도 가상 스레드 활성화 설정을 제공합니다.</p></section>
+<section class="item"><h3><span>03</span>주로 적용하는 상황</h3><p>외부 API, DB, 파일 등 블로킹 I/O 대기가 많고 동시 요청 수가 높은 서버가 후보입니다. Spring MVC와 동기식 라이브러리를 유지하면서 동시성 병목을 줄이고 싶을 때 검토합니다.</p></section>
+<section class="item"><h3><span>04</span>현재 트렌드에 적합한가?</h3><p><strong>현대 Java 서버 개발에 적합합니다.</strong> CPU 연산 자체를 빠르게 만드는 기능은 아닙니다. DB 커넥션 수와 외부 API의 처리 한도에 맞춘 동시성 제한이 계속 필요합니다.</p></section>
+<section class="item wide"><h3><span>05</span>최신 프로젝트에 필수인가?</h3><p><strong>아닙니다.</strong> 기존 스레드 풀이 충분하거나 CPU 작업이 병목이면 효과가 작을 수 있습니다. 처리량, 지연 시간, DB 대기량을 비교하고 사용하는 JDK·라이브러리와 함께 검증한 뒤 선택합니다.</p></section>
+</div><div class="example"><strong>현재 프로젝트에 연결하면</strong>ZIP 압축·연산 속도 개선보다는 여러 업로드의 I/O 대기 처리에 연결해 볼 수 있습니다. 먼저 실제 병목이 스레드인지 디스크인지 DB인지 구분해야 합니다.</div>
+<div class="sources">공식 근거: <a href="https://openjdk.org/jeps/444">JEP 444: 배경·목표·정식화</a><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html">Spring Boot 가상 스레드 설정</a></div>
+</article>
+
+<article class="tech" id="otel">
+<div class="tech-head"><div class="number">03 / OBSERVABILITY</div><h2>OpenTelemetry</h2><p>요청의 이동 경로, 성능 지표, 로그를 연결하는 공통 계측 체계.</p><div class="tags"><span class="tag">관측성</span><span class="tag choice">분산 서비스에서 우선 검토</span></div></div>
+<div class="grid">
+<section class="item"><h3><span>01</span>탄생 배경</h3><p>분산 시스템에서는 서버별 로그만으로 한 요청의 전체 흐름을 알기 어렵습니다. 모니터링 제품마다 계측 방식도 달랐습니다. 중복된 생태계를 통합하고 도구에 덜 종속적인 데이터 수집 방식을 제공하기 위해 출범했습니다.</p></section>
+<section class="item"><h3><span>02</span>대략 언제?</h3><p>2019년 OpenTracing과 OpenCensus의 통합으로 시작했습니다. 이후 트레이스·메트릭·로그를 다루는 체계로 발전했습니다. 신호별·언어별 구성 요소의 성숙도는 각각 확인해야 합니다.</p></section>
+<section class="item"><h3><span>03</span>주로 적용하는 상황</h3><p>API 여러 개를 거치는 요청, 메시지 소비 작업, 외부 서비스 호출이 많은 환경에 유용합니다. 운영 장애의 원인과 느린 구간을 연결해서 찾고, 모니터링 저장소를 유연하게 선택하려 할 때 적용합니다.</p></section>
+<section class="item"><h3><span>04</span>현재 트렌드에 적합한가?</h3><p><strong>클라우드·분산 운영에 잘 맞습니다.</strong> 공통 계측과 수집 경로를 제공하는 것이 핵심입니다. 자체적으로 모든 데이터를 저장하고 대시보드를 제공하는 완성형 모니터링 서비스는 아닙니다.</p></section>
+<section class="item wide"><h3><span>05</span>최신 프로젝트에 필수인가?</h3><p><strong>제품 자체는 필수가 아닙니다.</strong> 운영 서비스에는 로그·지표·알림 등의 관측 역량이 중요하며, 분산 추적이 필요하면 OpenTelemetry를 우선 검토할 만합니다. 단일 서비스는 기존 모니터링으로도 요구를 충족할 수 있습니다.</p></section>
+</div><div class="example"><strong>현재 프로젝트에 연결하면</strong>업로드 finalize 요청에서 파일 복원과 DB 저장 중 어느 단계가 오래 걸리는지 추적합니다. 수집 대상과 저장 기간은 운영 목적에 맞게 정합니다.</div>
+<div class="sources">공식 근거: <a href="https://opentelemetry.io/blog/2023/sunsetting-opencensus/">2019 통합 배경</a><a href="https://opentelemetry.io/docs/what-is-opentelemetry/">목적·지원 신호·범위</a></div>
+</article>
+
+<article class="tech" id="temporal">
+<div class="tech-head"><div class="number">04 / DURABLE EXECUTION</div><h2>Temporal</h2><p>여러 단계의 업무를 장애 이후에도 이어가는 워크플로 실행 플랫폼.</p><div class="tags"><span class="tag">업무 흐름·복구</span><span class="tag choice">복잡한 비동기 처리에 선택</span></div></div>
+<div class="grid">
+<section class="item"><h3><span>01</span>탄생 배경</h3><p>여러 서비스에 걸친 작업은 재시도, 타임아웃, 진행 상태, 장애 복구 코드를 반복해서 요구합니다. Uber의 Cadence 개발 경험을 바탕으로, 이런 실행 상태 관리를 플랫폼이 맡도록 발전했습니다.</p></section>
+<section class="item"><h3><span>02</span>대략 언제?</h3><p>2020년 10월 15일 공식 발표에서 첫 운영용 릴리스를 알렸습니다. Durable Execution은 장애에도 실행을 이어가는 방식이라는 더 넓은 개념이며, Temporal은 이를 구현하는 제품 중 하나입니다.</p></section>
+<section class="item"><h3><span>03</span>주로 적용하는 상황</h3><p>파일 변환 파이프라인, 주문·결제·보상 처리, 수시간 이상의 승인 대기, 여러 도구를 호출하는 AI 작업에 적합합니다. 작업 단계의 상태와 복구 절차가 복잡할수록 가치가 커집니다.</p></section>
+<section class="item"><h3><span>04</span>현재 트렌드에 적합한가?</h3><p><strong>오래 실행되는 분산 업무와 AI 워크플로에 적합합니다.</strong> Kafka가 이벤트 전달·보관을 맡는다면 Temporal은 업무 진행을 조율합니다. 용도가 달라 함께 사용할 수도 있습니다.</p></section>
+<section class="item wide"><h3><span>05</span>최신 프로젝트에 필수인가?</h3><p><strong>아닙니다.</strong> 단순 예약 작업이나 짧은 비동기 처리는 더 단순한 구성으로 충분할 수 있습니다. 워크플로 코드의 재현 가능성, 버전 변경, 외부 작업의 멱등성(재실행해도 의도한 결과를 유지하는 성질)을 설계해야 합니다. 외부 결제가 무조건 한 번만 실행된다는 보장은 아닙니다.</p></section>
+</div><div class="example"><strong>확장 시나리오</strong>업로드 → 바이러스 검사 → 포맷 변환 → 결과 저장 → 알림처럼 단계가 늘고 단계별 재시도가 필요해질 때 후보가 됩니다. 현재 서비스에 도입되어 있다는 의미는 아닙니다.</div>
+<div class="sources">공식 근거: <a href="https://temporal.io/news/temporal-raises-usd18-75m-series-a-increases-total-raised-to-usd25-5m">2020 첫 운영용 릴리스·탄생 배경</a><a href="https://docs.temporal.io/">플랫폼 문서</a><a href="https://temporal.io/">현재 활용 분야</a></div>
+</article>
+
+<article class="tech" id="rsc">
+<div class="tech-head"><div class="number">05 / FRONTEND RENDERING</div><h2>React Server Components</h2><p>서버에서 실행할 컴포넌트와 브라우저에서 상호작용할 컴포넌트를 조합.</p><div class="tags"><span class="tag">React / Next.js</span><span class="tag choice">App Router에서는 핵심 개념</span></div></div>
+<div class="grid">
+<section class="item"><h3><span>01</span>탄생 배경</h3><p>브라우저에 많은 JavaScript를 전달하면 다운로드·실행 비용이 커지고, 화면별 데이터 조회도 복잡해집니다. 일부 컴포넌트와 그 의존성을 서버에서만 실행해 클라이언트 부담을 줄이고 데이터 접근을 가깝게 하려는 연구에서 나왔습니다.</p></section>
+<section class="item"><h3><span>02</span>대략 언제?</h3><p>2020년 12월 연구가 공개되었습니다. 2024년 12월 React 19에서 Server Components가 안정화되었습니다. 프레임워크·번들러 구현용 내부 API의 안정성은 별도 사항입니다.</p></section>
+<section class="item"><h3><span>03</span>주로 적용하는 상황</h3><p>Next.js App Router에서 데이터 중심 화면, 콘텐츠 페이지, 서버 데이터와 상호작용 UI가 섞인 화면을 만들 때 사용합니다. 클릭·입력·브라우저 API 사용은 Client Component가 담당합니다.</p></section>
+<section class="item"><h3><span>04</span>현재 트렌드에 적합한가?</h3><p><strong>Next.js App Router의 현재 설계에 직접 연결됩니다.</strong> 서버와 클라이언트의 실행 경계가 핵심입니다. HTML을 서버에서 만드는 SSR과 동일한 개념은 아니며 함께 사용할 수 있습니다.</p></section>
+<section class="item wide"><h3><span>05</span>최신 프로젝트에 필수인가?</h3><p><strong>전체 웹 프로젝트에는 필수가 아닙니다.</strong> App Router에서는 페이지·레이아웃이 기본적으로 Server Component이므로 이해가 중요합니다. Vue/Nuxt에 React 기술을 추가할 필요는 없으며, 모든 React 앱이 RSC를 사용해야 하는 것도 아닙니다.</p></section>
+</div><div class="example"><strong>기존 스택과 연결하면</strong>Spring API에서 게시글을 조회하는 Next.js Server Component와, 복사 버튼을 담당하는 Client Component를 조합할 수 있습니다. 서버 컴포넌트 도입으로 Spring의 업무 로직을 반드시 이전해야 하는 것은 아닙니다.</div>
+<div class="sources">공식 근거: <a href="https://react.dev/blog/2020/12/21/data-fetching-with-react-server-components">2020 연구 공개</a><a href="https://react.dev/blog/2024/12/05/react-19">React 19 안정화</a><a href="https://nextjs.org/docs/app/getting-started/server-and-client-components">Next.js 기본 모델·적용법</a></div>
+</article>
+
+<article class="tech" id="gitops">
+<div class="tech-head"><div class="number">06 / CONTINUOUS DELIVERY</div><h2>GitOps / Argo CD</h2><p>Git에 기록한 목표 상태를 기준으로 Kubernetes 배포를 관리.</p><div class="tags"><span class="tag">운영·지속 배포</span><span class="tag choice">Kubernetes 사용 시 검토</span></div></div>
+<div class="grid">
+<section class="item"><h3><span>01</span>탄생 배경</h3><p>사람이나 스크립트가 환경을 수정하다 보면 Git의 설정과 실제 운영 상태가 달라집니다. 변경 이력을 남기고 목표 상태와 실제 상태를 지속적으로 비교·조정하려는 방식이 GitOps이며, Argo CD는 Kubernetes용 구현 도구입니다.</p></section>
+<section class="item"><h3><span>02</span>대략 언제?</h3><p>GitOps는 2010년대 후반에 정립된 흐름입니다. Argo 전체 프로젝트는 2017년에 시작했고, Argo CD는 2018년에 뒤따랐습니다. Argo 전체의 시작과 CD 제품의 시작을 구분해야 합니다.</p></section>
+<section class="item"><h3><span>03</span>주로 적용하는 상황</h3><p>개발·검증·운영 환경이나 클러스터가 여러 개이고, 배포 설정의 일관성과 변경 추적이 필요할 때 적용합니다. CI에서 만든 이미지의 배포 설정을 Git에 반영하면 Argo CD가 변경을 감지하고 동기화할 수 있습니다.</p></section>
+<section class="item"><h3><span>04</span>현재 트렌드에 적합한가?</h3><p><strong>Kubernetes를 운영하는 팀에 적합합니다.</strong> 배포 상태를 선언적으로 관리하는 데 도움이 됩니다. 빌드·단위 테스트를 수행하는 CI 자체를 대체하는 도구는 아닙니다.</p></section>
+<section class="item wide"><h3><span>05</span>최신 프로젝트에 필수인가?</h3><p><strong>아닙니다.</strong> Kubernetes에서도 다른 배포 도구를 선택할 수 있습니다. 자동 동기화와 리소스 삭제 범위를 정해야 하며, 앱 버전을 되돌린다고 DB 데이터 변경까지 자동 복원되는 것은 아닙니다.</p></section>
+</div><div class="example"><strong>현재 프로젝트에 연결하면</strong>현재의 Docker Compose 배포에는 우선순위가 낮습니다. 향후 Kubernetes로 옮기고 환경별 배포 관리가 복잡해질 때 검토할 수 있습니다.</div>
+<div class="sources">공식 근거: <a href="https://www.cncf.io/blog/2022/09/30/an-introduction-to-gitops-and-argo/">GitOps·Argo와 등장 시기</a><a href="https://argo-cd.readthedocs.io/en/stable/">Argo CD 기능과 운영</a><a href="https://argo-cd.readthedocs.io/en/stable/user-guide/ci_automation/">CI와의 연결</a></div>
+</article>
+
+<article class="tech" id="vector">
+<div class="tech-head"><div class="number">07 / SEMANTIC SEARCH</div><h2>pgvector / 벡터 검색</h2><p>PostgreSQL 안에서 의미가 가까운 데이터를 찾는 확장 기능.</p><div class="tags"><span class="tag">검색·AI 데이터</span><span class="tag choice">의미 검색이 필요할 때</span></div></div>
+<div class="grid">
+<section class="item"><h3><span>01</span>탄생 배경</h3><p>텍스트나 이미지를 숫자 벡터로 표현하면 정확히 같은 단어가 없어도 유사성을 계산할 수 있습니다. pgvector는 이런 벡터를 기존 관계형 데이터와 함께 PostgreSQL에 저장하고 검색할 수 있게 합니다.</p></section>
+<section class="item"><h3><span>02</span>대략 언제?</h3><p>공식 변경 이력상 첫 릴리스 0.1.0은 2021년 4월 20일입니다. 벡터 검색 자체는 더 오래된 기술이며, pgvector가 생성형 AI와 함께 처음 발명된 것은 아닙니다.</p></section>
+<section class="item"><h3><span>03</span>주로 적용하는 상황</h3><p>문서 의미 검색, 유사 게시글·상품 검색, 검색한 문서를 LLM에 제공하는 RAG에 사용합니다. 임베딩을 만드는 모델은 별도로 필요하며, pgvector는 벡터 저장·유사도 검색을 담당합니다.</p></section>
+<section class="item"><h3><span>04</span>현재 트렌드에 적합한가?</h3><p><strong>AI와 의미 검색 기능에 적합합니다.</strong> PostgreSQL의 데이터·필터 조건과 벡터 검색을 함께 다루는 선택지입니다. 검색 품질은 임베딩, 문서 분할, 필터, 인덱스와 실제 질의에 따라 달라집니다.</p></section>
+<section class="item wide"><h3><span>05</span>최신 프로젝트에 필수인가?</h3><p><strong>아닙니다.</strong> 일반 CRUD나 정확한 키워드 검색만 필요하면 도입 이유가 약합니다. RAG에도 검색 구현 선택지가 여러 개 있습니다. 데이터 규모, 갱신량, 검색 정확도와 지연 시간을 측정해 전용 벡터 DB 등의 대안과 비교합니다.</p></section>
+</div><div class="example"><strong>확장 시나리오</strong>‘압축파일 업로드 실패’라는 질문으로 ‘ZIP 전송 중 오류’ 게시글을 찾는 검색을 구상할 수 있습니다. 현재 종료된 AI 답변 기능의 재도입을 전제하지 않습니다.</div>
+<div class="sources">공식 근거: <a href="https://github.com/pgvector/pgvector/blob/master/CHANGELOG.md">첫 릴리스 이력</a><a href="https://github.com/pgvector/pgvector">기능·검색·인덱스·통합</a></div>
+</article>
+
+<section class="roadmap" id="learning" aria-labelledby="learning-title">
+<h2 id="learning-title">어떤 순서로 알아보면 좋을까요?</h2>
+<p>Spring Boot + Nuxt + PostgreSQL 경험을 기준으로 한 학습 제안입니다. 실제 도입 순서는 서비스의 문제에 따라 바뀝니다.</p>
+<div class="flow" aria-label="기본 학습 순서"><div><strong>1. Spring Modulith</strong><small>업무 경계와 의존성 이해</small></div><div><strong>2. Virtual Threads</strong><small>I/O와 동시성 병목 이해</small></div><div><strong>3. OpenTelemetry</strong><small>실제 요청과 성능 관찰</small></div></div>
+<ul><li><strong>복잡한 업무 자동화에 관심:</strong> Temporal로 실패와 재시도를 포함한 작업 흐름 학습.</li><li><strong>React / Next.js에 관심:</strong> Server Components와 Client Components의 경계 학습.</li><li><strong>Kubernetes 운영에 관심:</strong> GitOps와 Argo CD로 배포 상태 관리 학습.</li><li><strong>AI·검색에 관심:</strong> 임베딩과 pgvector로 의미 검색을 만들고 품질 평가.</li></ul>
+<p class="note">문서의 예시는 학습·확장 제안입니다. 이 저장소에 해당 기술들이 설치되거나 운영에 적용되었다는 의미는 아닙니다.</p>
+</section>
+<footer><span>2026.09.07 기준 · 공식 자료 기반 학습 가이드<br>외부 리소스 없이 열람 가능 · 출처 링크 열기는 인터넷 필요</span><button type="button" onclick="window.print()">인쇄 / PDF로 저장</button><a href="#content">위로 이동 ↑</a></footer>
+</main>
+</body>
+</html>
