@@ -6,7 +6,7 @@
 
 | 문서 | 담당 에이전트 | 검토 초점 | 상태 |
 | --- | --- | --- | --- |
-| `docs/README.md` | `docs-index-agent` | 목차, 경로, 전체 문서 연결 | 이상 없음 |
+| `docs/index.md` | `docs-index-agent` | 목차, 경로, 전체 문서 연결 | 이상 없음 |
 | `docs/01-project-overview.md` | `project-overview-agent` | 기능 범위, 현재 운영 상태, 제약 | 이상 없음 |
 | `docs/02-development-setup.md` | `dev-setup-agent` | 개발 준비 절차, 의존성, Git 제외 대상 | 이상 없음 |
 | `docs/03-local-development.md` | `local-dev-agent` | 로컬 실행, 포트, compose/dev server 차이 | 이상 없음 |

@@ -53,7 +53,7 @@
 
 ## README에서 이관한 개발·운영 안내
 
-README는 프로젝트 소개와 이용 안내를 담는다. 인프라·환경 설정·개발·배포 정보는 AGENTS.md와 docs/에서 관리한다. 아래 명령은 Bash 기준이다.
+README는 프로젝트 소개, 기술 스택, 개괄적인 아키텍처와 이용 안내를 담는다. 인프라·환경 설정·개발·배포 정보는 AGENTS.md와 docs/에서 관리한다. 아래 명령은 Bash 기준이다.
 
 ### 아키텍처
 
@@ -263,4 +263,4 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 | 문제 해결 (network/health/DB/첨부/ZIP/AI) | docs/15-troubleshooting.md |
 | 문서 에이전트·EC2 읽기전용 점검 | docs/16-document-agents.md |
 | 계정 ID 전환·첨부 일관성 검증 | docs/18-integrity-hardening.md |
-| 전체 문서 인덱스 | docs/README.md |
+| 전체 문서 인덱스 | docs/index.md |
