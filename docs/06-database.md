@@ -2,6 +2,10 @@
 
 백엔드는 PostgreSQL을 사용하고 Flyway로 schema를 관리합니다. 테스트는 H2 in-memory DB를 PostgreSQL mode로 실행하며 Flyway를 끄고 Hibernate `create-drop`을 사용합니다.
 
+## Spring Modulith refactor와 테스트 DB 구분
+
+이번 Spring Modulith refactor는 Flyway V1~V18 SQL, 운영 schema, 테이블 구조를 변경하지 않습니다. H2 전체 테스트는 Flyway 없이 Hibernate `create-drop`으로 실행하는 빠른 회귀 경로이고, PostgreSQL 검증은 별도의 보완 경로입니다. `PostgresMigrationTest`는 disposable PostgreSQL에 V1~V18을 적용하고 Hibernate validate를 확인하며, `PostgresUploadFinalizeTest`는 같은 종류의 disposable DB에서 finalize transaction의 rollback·commit 경계를 확인합니다. 최신 focused 실행은 Docker image `postgres:1.0`(PostgreSQL 17.10)을 localhost port `55432`에서 사용했으며, 이는 stated production PostgreSQL 18과 다른 테스트 환경입니다.
+
 ## 연결 설정
 
 운영 기준:

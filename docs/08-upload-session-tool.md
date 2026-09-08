@@ -87,7 +87,7 @@ version 1 byte + nonce 12 bytes + ciphertext/tag
 
 AAD는 alias 이름입니다. 예를 들어 `A1` 값을 다른 alias로 옮기면 복호화가 실패합니다.
 
-`finalize` 응답은 alias 암호문이 아니라 일반 `BoardPostDetailResponse` JSON입니다.
+`finalize` 응답은 alias 암호문이 아니라 `id`, `title`, `body`, `mode`, `conversionReady`, 작성자·시각, `attachments`(각 `downloadUrl` 포함), `replies`를 담는 기존 게시글 상세와 호환되는 board-detail-shaped 일반 JSON 응답입니다. 이는 upload가 board의 공개 생성 결과를 외부 상세 형태로 매핑한 결과이며, 내부 Java DTO 클래스명은 API/wire 계약이 아닙니다.
 
 ## 재개 동작
 

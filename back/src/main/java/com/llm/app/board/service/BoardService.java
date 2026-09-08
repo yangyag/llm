@@ -1,10 +1,11 @@
 package com.llm.app.board.service;
 
-import com.llm.app.auth.Admin;
-import com.llm.app.auth.AdminRepository;
-import com.llm.app.auth.ForbiddenException;
-import com.llm.app.auth.InvalidCredentialsException;
-import com.llm.app.auth.UserRole;
+import com.llm.app.auth.api.AuthenticatedUser;
+import com.llm.app.auth.api.AuthenticationGateway;
+import com.llm.app.auth.api.ForbiddenException;
+import com.llm.app.auth.api.IdentityAccess;
+import com.llm.app.auth.api.InvalidCredentialsException;
+import com.llm.app.auth.api.UserRole;
 import com.llm.app.board.ai.AiProvider;
 import com.llm.app.board.ai.AiReplyGenerator;
 import java.util.List;
@@ -51,7 +52,7 @@ public class BoardService {
 	private final BoardPostRepository boardPostRepository;
 	private final BoardReplyRepository boardReplyRepository;
 	private final BoardAttachmentRepository boardAttachmentRepository;
-	private final AdminRepository adminRepository;
+	private final IdentityAccess identityAccess;
 	private final BoardContentCodec boardContentCodec;
 	private final BoardMapper boardMapper;
 	private final AiReplyGenerator aiReplyGenerator;
@@ -63,7 +64,7 @@ public class BoardService {
 		BoardPostRepository boardPostRepository,
 		BoardReplyRepository boardReplyRepository,
 		BoardAttachmentRepository boardAttachmentRepository,
-		AdminRepository adminRepository,
+		IdentityAccess identityAccess,
 		BoardContentCodec boardContentCodec,
 		BoardMapper boardMapper,
 		AiReplyGenerator aiReplyGenerator,
@@ -74,7 +75,7 @@ public class BoardService {
 		this.boardPostRepository = boardPostRepository;
 		this.boardReplyRepository = boardReplyRepository;
 		this.boardAttachmentRepository = boardAttachmentRepository;
-		this.adminRepository = adminRepository;
+		this.identityAccess = identityAccess;
 		this.boardContentCodec = boardContentCodec;
 		this.boardMapper = boardMapper;
 		this.aiReplyGenerator = aiReplyGenerator;
@@ -100,17 +101,17 @@ public class BoardService {
 	}
 
 	public BoardPostDetailResponse createPost(Long authorUserId, CreateBoardPostRequest request) {
-		Admin author = requireExistingUser(authorUserId);
+		AuthenticatedUser author = requireExistingUser(authorUserId);
 		Instant now = Instant.now();
 		BoardPostMode mode = request.getMode();
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
 			resolvePostBody(mode, request.getBodyBase64()),
 			mode,
-			author.getUsername(),
+			author.username(),
 			now,
 			now,
-			author.getId()
+			author.userId()
 		));
 		syncAttachments(savedPost, request.getAttachments(), null, now);
 		return toDetailResponse(savedPost);
@@ -138,8 +139,8 @@ public class BoardService {
 	}
 
 	public void batchDeletePosts(Long actorUserId, List<Long> ids) {
-		Admin actor = requireExistingUser(actorUserId);
-		boolean admin = actor.getRole() == UserRole.ADMIN;
+		AuthenticatedUser actor = requireExistingUser(actorUserId);
+		boolean admin = actor.role() == UserRole.ADMIN;
 		List<BoardPost> posts = boardPostRepository.findAllById(ids);
 		// 하나라도 권한이 없으면 어떤 글도 지우지 않는다.
 		for (BoardPost post : posts) {
@@ -156,16 +157,16 @@ public class BoardService {
 	}
 
 	public BoardPostDetailResponse createReply(Long authorUserId, Long postId, CreateBoardReplyRequest request) {
-		Admin author = requireExistingUser(authorUserId);
+		AuthenticatedUser author = requireExistingUser(authorUserId);
 		BoardPost post = findPostWithReplies(postId);
 		Instant now = Instant.now();
 		BoardReply reply = new BoardReply(
 			post,
 			boardContentCodec.decodeBody(request.bodyBase64()),
-			author.getUsername(),
+			author.username(),
 			now,
 			now,
-			author.getId()
+			author.userId()
 		);
 		post.getReplies().add(reply);
 		boardReplyRepository.saveAndFlush(reply);
@@ -258,8 +259,8 @@ public class BoardService {
 	 * authorUserId가 null인 레거시 글은 ADMIN만 관리 가능.
 	 */
 	private void ensureCanManagePost(Long actorUserId, BoardPost post) {
-		Admin actor = requireExistingUser(actorUserId);
-		if (actor.getRole() == UserRole.ADMIN) {
+		AuthenticatedUser actor = requireExistingUser(actorUserId);
+		if (actor.role() == UserRole.ADMIN) {
 			return;
 		}
 		if (!isOwner(actorUserId, post.getAuthorUserId())) {
@@ -273,8 +274,8 @@ public class BoardService {
 	 * authorUserId가 null인 레거시 일반 댓글은 ADMIN만 관리 가능.
 	 */
 	private void ensureCanManageReply(Long actorUserId, BoardReply reply) {
-		Admin actor = requireExistingUser(actorUserId);
-		if (actor.getRole() == UserRole.ADMIN) {
+		AuthenticatedUser actor = requireExistingUser(actorUserId);
+		if (actor.role() == UserRole.ADMIN) {
 			return;
 		}
 		if (!isOwner(actorUserId, reply.getAuthorUserId())) {
@@ -287,9 +288,8 @@ public class BoardService {
 			&& Objects.equals(authorUserId, actorUserId);
 	}
 
-	private Admin requireExistingUser(Long userId) {
-		return adminRepository.findById(userId)
-			.orElseThrow(() -> new InvalidCredentialsException("User no longer exists"));
+	private AuthenticatedUser requireExistingUser(Long userId) {
+		return identityAccess.requireUser(userId);
 	}
 
 	private BoardPostDetailResponse toDetailResponse(BoardPost post) {

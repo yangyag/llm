@@ -1,7 +1,5 @@
 package com.llm.app.board.exception;
 
-import java.util.UUID;
-
 public class NotFoundException extends RuntimeException {
     private NotFoundException(String message) {
         super(message);
@@ -19,11 +17,4 @@ public class NotFoundException extends RuntimeException {
         return new NotFoundException("Attachment not found for post id=" + postId);
     }
 
-    public static NotFoundException uploadSession(UUID sessionId) {
-        return new NotFoundException("upload session not found: " + sessionId);
-    }
-
-    public static NotFoundException user(Long id) {
-        return new NotFoundException("user not found: " + id);
-    }
 }

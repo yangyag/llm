@@ -9,6 +9,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.llm.app.auth.internal.Admin;
+import com.llm.app.auth.internal.AdminRepository;
+import com.llm.app.auth.internal.JwtProvider;
+import com.llm.app.auth.api.UserRole;
+
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

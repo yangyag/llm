@@ -1,6 +1,6 @@
 package com.llm.app.board.controller;
 
-import com.llm.app.auth.JwtProvider;
+import com.llm.app.auth.api.AuthenticationGateway;
 import com.llm.app.board.dto.BatchDeleteRequest;
 import com.llm.app.board.dto.BoardPostDetailResponse;
 import com.llm.app.board.dto.BoardPostListResponse;
@@ -35,11 +35,11 @@ import org.springframework.web.bind.annotation.RequestHeader;
 @RequestMapping("/api/v1/posts")
 public class BoardPostController {
 	private final BoardService boardService;
-	private final JwtProvider jwtProvider;
+	private final AuthenticationGateway authenticationGateway;
 
-	public BoardPostController(BoardService boardService, JwtProvider jwtProvider) {
+	public BoardPostController(BoardService boardService, AuthenticationGateway authenticationGateway) {
 		this.boardService = boardService;
-		this.jwtProvider = jwtProvider;
+		this.authenticationGateway = authenticationGateway;
 	}
 
 	@GetMapping
@@ -61,7 +61,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@Valid @ModelAttribute CreateBoardPostRequest request
 	) {
-		Long userId = jwtProvider.authenticate(authHeader);
+		Long userId = authenticationGateway.authenticate(authHeader);
 		return boardService.createPost(userId, request);
 	}
 
@@ -71,7 +71,7 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @ModelAttribute UpdateBoardPostRequest request
 	) {
-		Long userId = jwtProvider.authenticate(authHeader);
+		Long userId = authenticationGateway.authenticate(authHeader);
 		return boardService.updatePost(userId, id, request);
 	}
 
@@ -81,7 +81,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long id
 	) {
-		Long userId = jwtProvider.authenticate(authHeader);
+		Long userId = authenticationGateway.authenticate(authHeader);
 		boardService.deletePost(userId, id);
 	}
 
@@ -91,7 +91,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@Valid @RequestBody BatchDeleteRequest request
 	) {
-		Long userId = jwtProvider.authenticate(authHeader);
+		Long userId = authenticationGateway.authenticate(authHeader);
 		boardService.batchDeletePosts(userId, request.ids());
 	}
 
@@ -102,7 +102,7 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @RequestBody CreateBoardReplyRequest request
 	) {
-		Long userId = jwtProvider.authenticate(authHeader);
+		Long userId = authenticationGateway.authenticate(authHeader);
 		return boardService.createReply(userId, id, request);
 	}
 
@@ -118,7 +118,7 @@ public class BoardPostController {
 		@PathVariable Long id,
 		@Valid @RequestBody CreateAiReplyRequest request
 	) {
-		jwtProvider.authenticate(authHeader);
+		authenticationGateway.authenticate(authHeader);
 		throw new AiReplyDisabledException();
 	}
 
@@ -151,7 +151,7 @@ public class BoardPostController {
 		@PathVariable Long replyId,
 		@Valid @RequestBody UpdateBoardReplyRequest request
 	) {
-		Long userId = jwtProvider.authenticate(authHeader);
+		Long userId = authenticationGateway.authenticate(authHeader);
 		return boardService.updateReply(userId, replyId, request);
 	}
 
@@ -161,7 +161,7 @@ public class BoardPostController {
 		@RequestHeader(value = "Authorization", required = false) String authHeader,
 		@PathVariable Long replyId
 	) {
-		Long userId = jwtProvider.authenticate(authHeader);
+		Long userId = authenticationGateway.authenticate(authHeader);
 		boardService.deleteReply(userId, replyId);
 	}
 }
