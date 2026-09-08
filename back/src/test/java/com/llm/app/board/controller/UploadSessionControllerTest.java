@@ -5,6 +5,9 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -14,30 +17,36 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.llm.app.auth.Admin;
-import com.llm.app.auth.AdminRepository;
-import com.llm.app.auth.JwtProvider;
-import com.llm.app.auth.UserRole;
+import com.llm.app.auth.internal.Admin;
+import com.llm.app.auth.internal.AdminRepository;
+import com.llm.app.auth.internal.JwtProvider;
+import com.llm.app.auth.api.UserRole;
 import com.llm.app.board.ai.AiReplyGenerator;
-import com.llm.app.board.dto.CreateUploadSessionRequest;
-import com.llm.app.board.dto.EncryptedUploadSessionCreateRequest;
-import com.llm.app.board.dto.EncryptedUploadSessionChunkUploadRequest;
-import com.llm.app.board.dto.UploadSessionStatusResponse;
-import com.llm.app.board.model.UploadSession;
-import com.llm.app.board.model.UploadSessionStatus;
+import com.llm.app.board.api.upload.GeneratedAttachmentPolicy;
+import com.llm.app.board.exception.AttachmentTooLargeException;
+import com.llm.app.board.service.AttachmentStorageService;
+import com.llm.app.upload.dto.CreateUploadSessionRequest;
+import com.llm.app.upload.dto.EncryptedUploadSessionCreateRequest;
+import com.llm.app.upload.dto.EncryptedUploadSessionChunkUploadRequest;
+import com.llm.app.upload.dto.UploadSessionStatusResponse;
+import com.llm.app.upload.exception.UploadSessionStorageException;
+import com.llm.app.upload.model.UploadSession;
+import com.llm.app.upload.model.UploadSessionStatus;
 import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
-import com.llm.app.board.repository.UploadSessionPartRepository;
-import com.llm.app.board.repository.UploadSessionRepository;
-import com.llm.app.board.service.UploadSessionStatusSnapshot;
-import com.llm.app.board.service.UploadSessionWireCodec;
+import com.llm.app.upload.repository.UploadSessionPartRepository;
+import com.llm.app.upload.repository.UploadSessionRepository;
+import com.llm.app.upload.service.UploadSessionStatusSnapshot;
+import com.llm.app.upload.service.UploadSessionStorageService;
+import com.llm.app.upload.service.UploadSessionWireCodec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,6 +93,15 @@ class UploadSessionControllerTest {
 
 	@Autowired
 	private UploadSessionPartRepository uploadSessionPartRepository;
+
+	@Autowired
+	private GeneratedAttachmentPolicy generatedAttachmentPolicy;
+
+	@org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+	private AttachmentStorageService attachmentStorageService;
+
+	@org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+	private UploadSessionStorageService uploadSessionStorageService;
 
 	@Value("${app.attachments.root-path}")
 	private String attachmentRootPath;
@@ -267,18 +285,23 @@ class UploadSessionControllerTest {
 	void finalizeShouldFailWhenHashDoesNotMatch() throws Exception {
 		UUID sessionId = createSession("bad.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 		String encoded = encode(ZIP_BYTES);
+		String firstChunk = encoded.substring(0, CHUNK_SIZE_BASE64_CHARS);
+		String lastChunk = encoded.substring(CHUNK_SIZE_BASE64_CHARS);
 
 		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
 				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(chunkRequest(1, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+				.content(chunkRequest(1, firstChunk)))
 			.andExpect(status().isOk());
 
 		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
 				.header("Authorization", "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(chunkRequest(2, encoded.substring(CHUNK_SIZE_BASE64_CHARS))))
+				.content(chunkRequest(2, lastChunk)))
 			.andExpect(status().isOk());
+
+		List<Path> originalChunkPaths = originalChunkPaths(sessionId);
+		assertChunkFiles(originalChunkPaths);
 
 		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
 				.header("Authorization", "Bearer " + token))
@@ -290,6 +313,74 @@ class UploadSessionControllerTest {
 		var failedSession = uploadSessionRepository.findById(sessionId).orElseThrow();
 		assertThat(failedSession.getStatus()).isEqualTo(UploadSessionStatus.FAILED);
 		assertThat(failedSession.getUpdatedAt()).isAfter(failedSession.getCreatedAt());
+		assertChunkFiles(originalChunkPaths);
+		assertThat(assemblyFiles(Path.of(uploadSessionRootPath).resolve(sessionId.toString()))).isEmpty();
+	}
+
+	@Test
+	void finalizeShouldMarkFailedWhenAssemblyTargetCannotBeCreated() throws Exception {
+		UUID sessionId = createUploadedSession("assembly-target-failure.zip");
+		Path sessionDirectory = Path.of(uploadSessionRootPath).resolve(sessionId.toString());
+		List<Path> originalChunkPaths = originalChunkPaths(sessionId);
+		assertChunkFiles(originalChunkPaths);
+		doThrow(new UploadSessionStorageException(
+			"simulated target creation failure", new IOException("test fixture")))
+			.when(uploadSessionStorageService).createAssembledTarget(eq(sessionId), eq("assembly-target-failure.zip"));
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isInternalServerError())
+			.andExpect(jsonPath("$.code").value("ATTACHMENT_STORAGE_ERROR"));
+
+		assertThat(uploadSessionRepository.findById(sessionId).orElseThrow().getStatus())
+			.isEqualTo(UploadSessionStatus.FAILED);
+		assertChunkFiles(originalChunkPaths);
+		assertThat(assemblyFiles(sessionDirectory)).isEmpty();
+	}
+
+	@Test
+	void createSessionShouldAcceptSizeImmediatelyBelowGeneratedLimit() throws Exception {
+		long limit = generatedAttachmentPolicy.getMaxGeneratedFileSizeBytes();
+		createBoundarySession(limit - 1, "below-limit.zip");
+
+		assertThat(uploadSessionRepository.count()).isEqualTo(1);
+		assertThat(uploadSessionPartRepository.count()).isZero();
+	}
+
+	@Test
+	void createSessionShouldAcceptSizeExactlyAtGeneratedLimit() throws Exception {
+		long limit = generatedAttachmentPolicy.getMaxGeneratedFileSizeBytes();
+		createBoundarySession(limit, "at-limit.zip");
+
+		assertThat(uploadSessionRepository.count()).isEqualTo(1);
+		assertThat(uploadSessionPartRepository.count()).isZero();
+	}
+
+	@Test
+	void createSessionShouldRejectSizeImmediatelyAboveGeneratedLimitWithoutSideEffects() throws Exception {
+		long limit = generatedAttachmentPolicy.getMaxGeneratedFileSizeBytes();
+		mockMvc.perform(post("/api/v1/upload-sessions")
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(createBoundarySessionRequest(limit + 1, "above-limit.zip")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_UPLOAD_SESSION_REQUEST"));
+
+		assertThat(uploadSessionRepository.count()).isZero();
+		assertThat(uploadSessionPartRepository.count()).isZero();
+		assertThat(Files.exists(Path.of(uploadSessionRootPath))).isFalse();
+	}
+
+	@Test
+	void finalizeShouldMapGeneratedAttachmentTooLargeToPayloadTooLarge() throws Exception {
+		UUID sessionId = createUploadedSession("generated-too-large.zip");
+		doThrow(new AttachmentTooLargeException(generatedAttachmentPolicy.getMaxGeneratedFileSizeBytes()))
+			.when(attachmentStorageService).store(any(Path.class), eq("generated-too-large.zip"), eq("application/zip"));
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isPayloadTooLarge())
+			.andExpect(jsonPath("$.code").value("ATTACHMENT_TOO_LARGE"));
 	}
 
 	@Test
@@ -484,6 +575,56 @@ class UploadSessionControllerTest {
 			.andExpect(jsonPath("$.sessionId").doesNotExist())
 			.andReturn();
 		return readStatus(result).sessionId();
+	}
+
+	private UUID createUploadedSession(String archiveName) throws Exception {
+		UUID sessionId = createSession(archiveName, ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
+		String encoded = encode(ZIP_BYTES);
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(chunkRequest(1, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(chunkRequest(2, encoded.substring(CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+		return sessionId;
+	}
+
+	private void createBoundarySession(long fileSizeBytes, String archiveName) throws Exception {
+		mockMvc.perform(post("/api/v1/upload-sessions")
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(createBoundarySessionRequest(fileSizeBytes, archiveName)))
+			.andExpect(status().isCreated());
+	}
+
+	private String createBoundarySessionRequest(long fileSizeBytes, String archiveName) throws Exception {
+		int chunkSize = 2_000_000;
+		long decodedChunkSize = (chunkSize / 4L) * 3L;
+		int totalChunks = Math.toIntExact((fileSizeBytes + decodedChunkSize - 1L) / decodedChunkSize);
+		return createSessionRequest(archiveName, Math.toIntExact(fileSizeBytes), chunkSize, totalChunks, ZIP_SHA256);
+	}
+
+	private List<Path> originalChunkPaths(UUID sessionId) {
+		return List.of(
+			Path.of(uploadSessionRootPath).resolve(sessionId.toString()).resolve("chunk-000001"),
+			Path.of(uploadSessionRootPath).resolve(sessionId.toString()).resolve("chunk-000002")
+		);
+	}
+
+	private void assertChunkFiles(List<Path> paths) throws IOException {
+		assertThat(paths).allMatch(Files::exists);
+		assertThat(Files.readAllBytes(paths.get(0))).isEqualTo(java.util.Base64.getDecoder().decode(encode(ZIP_BYTES).substring(0, CHUNK_SIZE_BASE64_CHARS)));
+		assertThat(Files.readAllBytes(paths.get(1))).isEqualTo(java.util.Base64.getDecoder().decode(encode(ZIP_BYTES).substring(CHUNK_SIZE_BASE64_CHARS)));
+	}
+
+	private List<Path> assemblyFiles(Path sessionDirectory) throws IOException {
+		try (var paths = Files.list(sessionDirectory)) {
+			return paths.filter(path -> path.getFileName().toString().startsWith("assembled-")).toList();
+		}
 	}
 
 	private UploadSessionStatusSnapshot readStatus(MvcResult result) throws Exception {
