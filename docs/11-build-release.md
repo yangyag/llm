@@ -1,6 +1,6 @@
 # 빌드와 릴리스
 
-프론트와 백엔드 모두 Docker Hub에 올리지 않습니다. Windows에서 이미지를 만든 뒤 tar로 EC2에 `docker load`합니다.
+프론트와 백엔드 모두 Docker Hub에 올리지 않습니다. Windows에서 이미지를 만든 뒤 저장소의 `docker/` 폴더에 tar를 만들고 EC2에 `docker load`합니다.
 
 ## 이미지
 
@@ -105,7 +105,7 @@ Windows 저장소 루트:
 .\aws\deploy-back.ps1
 ```
 
-tar는 EC2 `/home/ubuntu/llm/`에 둡니다. snap Docker는 `/tmp`에서 `docker load`가 실패합니다.
+배포 스크립트는 tar를 저장소의 `docker/` 폴더에 만들고 EC2 `/home/ubuntu/llm/`로 전송합니다. snap Docker는 `/tmp`에서 `docker load`가 실패하므로 EC2에서는 해당 경로에 둡니다.
 
 이미 load된 이미지로만 기동할 때:
 

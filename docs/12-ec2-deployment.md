@@ -92,7 +92,7 @@ secret 값은 확인하거나 문서에 기록하지 않습니다.
 
 EC2에서 Docker 데몬과 외부 네트워크를 확인한 뒤, Compose를 직접 실행합니다.
 
-프론트와 백엔드 모두 Docker Hub에 올리지 않습니다. Windows에서 이미지를 만들어 tar로 EC2에 넣습니다. EC2(snap Docker)에서는 `/tmp`의 tar를 `docker load`하지 못하므로 `/home/ubuntu/llm/`에 둡니다.
+프론트와 백엔드 모두 Docker Hub에 올리지 않습니다. Windows에서 이미지를 만들어 저장소의 `docker/` 폴더에 tar를 저장한 뒤 EC2에 넣습니다. EC2(snap Docker)에서는 `/tmp`의 tar를 `docker load`하지 못하므로 전송한 tar는 `/home/ubuntu/llm/`에 둡니다.
 
 ```powershell
 # Windows 저장소 루트
@@ -100,7 +100,7 @@ EC2에서 Docker 데몬과 외부 네트워크를 확인한 뒤, Compose를 직�
 .\aws\deploy-back.ps1
 ```
 
-수동으로 프론트를 올릴 때:
+수동으로 프론트와 백엔드를 올릴 때:
 
 ```powershell
 cd front
@@ -110,11 +110,14 @@ $env:NUXT_PUBLIC_API_BASE=""
 npm run build
 cd ..
 docker build -t llm-front:1.0 .\front
-docker save -o llm-front-1.0.tar llm-front:1.0
-scp -i aws\test-keypair.pem llm-front-1.0.tar ubuntu@43.202.113.123:/home/ubuntu/llm/llm-front-1.0.tar
+docker save -o docker/llm-front-1.0.tar llm-front:1.0
+scp -i aws\test-keypair.pem docker/llm-front-1.0.tar ubuntu@43.202.113.123:/home/ubuntu/llm/llm-front-1.0.tar
+docker build -t llm-back:1.0 .\back
+docker save -o docker/llm-back-1.0.tar llm-back:1.0
+scp -i aws\test-keypair.pem docker/llm-back-1.0.tar ubuntu@43.202.113.123:/home/ubuntu/llm/llm-back-1.0.tar
 ```
 
-백엔드는 `docker build -t llm-back:1.0 .\back` 후 같은 방식으로 save/scp/load 합니다. Gradle은 Windows Docker 빌드 안에서 실행됩니다.
+Gradle은 Windows Docker 빌드 안에서 실행됩니다.
 
 ```bash
 # EC2 (이미 load된 이미지로 기동)

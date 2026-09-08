@@ -8,13 +8,16 @@ $hostName = "43.202.113.123"
 $user = "ubuntu"
 $image = "llm-front:1.0"
 $tarName = "llm-front-1.0.tar"
-$localTar = Join-Path $repo $tarName
+$dockerDir = Join-Path $repo "docker"
+$localTar = Join-Path $dockerDir $tarName
 $remoteDir = "/home/ubuntu/llm"
 $frontDir = Join-Path $repo "front"
 
 if (-not (Test-Path -LiteralPath $key)) {
     throw "PEM not found: $key"
 }
+
+$null = New-Item -ItemType Directory -Path $dockerDir -Force
 
 function Invoke-Remote([string]$Command) {
     & ssh -i $key -o StrictHostKeyChecking=accept-new "$user@$hostName" $Command
