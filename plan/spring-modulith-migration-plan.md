@@ -147,7 +147,7 @@ flowchart LR
 
 ### 인증·권한
 
-- 보호 컨트롤러는 공통 `JwtProvider.authenticate`를 통한 JWT·계정 존재 검증을 유지한다. 클래스 이동 시에도 공통 인증 진입점을 유지한다.
+- `auth` 외부 모듈의 보호 컨트롤러는 공개 계약인 `AuthenticationGateway.authenticate`를 호출하고, `auth.internal`의 `JwtProvider` 구현이 JWT·계정 존재 여부를 검증하는 공통 인증 진입점을 유지한다. auth 내부 컨트롤러의 직접 `JwtProvider` 사용은 허용하며, 클래스 이동 시에도 외부 모듈이 내부 구현을 직접 참조하지 않도록 한다.
 - JWT subject의 계정 ID와 `tokenVersion=2`, 고정 만료 동작을 유지한다.
 - 게시글·댓글 수정/삭제는 작성자 본인 또는 ADMIN만 허용한다.
 - 작성자 ID가 null인 레거시 데이터는 ADMIN만 관리한다.
@@ -157,7 +157,7 @@ flowchart LR
 
 ### 업로드 완료·첨부 일관성
 
-구현된 `finalizeSession`은 게시글·첨부 저장과 세션 행 정리를 같은 트랜잭션에서 수행하고, 커밋 후 세션 디렉터리를 정리한다. 메서드 내부의 `catch`는 `UploadSessionFailureService.markFailed`를 `REQUIRES_NEW`로 호출하며, 실패 상태 기록 중 발생한 예외가 원래 오류를 덮지 않게 한다.
+구현된 `finalizeSession`은 게시글·첨부 저장과 세션 행 정리를 같은 트랜잭션에서 수행하고, 커밋 후 세션 디렉터리를 정리한다. 조립 대상 경로를 만든 직후 정리 콜백을 등록하여, 커밋 후 세션 디렉터리를 삭제하고 롤백 시 조립 파일을 삭제한다. finalize 본문에서 예외가 나면 `catch`는 `UploadSessionFailureService.markFailed`를 직접 호출하지 않고 실패 기록 콜백을 등록한 뒤 원래 예외를 재전파한다. 기존 트랜잭션이 롤백된 뒤 `afterCompletion`에서 `REQUIRES_NEW` 트랜잭션으로 `FAILED`를 기록한다. 메서드 본문 반환 이후 실제 commit 실패는 이 `catch`를 거치지 않으며, 검증된 경로에서는 세션이 `PENDING`으로 복원되고 원본 chunk가 유지된다.
 
 PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) 게시판 생성 후 `EntityManager.flush()` 뒤 본문 실패는 원래 예외·롤백·`FAILED` 세션·원본 chunk 보존·조립 파일 정리와 제한 시간 내 종료를 확인했다. (c) deferrable delete trigger로 실제 commit 단계 실패를 유도해 commit 예외 전파, 롤백, `PENDING` 세션·원본 chunk 보존과 조립 파일 정리를 확인했다. (b) 세션·part 삭제를 명시적으로 flush한 뒤 본문 실패하는 지점은 해당 주입을 위한 production-only flush hook을 추가하지 않아 미커버로 남겼다.
 
@@ -169,8 +169,9 @@ PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) �
 2. `upload`가 ZIP을 복원하고 크기·해시를 검증한다.
 3. `upload`가 `board`의 공개 생성 API를 동기 호출한다.
 4. `board`가 게시글·첨부 메타데이터를 저장하고, 신규 파일의 롤백 정리를 등록한다.
-5. `upload`가 세션 행을 정리하고, 커밋 후 임시 디렉터리 정리를 등록한다.
-6. upload의 결과 매퍼가 board-detail-shaped JSON 응답을 만든다.
+5. `upload`가 조립 대상 경로를 만든 직후 롤백 시 조립 파일 삭제·커밋 후 세션 디렉터리 삭제 콜백을 등록한다.
+6. `upload`가 세션 행을 정리한다. 본문 실패 시 실패 기록 콜백을 등록하고 원래 예외를 재전파하며, 롤백 완료 후 `afterCompletion`의 `REQUIRES_NEW` 트랜잭션에서 세션을 `FAILED`로 기록한다. 메서드 반환 이후 commit 실패는 `catch`를 지나지 않아 세션이 `PENDING`으로 복원된다.
+7. upload의 결과 매퍼가 board-detail-shaped JSON 응답을 만든다.
 
 게시판 생성 API는 기존 트랜잭션에 참여하도록 설계한다. 모듈을 분리했다는 이유로 별도 커밋이나 비동기 실행을 추가하지 않는다. 게시글·첨부·세션 상태가 부분적으로 커밋되지 않는지 검증한다.
 
