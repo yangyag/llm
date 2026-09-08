@@ -59,9 +59,9 @@ npm run build
 
 `SecurityAndStorageRegressionTest`는 삭제 계정의 모든 쓰기·업로드 차단, username 재사용 시 토큰/소유권 분리, 첨부 롤백·삭제 재시도, 긴 ZIP 제목을 검증합니다. `front/tests/postDetail.test.cjs`는 실제 Pinia store에서 응답 순서 역전·조회 실패·저장 중 이동·ID 불일치·계정 ID 권한 표시를 검증합니다.
 
-`PostgresMigrationTest`와 `PostgresUploadFinalizeTest`는 `LLM_TEST_POSTGRES_URL=jdbc:postgresql://127.0.0.1:<임시포트>/postgres`가 있을 때만 실행하고, 변수가 없으면 JUnit 조건에 따라 각각 1개·2개 테스트를 건너뜁니다. 별도 disposable PostgreSQL의 postgres 사용자와 격리된 무작위 schema·임시 파일 저장소를 사용하며 운영 DB를 지정하지 않습니다. Migration 테스트는 V1~V18 적용·소유권 백필·삭제 FK·Hibernate validate를 확인하고, finalize 테스트는 (a) 본문 flush 이후 실패와 (c) 실제 commit 단계 지연 삭제 실패를 확인합니다. (b) 명시적 session/part 삭제 flush 뒤 본문 실패는 production-only flush hook을 추가하지 않아 미커버입니다.
+`PostgresMigrationTest`와 `PostgresUploadFinalizeTest`는 `LLM_TEST_POSTGRES_URL=jdbc:postgresql://127.0.0.1:<임시포트>/postgres`가 있을 때만 실행하고, 변수가 없으면 JUnit 조건에 따라 각각 1개·3개 테스트를 건너뜁니다. 별도 disposable PostgreSQL의 postgres 사용자와 격리된 무작위 schema·임시 파일 저장소를 사용하며 운영 DB를 지정하지 않습니다. Migration 테스트는 V1~V18 적용·소유권 백필·삭제 FK·Hibernate validate를 확인하고, finalize 테스트는 (a) 본문 flush 이후 실패, (b) 명시적 session/part 삭제 flush 뒤 본문 실패, (c) 실제 commit 단계 지연 삭제 실패를 확인합니다. (b)는 테스트 전용 repository decorator가 실제 삭제와 `EntityManager.flush()` 뒤 SQL 조회로 삭제 상태를 확인하고 본문 예외를 주입하며, 운영 코드에는 테스트 hook을 추가하지 않습니다.
 
-2026-09-08 최신 확인은 Docker 이미지 `postgres:1.0`(PostgreSQL 17.10)을 localhost port `55432`에 둔 환경에서 수행했습니다. PostgreSQL 17.10 disposable test image는 stated production PostgreSQL 18을 대체하지 않습니다. focused 결과는 `PostgresMigrationTest` 1/1 통과와 `PostgresUploadFinalizeTest` 2/2 통과입니다. 환경변수 없이 실행한 전체 `clean test`는 **146개 발견, 143개 통과, 3개 skipped, 실패 0개·오류 0개**였고, skipped 3개는 두 PostgreSQL 조건부 테스트입니다. 실제 PostgreSQL focused 실행에서는 해당 3개가 모두 통과했습니다.
+2026-09-08 최신 확인은 Docker 이미지 `postgres:1.0`(PostgreSQL 17.10)을 localhost port `55432`에 둔 환경에서 수행했습니다. PostgreSQL 17.10 disposable test image는 stated production PostgreSQL 18을 대체하지 않습니다. focused 결과는 `PostgresMigrationTest` 1/1 통과와 `PostgresUploadFinalizeTest` 3/3 통과입니다. 환경변수 없이 실행한 전체 `clean test`는 **147개 발견, 143개 통과, 4개 skipped, 실패 0개·오류 0개**였고, skipped 4개는 두 PostgreSQL 조건부 테스트입니다. 실제 PostgreSQL focused 실행에서는 해당 4개가 모두 통과했습니다.
 
 실제 전체 실행 예시:
 

@@ -1,6 +1,6 @@
 # Spring Modulith 기반 모듈형 모놀리스 전환 계획서
 
-- 상태: 구현 완료 — Phase 0~8 완료, Phase 8의 격리 환경 인증 ZIP HTTP smoke까지 검증 완료 (PostgreSQL finalize 시나리오 (b)는 미커버)
+- 상태: 구현 완료 — Phase 0~8 완료, Phase 8의 격리 환경 인증 ZIP HTTP smoke와 PostgreSQL finalize 시나리오 (a)/(b)/(c)까지 검증 완료
 - 작성일: 2026-09-07
 - 최종 갱신: 2026-09-08
 - 대상: `back/` Spring Boot 백엔드
@@ -8,9 +8,9 @@
 - 현재 기술: Spring Boot 3.5.11, Java 25, JPA, PostgreSQL, Flyway
 - 목적: 하나의 애플리케이션을 유지하면서 업무 경계와 공개 계약을 명확히 하고, 경계 위반을 테스트로 검출한다.
 
-이 문서는 구현 결과와 검증 기록으로 갱신한 계획서다. Spring Modulith 의존성·패키지 경계·공개 계약·업로드 회귀 테스트가 로컬 작업 트리에 반영되었고, 엄격한 `ApplicationModules.verify()`가 통과했다. `auth` 패키지는 `identity`로 이름을 바꾸지 않고 `api`/`internal` 하위 패키지로 정리했다. 2026-09-08 최신 소스로 백엔드 이미지를 다시 빌드한 뒤 compose를 기동해 back/front health, front proxy의 8083 health와 게시글 목록 조회를 확인했으며, 별도 격리 환경에서 실제 HTTP 로그인·ZIP 업로드·다운로드 smoke도 성공했다. 기존 서비스에 영향을 주지 않도록 격리 컨테이너·네트워크·볼륨은 검증 후 제거하고 원본 front 네트워크를 복원했다.
+이 문서는 구현 결과와 검증 기록으로 갱신한 계획서다. Spring Modulith 의존성·패키지 경계·공개 계약·업로드 회귀 테스트가 로컬 작업 트리에 반영되었고, 엄격한 `ApplicationModules.verify()`가 통과했다. `auth` 패키지는 `identity`로 이름을 바꾸지 않고 `api`/`internal` 하위 패키지로 정리했다. 2026-09-08 최신 소스로 백엔드 이미지를 다시 빌드한 뒤 compose를 기동해 back/front health, front proxy의 8083 health와 게시글 목록 조회를 확인했으며, 별도 격리 환경에서 실제 HTTP 로그인·ZIP 업로드·다운로드 smoke도 성공했다. M1에서 PostgreSQL finalize 시나리오 (b)의 삭제 flush 후 본문 실패 테스트를 추가해 (a)/(b)/(c) 세 경계를 모두 검증했다. 기존 서비스에 영향을 주지 않도록 격리 컨테이너·네트워크·볼륨은 검증 후 제거하고 원본 front 네트워크를 복원했다.
 
-이 문서의 완료 표시는 코드와 실제 검증 결과에만 근거한다. 확인하지 못한 PostgreSQL finalize 시나리오 (b)는 완료로 기록하지 않는다.
+이 문서의 완료 표시는 코드와 실제 검증 결과에만 근거한다. PostgreSQL finalize 시나리오 (a)/(b)/(c)는 disposable PostgreSQL focused 테스트에서 모두 통과했다.
 
 ## 1. 추진 배경과 기대 효과
 
@@ -159,7 +159,7 @@ flowchart LR
 
 구현된 `finalizeSession`은 게시글·첨부 저장과 세션 행 정리를 같은 트랜잭션에서 수행하고, 커밋 후 세션 디렉터리를 정리한다. 조립 대상 경로를 만든 직후 정리 콜백을 등록하여, 커밋 후 세션 디렉터리를 삭제하고 롤백 시 조립 파일을 삭제한다. finalize 본문에서 예외가 나면 `catch`는 `UploadSessionFailureService.markFailed`를 직접 호출하지 않고 실패 기록 콜백을 등록한 뒤 원래 예외를 재전파한다. 기존 트랜잭션이 롤백된 뒤 `afterCompletion`에서 `REQUIRES_NEW` 트랜잭션으로 `FAILED`를 기록한다. 메서드 본문 반환 이후 실제 commit 실패는 이 `catch`를 거치지 않으며, 검증된 경로에서는 세션이 `PENDING`으로 복원되고 원본 chunk가 유지된다.
 
-PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) 게시판 생성 후 `EntityManager.flush()` 뒤 본문 실패는 원래 예외·롤백·`FAILED` 세션·원본 chunk 보존·조립 파일 정리와 제한 시간 내 종료를 확인했다. (c) deferrable delete trigger로 실제 commit 단계 실패를 유도해 commit 예외 전파, 롤백, `PENDING` 세션·원본 chunk 보존과 조립 파일 정리를 확인했다. (b) 세션·part 삭제를 명시적으로 flush한 뒤 본문 실패하는 지점은 해당 주입을 위한 production-only flush hook을 추가하지 않아 미커버로 남겼다.
+PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) 게시판 생성 후 `EntityManager.flush()` 뒤 본문 실패는 원래 예외·롤백·`FAILED` 세션·원본 chunk 보존·조립 파일 정리와 제한 시간 내 종료를 확인했다. (b) 테스트 전용 `UploadSessionRepository` decorator가 세션 삭제와 `EntityManager.flush()`를 수행한 뒤 같은 트랜잭션에서 SQL 조회로 세션·part 삭제를 확인하고 본문 예외를 주입했다. 원래 예외·롤백·`FAILED` 세션·원본 chunk 보존·조립 파일 정리·잠금 없는 후속 접근을 확인했다. (c) deferrable delete trigger로 실제 commit 단계 실패를 유도해 commit 예외 전파, 롤백, `PENDING` 세션·원본 chunk 보존과 조립 파일 정리를 확인했다.
 
 `REQUIRES_NEW`는 외부 트랜잭션을 종료하지 않고 별도 트랜잭션을 사용한다. 따라서 flush 이후 실패와 별도 실패 기록의 잠금 상호작용은 구현·테스트 경계로 계속 구분한다. 모든 실패가 자동으로 `FAILED` 상태를 남긴다고 가정하지 않으며, 실제 결과는 시나리오별로 기록한다.
 
@@ -191,7 +191,7 @@ PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) �
 - `ApplicationModulesDiagnosticTest`로 실제 모듈 모델과 허용 의존을 검증한다.
 - `GeneratedAttachmentPolicyTest`로 생성 첨부 크기 정책의 공개 계약과 제한 경계를 검증한다.
 - `PostgresUploadFinalizeTest`로 disposable PostgreSQL에서 finalize 트랜잭션 경계를 검증한다.
-- `PostgresMigrationTest`와 `PostgresUploadFinalizeTest`는 `LLM_TEST_POSTGRES_URL`이 설정된 조건부 테스트이며, 일반 `clean test`에서 변수가 없으면 각각 1개·2개가 skipped된다. PostgreSQL 환경을 제공한 focused 실행에서는 3개 모두 통과한다.
+- `PostgresMigrationTest`와 `PostgresUploadFinalizeTest`는 `LLM_TEST_POSTGRES_URL`이 설정된 조건부 테스트이며, 일반 `clean test`에서 변수가 없으면 각각 1개·3개가 skipped된다. PostgreSQL 환경을 제공한 focused 실행에서는 4개 모두 통과한다.
 
 ### 진행 현황
 | --- | --- | --- | --- |
@@ -205,7 +205,7 @@ PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) �
 | 7 | 전체 경계 강제·문서화 | 완료 | `ApplicationModulesDiagnosticTest`가 일반 `clean test`에 포함되어 통과했고 관련 문서를 구현 결과에 맞게 갱신했다. |
 | 8 | 최종 통합 검증 | 완료·인증 ZIP HTTP smoke 성공 | 전체 백엔드·focused PostgreSQL·최신 이미지 기동·back/front health·8083 health·게시글 목록 조회와 격리 환경의 실제 HTTP 로그인·암호화 청크 1건·finalize·다운로드를 통과했다. `m2-llm-back:smoke`(`sha256:8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef`)와 `m2-llm-front:smoke`(`sha256:55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`)를 사용했다. |
 
-상태는 `미착수 / 진행 중 / 중단 / 차단 / 완료`로 기록한다. Phase 8은 격리 환경의 인증 ZIP smoke까지 성공해 완료로 기록한다. PostgreSQL finalize 시나리오 (b)는 별도 미커버 항목으로 유지한다.
+상태는 `미착수 / 진행 중 / 중단 / 차단 / 완료`로 기록한다. Phase 8은 격리 환경의 인증 ZIP smoke와 PostgreSQL finalize 시나리오 (a)/(b)/(c) focused 검증까지 성공해 완료로 기록한다.
 
 ### Phase 0 — 환경·기준선 확보
 
@@ -229,7 +229,7 @@ PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) �
 
 **상태: 완료**
 
-기존 인증·권한·업로드·첨부 일관성 테스트를 기준으로 구조 변경 후 보존할 동작을 확인했다. `SecurityAndStorageRegressionTest`와 관련 controller/service 테스트가 통과했고, PostgreSQL finalize 경계에 필요한 신규 실패 시나리오를 별도로 추가했다. 명시적 세션·part 삭제 flush 뒤 본문 실패 시나리오(시나리오 (b))는 invasive한 production-only flush hook을 피하기 위해 테스트로 다루지 않았다.
+기존 인증·권한·업로드·첨부 일관성 테스트를 기준으로 구조 변경 후 보존할 동작을 확인했다. `SecurityAndStorageRegressionTest`와 관련 controller/service 테스트가 통과했고, PostgreSQL finalize 경계에 필요한 신규 실패 시나리오를 별도로 추가했다. 테스트 전용 repository decorator로 명시적 세션·part 삭제 flush 뒤 본문 실패 시나리오 (b)를 추가해 실제 삭제 flush와 롤백·실패 기록을 검증했다.
 
 ### Phase 2 — Modulith 도입·구조 진단
 
@@ -253,7 +253,7 @@ Spring Boot 3.5.11·Java 25에 맞춰 Spring Modulith BOM `1.4.13`, `spring-modu
 
 **상태: 완료**
 
-`board.api.upload`에 업로드 결과 게시글·첨부 생성 계약과 `GeneratedAttachmentPolicy`를 구현했다. 게시판이 영구 첨부파일과 metadata를 소유하고, upload는 공개 계약을 동기 호출한다. `GeneratedAttachmentPolicyTest`의 3개 테스트와 H2 회귀 테스트가 통과했다. PostgreSQL finalize focused 테스트에서도 본문 flush 이후 실패(시나리오 (a))와 실제 커밋 단계의 지연 삭제 실패(시나리오 (c))가 통과했다. 명시적 세션·part 삭제 flush 뒤 본문 실패(시나리오 (b))는 커버하지 않았다.
+`board.api.upload`에 업로드 결과 게시글·첨부 생성 계약과 `GeneratedAttachmentPolicy`를 구현했다. 게시판이 영구 첨부파일과 metadata를 소유하고, upload는 공개 계약을 동기 호출한다. `GeneratedAttachmentPolicyTest`의 3개 테스트와 H2 회귀 테스트가 통과했다. PostgreSQL finalize focused 테스트에서도 본문 flush 이후 실패(시나리오 (a)), 테스트 전용 repository decorator의 세션·part 삭제 flush 뒤 본문 실패(시나리오 (b)), 실제 커밋 단계의 지연 삭제 실패(시나리오 (c))가 모두 통과했다.
 
 ### Phase 6 — 업로드 모듈 분리
 
@@ -294,22 +294,22 @@ Spring Boot 3.5.11·Java 25에 맞춰 Spring Modulith BOM `1.4.13`, `spring-modu
 ```text
 기록 일시: 2026-09-08
 승인 범위: Spring Modulith 구현 결과와 문서 상태 갱신
-구현 상태: Phase 0~8 완료; PostgreSQL finalize 시나리오 (b)는 미커버
+구현 상태: Phase 0~8 완료; PostgreSQL finalize 시나리오 (a)/(b)/(c) 모두 검증
 현재 Phase: 8 (백엔드·PostgreSQL·컨테이너 health·공개 목록 조회·인증 ZIP HTTP smoke 완료)
 마지막 완료 Phase: 8
 기준 커밋/브랜치: main / 구현 변경은 작업 트리에 존재하며 이번 요청은 문서만 수정
 이번 작업 파일: plan/spring-modulith-migration-plan.md 및 관련 docs/*.md
 구조 구현: Spring Modulith BOM 1.4.13; auth 이름 유지(auth.api/auth.internal); board.api.upload 계약; upload 모듈; root GlobalExceptionHandler
-최신 전체 테스트: Java 25 경로 지정 `clean test` 성공 — 146 tests, 0 failures, 0 errors; PostgreSQL 조건부 테스트 3건은 환경변수 미지정으로 skipped, H2/일반 테스트 143건 통과
+최신 전체 테스트: Java 25 경로 지정 `clean test` 성공 — 147 tests, 143 passed, 0 failures, 0 errors; PostgreSQL 조건부 테스트 4건은 환경변수 미지정으로 skipped, H2/일반 테스트 143건 통과
 구조·정책 테스트: ApplicationModulesDiagnosticTest 1건 통과; GeneratedAttachmentPolicyTest 3건 통과
-PostgreSQL focused: `PostgresMigrationTest` 1/1 통과, `PostgresUploadFinalizeTest` 2/2 통과; disposable Docker image postgres:1.0, PostgreSQL 17.10, localhost port 55432
-PostgreSQL 범위: migration V1~V18 및 Hibernate validate, finalize 시나리오 (a) 본문 flush 이후 실패와 (c) 실제 commit 단계 지연 삭제 실패 통과; (b) 명시적 session/part 삭제 flush 뒤 본문 실패는 미커버
+PostgreSQL focused: `PostgresMigrationTest` 1/1 통과, `PostgresUploadFinalizeTest` 3/3 통과; disposable Docker image postgres:1.0, PostgreSQL 17.10, localhost port 55432
+PostgreSQL 범위: migration V1~V18 및 Hibernate validate, finalize 시나리오 (a) 본문 flush 이후 실패, (b) 명시적 session/part 삭제 flush 뒤 본문 실패, (c) 실제 commit 단계 지연 삭제 실패 모두 통과
 컨테이너 검증: 최신 `llm-back:1.0` 이미지 재빌드·compose 기동, `llm-back`·`llm-front` healthy, 8083 health `status=UP`, `GET /api/v1/posts?page=1` 성공
 인증 smoke: 격리 환경에서 `m2-llm-back:smoke` sha256 `8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef` 및 `m2-llm-front:smoke` sha256 `55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`로 실제 HTTP 로그인·AES-GCM alias 세션·암호화 청크 1건·finalize·다운로드 성공
 인증 smoke 결과: post id=1, mode FILE_CONVERSION_REQUEST, conversionReady=true, authorUserId=2, 첨부 `/api/v1/posts/1/attachments/1`; 원본·다운로드 SHA-256 `a7a184d93123d7f52442f8bd6b4897f3665cc8f00cbc7aa647699b48279f2904` 일치, 바이트·HTTP 200/application/zip 길이 비교 통과
 DB/스키마: PostgreSQL 17 이미지, database `llm_m2_smoke`, schema `llm`, Flyway V1~V18 모두 success; 이번 refactor에서 운영 Flyway/schema 변경 없음
 정리: 격리 컨테이너·네트워크·볼륨 제거 및 원본 front 네트워크 복원, `upload_sessions=0`, `upload_session_parts=0`, 세션 임시 volume empty, 영구 첨부 volume에 ZIP 존재; 기존 서비스 영향 없음
-미확정 사항: PostgreSQL finalize 시나리오 (b)는 미검증
+미확정 사항: 없음 — PostgreSQL finalize 시나리오 (a)/(b)/(c) 모두 검증
 ```
 
 
@@ -329,11 +329,11 @@ DB/스키마: PostgreSQL 17 이미지, database `llm_m2_smoke`, schema `llm`, Fl
 
 ### 결과 기록
 
-- 전체 `clean test`: **146 tests discovered, 143 passed, 3 skipped, 0 failures, 0 errors**. PostgreSQL 조건부 테스트 3건이 환경변수 미지정으로 skipped되었다.
+- 전체 `clean test`: **147 tests discovered, 143 passed, 4 skipped, 0 failures, 0 errors**. PostgreSQL 조건부 테스트 4건(`PostgresMigrationTest` 1건, `PostgresUploadFinalizeTest` 3건)이 환경변수 미지정으로 skipped되었다.
 - 구조·정책 테스트: `ApplicationModulesDiagnosticTest` **1/1**, `GeneratedAttachmentPolicyTest` **3/3** 통과.
-- PostgreSQL focused: `PostgresMigrationTest` **1/1**, `PostgresUploadFinalizeTest` **2/2** 통과.
+- PostgreSQL focused: `PostgresMigrationTest` **1/1**, `PostgresUploadFinalizeTest` **3/3** 통과.
 - PostgreSQL focused 환경: disposable Docker image `postgres:1.0`, PostgreSQL **17.10**, localhost port **55432**. stated production PostgreSQL 18과 구분한다.
-- finalize 범위: 시나리오 (a) 본문 flush 이후 실패와 (c) 실제 commit 단계 지연 삭제 실패 통과. 시나리오 (b) 명시적 session/part 삭제 flush 뒤 본문 실패는 production-only flush hook을 추가하지 않아 미커버.
+- finalize 범위: 시나리오 (a) 본문 flush 이후 실패, (b) 명시적 session/part 삭제 flush 뒤 본문 실패, (c) 실제 commit 단계 지연 삭제 실패 모두 통과.
 - 컨테이너 통합: 최신 `llm-back:1.0` 이미지 재빌드 후 compose를 기동했고 `llm-back`·`llm-front`가 healthy였다. `127.0.0.1:8083/api/v1/health`는 `status=UP`을 반환했고 `GET /api/v1/posts?page=1` 목록 조회가 성공했다.
 - 인증 ZIP HTTP smoke: 격리 네트워크의 back `18080`·front proxy `18083`에서 실제 로그인, `upload_zip_post.py` exit 0, AES-GCM alias 세션·암호화 청크 1건·finalize·다운로드를 성공했다. 이미지 `m2-llm-back:smoke` sha256 `8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef`, `m2-llm-front:smoke` sha256 `55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`; PostgreSQL 17, database `llm_m2_smoke`, schema `llm`, Flyway V1~V18 success. 결과 게시글은 id 1, `FILE_CONVERSION_REQUEST`, `conversionReady=true`, `authorUserId=2`, 첨부 URL `/api/v1/posts/1/attachments/1`; 원본·다운로드 SHA-256 `a7a184d93123d7f52442f8bd6b4897f3665cc8f00cbc7aa647699b48279f2904` 일치 및 바이트 비교 통과.
 - smoke 정리: `posts=1`, `post_attachments=1`, `upload_sessions=0`, `upload_session_parts=0`, 세션 임시 volume empty, 영구 첨부 volume에 ZIP 존재. 격리 컨테이너·네트워크·볼륨 제거 후 원본 front 네트워크를 복원했으며 기존 서비스 영향은 없었다.
@@ -365,17 +365,16 @@ DB/스키마: PostgreSQL 17 이미지, database `llm_m2_smoke`, schema `llm`, Fl
 
 ### PostgreSQL finalize 실패 검증
 
-최신 확인은 Docker 이미지 `postgres:1.0`(PostgreSQL 17.10)을 localhost port `55432`에 둔 disposable test 환경에서 수행했습니다. 이는 stated production PostgreSQL 18과 다른 테스트 환경입니다. `PostgresMigrationTest`는 V1~V18 적용과 Hibernate validate까지 **1/1 통과**했고, `PostgresUploadFinalizeTest`는 **2/2 통과**했습니다. 전체 H2/default `clean test`에서는 PostgreSQL 조건부 테스트 3건이 환경변수 미지정으로 skipped되었으며, 나머지 143건은 통과했습니다. 시나리오 (a)/(c)는 통과했고, (b) 명시적 session/part 삭제 flush 뒤 본문 실패는 미커버입니다.
+최신 확인은 Docker 이미지 `postgres:1.0`(PostgreSQL 17.10)을 localhost port `55432`에 둔 disposable test 환경에서 수행했습니다. 이는 stated production PostgreSQL 18과 다른 테스트 환경입니다. `PostgresMigrationTest`는 V1~V18 적용과 Hibernate validate까지 **1/1 통과**했고, `PostgresUploadFinalizeTest`는 **3/3 통과**했습니다. 전체 H2/default `clean test`에서는 PostgreSQL 조건부 테스트 4건이 환경변수 미지정으로 skipped되었으며, 나머지 143건은 통과했습니다. 시나리오 (a)/(b)/(c)가 모두 통과했습니다.
 
 | 실패 지점 | 주입 방법 | 결과 |
 | --- | --- | --- |
 | (a) 세션 변경 flush 이후의 본문 실패 | 게시판 생성 대역이 생성 후 `EntityManager.flush()` 뒤 예외를 주입 | **통과:** 원래 예외 보존, 게시글·첨부 롤백, 세션 `FAILED`, 원본 chunk 유지, 조립 파일 정리, 제한 시간 내 종료 |
-| (b) 세션·청크 삭제 flush 이후의 본문 실패 | 세션/part 삭제를 명시적으로 flush한 뒤 본문 예외 주입 | **미커버:** 이 주입 지점만을 위한 production-only flush hook은 추가하지 않았다. 따라서 이 시나리오를 통과했다고 기록하지 않는다. |
+| (b) 세션·청크 삭제 flush 이후의 본문 실패 | 테스트 전용 `UploadSessionRepository` decorator가 세션 삭제와 `EntityManager.flush()`를 수행한 뒤 SQL 조회로 세션·part 삭제를 확인하고 본문 예외 주입 | **통과:** 원래 예외 보존, 게시글·첨부 롤백, 세션·part 삭제 롤백 후 `FAILED` 별도 커밋, 원본 chunk 유지, 조립 파일 정리, 잠금 없는 후속 접근 |
 | (c) 메서드 본문 반환 후의 실제 commit 실패 | 테스트 schema에 deferrable delete trigger를 설치해 commit 단계에서 DB가 거부하도록 구성 | **통과:** commit 예외 전파, 게시글·첨부 롤백, 세션 `PENDING`·원본 chunk 유지, 조립 파일 정리, 잔여 잠금 없이 종료 |
 
-- 위 결과는 운영 PostgreSQL 18이 아니라 PostgreSQL 17.10 disposable test image에 대한 결과다. `PostgresMigrationTest`는 V1~V18을 전용 schema에 적용하고 Hibernate validate까지 통과했다(1/1). `PostgresUploadFinalizeTest`는 (a)/(c) 두 테스트가 통과했다(2/2). 테스트 자체의 자동 rollback에 의존하지 않고 실제 서비스 proxy·transaction manager와 격리된 임시 파일 저장소를 사용한다.
+- 위 결과는 운영 PostgreSQL 18이 아니라 PostgreSQL 17.10 disposable test image에 대한 결과다. `PostgresMigrationTest`는 V1~V18을 전용 schema에 적용하고 Hibernate validate까지 통과했다(1/1). `PostgresUploadFinalizeTest`는 (a)/(b)/(c) 세 테스트가 통과했다(3/3). 테스트 자체의 자동 rollback에 의존하지 않고 실제 서비스 proxy·transaction manager와 격리된 임시 파일 저장소를 사용한다.
 - PostgreSQL 테스트는 테스트 이미지·포트·임시 schema에 한정된 검증이다. 운영 DB의 모든 동작이나 실제 HTTP 경로를 대신하지 않는다.
-- (b)는 미커버 범위로 남기며, 해당 경계의 직접 재현이 필요하면 별도 테스트 seam 설계를 먼저 검토한다.
 
 ### 예외 매핑 검증
 
@@ -466,18 +465,16 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 - [x] 세션 생성의 첨부 크기 정책이 board 공개 계약을 사용하며 설정 일치·경계값·400 응답·세션 및 파일 미생성이 검증되었다.
 - [x] 다른 모듈에서 전파된 예외의 HTTP 오류 계약이 전체 회귀 테스트로 유지되었다.
 - [x] finalize의 DB 원자성과 첨부 커밋·롤백 후 정리 동작이 검증되었다.
-- [ ] `PostgreSQL` finalize의 모든 계획 시나리오가 검증되었다 — (a)/(c)는 통과했지만 (b) 명시적 삭제 flush 뒤 본문 실패는 미커버다.
+- [x] `PostgreSQL` finalize의 모든 계획 시나리오가 검증되었다 — (a) 본문 flush 이후 실패, (b) 명시적 삭제 flush 뒤 본문 실패, (c) 실제 commit 단계 실패가 모두 통과했다.
 - [x] PostgreSQL migration/finalize focused 검증 결과와 H2/full test 결과가 구분되어 기록되었다.
 - [x] 문자열에 포함된 이전 패키지 경로를 점검하고 JPQL·게시글 목록 조회를 회귀 테스트로 실행했다.
-- [x] 전체 백엔드 테스트와 인증 ZIP HTTP smoke까지 모두 기록되었다 — 격리 환경에서 이미지 식별자, PostgreSQL 17/`llm_m2_smoke`/`llm` 및 Flyway V1~V18 성공, 실제 로그인·암호화 청크·finalize·다운로드, SHA-256/바이트 일치와 세션·part·임시 volume 정리를 확인했다.
+- [x] 전체 백엔드 테스트와 인증 ZIP HTTP smoke까지 모두 기록되었다 — clean test 147건(143 pass, 4 PostgreSQL conditional skip), 격리 환경에서 이미지 식별자, PostgreSQL 17/`llm_m2_smoke`/`llm` 및 Flyway V1~V18 성공, 실제 로그인·암호화 청크·finalize·다운로드, SHA-256/바이트 일치와 세션·part·임시 volume 정리를 확인했다.
 - [x] API·환경 변수·DB 스키마 변경 없이 목표를 달성했다. 이번 refactor는 Flyway V1~V18과 schema를 변경하지 않았다.
 - [x] 실제 모듈 구조와 관련 개발 안내가 갱신되었다.
 
 ## 구현 후 남은 확인 사항
 
-1. 필요성이 확인되면 명시적 세션·part 삭제 flush 뒤 본문 실패인 PostgreSQL 시나리오 (b)를 별도 test seam으로 검토한다.
-
-그 외의 구현 설계 항목과 인증 ZIP HTTP smoke는 실제 코드와 격리 환경 검증으로 확정했다. 이 문서는 확인되지 않은 시나리오 (b)를 완료로 표시하지 않는다.
+이번 후속 검증에서 남아 있던 PostgreSQL finalize 시나리오 (b)를 테스트 전용 repository decorator로 검증했다. 구현 설계 항목과 인증 ZIP HTTP smoke도 실제 코드와 격리 환경 검증으로 확정했다.
 
 ## 13. 참고 자료
 
