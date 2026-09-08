@@ -7,6 +7,7 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
 
 import com.llm.app.LlmApplication;
 import com.llm.app.auth.api.UserRole;
@@ -112,9 +113,6 @@ class PostgresUploadFinalizeTest {
     private UploadSessionPartRepository parts;
 
     @Autowired
-    private EntityManager entityManager;
-
-    @Autowired
     private UploadSessionService uploadSessionService;
 
     @Autowired
@@ -137,7 +135,7 @@ class PostgresUploadFinalizeTest {
     @BeforeEach
     void setUp() {
         uploadedPostCreator.reset();
-        deleteFailureControl.reset();
+        deleteFailureControl.resetState();
         deleteRows();
         deleteRecursively(DATA_ROOT);
     }
@@ -145,7 +143,7 @@ class PostgresUploadFinalizeTest {
     @AfterEach
     void tearDown() {
         uploadedPostCreator.reset();
-        deleteFailureControl.reset();
+        deleteFailureControl.resetState();
         deleteRows();
         deleteRecursively(DATA_ROOT);
     }
@@ -452,9 +450,9 @@ class PostgresUploadFinalizeTest {
             return observed;
         }
 
-        void reset() {
+        void resetState() {
             observed = false;
-            org.mockito.Mockito.reset(repository);
+            reset(repository);
         }
     }
 
