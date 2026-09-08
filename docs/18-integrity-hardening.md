@@ -40,7 +40,15 @@ Remove-Item Env:\LLM_TEST_POSTGRES_URL
 docker stop llm-validation-postgres
 ```
 
-로컬 검증 결과: 백엔드 135개(실제 PostgreSQL 마이그레이션·Hibernate validate 포함) 통과, 프론트 회귀 테스트 7개·typecheck·build 통과.
+2026-09-05 당시 검증 결과: 백엔드 135개(실제 PostgreSQL 마이그레이션·Hibernate validate 포함) 통과, 프론트 회귀 테스트 7개·typecheck·build 통과. 최신 Spring Modulith 후속 검증은 아래 별도 기록을 참조합니다.
+
+## Spring Modulith 후속 검증 — 2026-09-08
+
+- `ApplicationModulesDiagnosticTest`의 strict verification과 Java 25 전체 backend `clean test`가 통과했습니다: 146개 발견, 143개 통과, 3개 조건부 건너뜀, 실패 0개·오류 0개.
+- disposable PostgreSQL `postgres:1.0`(PostgreSQL 17.10, localhost `55432`)에서 `PostgresMigrationTest` 1/1, `PostgresUploadFinalizeTest` 2/2가 통과했습니다. 운영 기준 PostgreSQL 18과는 별도 테스트 환경입니다.
+- finalize 본문 flush 이후 실패와 commit 단계 지연 삭제 실패는 검증했으며, 명시적 session/part 삭제 flush 뒤 본문 실패 시나리오는 production-only flush hook을 피하기 위해 미커버로 남겼습니다.
+- 최신 `llm-back:1.0` 이미지 재빌드 후 compose를 기동해 `llm-back`·`llm-front` health, front proxy 8083 health(`status=UP`), `GET /api/v1/posts?page=1` 목록 조회를 확인했습니다. 테스트 데이터 변경을 피하기 위해 실제 인증 ZIP upload/download smoke는 실행하지 않았습니다.
+- 이번 구조 전환은 Flyway V1~V18, 운영 schema, API 경로, 환경변수를 변경하지 않았습니다.
 
 ## 배포 시 확인
 

@@ -1,8 +1,8 @@
 # AI 답변 연동
 
-> 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. `POST /api/v1/posts/{id}/ai-replies`는 410 `AI_REPLY_DISABLED`를 반환합니다. 아래 내용은 종료 이전 동작의 기록이며, 관련 클래스·컬럼·DTO는 레거시 조회/보호용 잔재로 유지됩니다.
+> 2026-09-03 이후 미사용 — 댓글 AI 답변 기능 종료. `POST /api/v1/posts/{id}/ai-replies`는 인증 후 410 `AI_REPLY_DISABLED`를 반환하며 provider 호출이나 새 답변 저장을 수행하지 않습니다. 아래 내용은 종료 이전 동작의 기록이고, 관련 클래스·컬럼·DTO는 레거시 조회/보호용 잔재로 유지됩니다.
 
-백엔드는 게시글 본문을 바탕으로 AI 답변을 생성합니다. 지원 provider는 `GPT`, `CLAUDE`, `GROK`입니다.
+백엔드는 종료 전 게시글 본문을 바탕으로 AI 답변을 생성했습니다. 지원 provider 기록은 `GPT`, `CLAUDE`, `GROK`입니다.
 
 ## 코드 위치
 
@@ -63,7 +63,9 @@ AI 답변은 수정/삭제할 수 없습니다.
 
 ## 제한 사항
 
+- 현재 `POST /api/v1/posts/{id}/ai-replies`는 `410 Gone` / `AI_REPLY_DISABLED`를 반환합니다.
 - `FILE_CONVERSION_REQUEST` 게시글에는 AI 답변을 만들 수 없습니다.
+- 아래 provider 설정과 오류 코드는 종료 전 구현의 기록이며 현재 새 provider 호출에 사용되지 않습니다.
 - API key가 비어 있으면 해당 provider는 `AI_PROVIDER_NOT_CONFIGURED` 오류를 반환합니다.
 - 외부 API가 오류를 반환하면 `AI_REPLY_GENERATION_FAILED` 오류를 반환합니다.
 - GPT/Grok 응답은 `choices[0].message.content`에서 추출합니다.

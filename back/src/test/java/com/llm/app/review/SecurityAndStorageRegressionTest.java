@@ -10,19 +10,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.llm.app.auth.Admin;
-import com.llm.app.auth.AdminRepository;
-import com.llm.app.auth.JwtProvider;
-import com.llm.app.auth.UserRole;
-import com.llm.app.board.dto.CreateUploadSessionRequest;
-import com.llm.app.board.dto.UploadSessionStatusResponse;
+import com.llm.app.auth.internal.Admin;
+import com.llm.app.auth.internal.AdminRepository;
+import com.llm.app.auth.internal.JwtProvider;
+import com.llm.app.auth.api.UserRole;
+import com.llm.app.upload.dto.CreateUploadSessionRequest;
+import com.llm.app.upload.dto.UploadSessionStatusResponse;
 import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
-import com.llm.app.board.repository.UploadSessionPartRepository;
-import com.llm.app.board.repository.UploadSessionRepository;
+import com.llm.app.upload.repository.UploadSessionPartRepository;
+import com.llm.app.upload.repository.UploadSessionRepository;
 import com.llm.app.board.service.BoardService;
-import com.llm.app.board.service.UploadSessionWireCodec;
+import com.llm.app.upload.service.UploadSessionWireCodec;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;

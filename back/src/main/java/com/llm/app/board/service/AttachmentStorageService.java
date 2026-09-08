@@ -1,5 +1,6 @@
 package com.llm.app.board.service;
 
+import com.llm.app.board.api.upload.GeneratedAttachmentPolicy;
 import com.llm.app.board.exception.AttachmentStorageException;
 import com.llm.app.board.exception.AttachmentTooLargeException;
 import com.llm.app.board.model.BoardAttachment;
@@ -18,7 +19,7 @@ import org.springframework.util.unit.DataSize;
 import org.springframework.web.multipart.MultipartFile;
 
 @Component
-public class AttachmentStorageService {
+public class AttachmentStorageService implements GeneratedAttachmentPolicy {
 	private final Path rootPath;
 	private final long maxUploadFileSizeBytes;
 	private final long maxGeneratedFileSizeBytes;

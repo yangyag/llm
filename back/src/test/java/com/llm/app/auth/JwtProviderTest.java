@@ -3,6 +3,14 @@ package com.llm.app.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.llm.app.auth.internal.Admin;
+import com.llm.app.auth.internal.AdminRepository;
+import com.llm.app.auth.internal.AuthService;
+import com.llm.app.auth.internal.JwtProvider;
+import com.llm.app.auth.internal.LoginRequest;
+import com.llm.app.auth.api.InvalidCredentialsException;
+import com.llm.app.auth.api.UserRole;
+
 import com.llm.app.common.SecretKeyDerivation;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;

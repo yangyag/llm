@@ -6,10 +6,12 @@
 
 백엔드:
 
-```bash
-cd /home/yangyag/llm/back
-./gradlew clean test
+```powershell
+cd back
+.\gradlew.bat '-Porg.gradle.java.installations.paths=<JAVA_25_HOME>' clean test
 ```
+
+`<JAVA_25_HOME>`은 실행 환경의 Java 25 설치 경로로 바꿉니다. 경로·secret 값은 저장소에 기록하지 않습니다.
 
 프론트:
 
@@ -21,13 +23,7 @@ npm run typecheck
 npm run build
 ```
 
-통합:
-
-```bash
-cd /home/yangyag/llm
-docker compose up -d --wait
-curl -fsS http://localhost:8083/api/v1/health
-```
+통합 명령은 compose 스택과 외부 PostgreSQL이 준비된 환경에서 실행합니다. 2026-09-08 최신 `llm-back:1.0` 이미지로 compose를 기동해 `llm-back`·`llm-front` health, 8083 health, 공개 게시글 목록 조회를 확인했습니다. 테스트 데이터 변경을 피하기 위해 인증이 필요한 실제 HTTP ZIP upload/download smoke는 실행하지 않았습니다.
 
 ## 백엔드 테스트 구성
 
@@ -49,24 +45,42 @@ curl -fsS http://localhost:8083/api/v1/health
 | `HealthControllerTest` | health endpoint |
 | `UserManagementControllerTest` | 사용자 추가/수정/삭제, ADMIN 전용, 마지막 ADMIN/자기 자신 보호 |
 | `BoardPostControllerTest` | 게시글, 댓글, 첨부파일, AI 답변 제약, 작성자 소유권(본인/ADMIN/레거시), 일괄 삭제 권한, 댓글 소유권 |
-| `UploadSessionControllerTest` | 업로드 세션 생성, chunk, finalize, 오류 조건, finalize 게시글 작성자 기록, 타인 접근/만료/완료 상태 |
+| `UploadSessionControllerTest` | 업로드 세션 생성, chunk, finalize, 오류 조건, finalize 게시글 작성자 기록, 크기 제한 경계, 실패 시 파일 정리, 타인 접근/만료/완료 상태 |
 | `JwtProviderTest` | 토큰 생성/검증, 만료, 위조, Bearer 형식 |
 | `SecretKeyDerivationTest` | 키 파생(32바이트 미만 확장/이상 절단) |
 | `BoardContentCodecTest` | bodyBase64 디코딩 경계(blank/100만자/오류) |
 | `UploadSessionWireCodecTest` | 암호화 라운드트립, AAD alias 바인딩, 변조/타 secret 거부 |
-| `ExternalAiReplyGeneratorDefaultsTest` | AI provider 기본값 |
+| `ExternalAiReplyGeneratorDefaultsTest` | legacy AI provider 기본값 및 종료된 기능의 잔재 |
+| `ApplicationModulesDiagnosticTest` | Spring Modulith 모듈 경계·순환·내부 접근·허용 의존 strict verification |
+| `GeneratedAttachmentPolicyTest` | board 공개 생성 첨부 크기 정책과 제한 경계 |
+| `PostgresUploadFinalizeTest` | disposable PostgreSQL finalize transaction rollback·commit failure와 파일 정리 |
 
 ## 추가 회귀 검증
 
 `SecurityAndStorageRegressionTest`는 삭제 계정의 모든 쓰기·업로드 차단, username 재사용 시 토큰/소유권 분리, 첨부 롤백·삭제 재시도, 긴 ZIP 제목을 검증합니다. `front/tests/postDetail.test.cjs`는 실제 Pinia store에서 응답 순서 역전·조회 실패·저장 중 이동·ID 불일치·계정 ID 권한 표시를 검증합니다.
 
-`PostgresMigrationTest`는 `LLM_TEST_POSTGRES_URL=jdbc:postgresql://127.0.0.1:<임시포트>/postgres`가 있을 때 실행합니다. 별도 일회용 PostgreSQL의 postgres 사용자와 빈 비밀번호를 사용하며 무작위 schema에 V1~V16 → V17~V18을 적용하고 소유권 백필·삭제 FK·Hibernate validate를 확인합니다. 운영 DB를 지정하지 않습니다. 변수가 없으면 해당 테스트는 건너뜁니다. 준비·실행 명령은 [18-integrity-hardening.md](./18-integrity-hardening.md)를 참조합니다.
+`PostgresMigrationTest`와 `PostgresUploadFinalizeTest`는 `LLM_TEST_POSTGRES_URL=jdbc:postgresql://127.0.0.1:<임시포트>/postgres`가 있을 때만 실행하고, 변수가 없으면 JUnit 조건에 따라 각각 1개·2개 테스트를 건너뜁니다. 별도 disposable PostgreSQL의 postgres 사용자와 격리된 무작위 schema·임시 파일 저장소를 사용하며 운영 DB를 지정하지 않습니다. Migration 테스트는 V1~V18 적용·소유권 백필·삭제 FK·Hibernate validate를 확인하고, finalize 테스트는 (a) 본문 flush 이후 실패와 (c) 실제 commit 단계 지연 삭제 실패를 확인합니다. (b) 명시적 session/part 삭제 flush 뒤 본문 실패는 production-only flush hook을 추가하지 않아 미커버입니다.
 
-## 변경별 권장 게이트
+2026-09-08 최신 확인은 Docker 이미지 `postgres:1.0`(PostgreSQL 17.10)을 localhost port `55432`에 둔 환경에서 수행했습니다. PostgreSQL 17.10 disposable test image는 stated production PostgreSQL 18을 대체하지 않습니다. focused 결과는 `PostgresMigrationTest` 1/1 통과와 `PostgresUploadFinalizeTest` 2/2 통과입니다. 환경변수 없이 실행한 전체 `clean test`는 **146개 발견, 143개 통과, 3개 skipped, 실패 0개·오류 0개**였고, skipped 3개는 두 PostgreSQL 조건부 테스트입니다. 실제 PostgreSQL focused 실행에서는 해당 3개가 모두 통과했습니다.
 
+실제 전체 실행 예시:
+
+```powershell
+cd back
+.\gradlew.bat '-Porg.gradle.java.installations.paths=<JAVA_25_HOME>' clean test
+```
+
+focused PostgreSQL 실행 예시(환경변수 값 자체는 기록하거나 공유하지 않음):
+
+```powershell
+cd back
+$env:LLM_TEST_POSTGRES_URL = 'jdbc:postgresql://127.0.0.1:<임시포트>/postgres'
+.\gradlew.bat '-Porg.gradle.java.installations.paths=<JAVA_25_HOME>' test --tests com.llm.app.review.PostgresMigrationTest --tests com.llm.app.review.PostgresUploadFinalizeTest
+Remove-Item Env:LLM_TEST_POSTGRES_URL
+```
 | 변경 유형 | 필수 검증 |
 | --- | --- |
-| 백엔드 controller/service/domain | `cd back && ./gradlew clean test` |
+| 백엔드 controller/service/domain | `cd back && .\gradlew.bat '-Porg.gradle.java.installations.paths=<JAVA_25_HOME>' clean test` |
 | DB migration | 백엔드 테스트와 실제 PostgreSQL 연결 검증. 루트 compose에는 PostgreSQL 서비스가 없으므로 로컬/EC2의 외부 DB 또는 별도 PostgreSQL을 준비 |
 | 프론트 UI/API client | `cd front && npm run typecheck && npm run build` |
 | Dockerfile/compose | 프론트는 `cd front && npm run build` 후 `docker compose --profile build build front-build`. 백엔드는 `build back-build`. 이어서 `docker compose up -d --wait` |
@@ -77,6 +91,8 @@ curl -fsS http://localhost:8083/api/v1/health
 
 ## 수동 smoke test
 
+아래 절차는 compose 스택이 실행 중이고 외부 PostgreSQL이 준비된 환경에서 수행합니다. 2026-09-08에는 최신 백엔드 이미지로 compose 기동, 컨테이너 health, 8083 health와 공개 게시글 목록 조회까지 확인했습니다. 인증이 필요한 실제 ZIP upload/download smoke는 테스트 데이터 변경을 피하기 위해 실행하지 않았습니다.
+
 1. `docker compose up -d --wait`
 2. `http://localhost:8083` 접속
 3. 기본 관리자 계정으로 로그인
@@ -85,7 +101,7 @@ curl -fsS http://localhost:8083/api/v1/health
 6. 첨부파일 업로드/다운로드 확인
 7. 댓글 작성/수정/삭제 확인
 8. 검색 확인
-9. AI provider API key가 있다면 AI 답변 생성 확인
+9. AI 답변 endpoint가 `410 Gone` / `AI_REPLY_DISABLED`를 반환하는지 확인(외부 provider 호출 없음)
 10. `front/public/upload_zip_post.zip`에서 스크립트를 추출해 작은 ZIP 업로드 확인
 11. 일반 글 상세(로그인·공개)에서 본문 복사 → 붙여넣기 = 화면 본문; 변환글에서는 버튼 없음
 
