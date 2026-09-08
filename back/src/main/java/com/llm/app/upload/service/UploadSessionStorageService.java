@@ -23,6 +23,12 @@ public class UploadSessionStorageService {
 	private final Path rootPath;
 	private final long maxDecodedChunkSizeBytes;
 
+	/**
+	 * 업로드 세션 파일의 루트 경로와 디코딩된 청크 최대 크기를 설정한다.
+	 *
+	 * @param rootPath 업로드 세션 파일을 저장할 루트 경로
+	 * @param maxDecodedChunkSize 디코딩된 청크 하나의 최대 허용 크기
+	 */
 	public UploadSessionStorageService(
 		@Value("${app.upload-sessions.root-path:${java.io.tmpdir}/llm-upload-sessions}") String rootPath,
 		@Value("${app.upload-sessions.max-decoded-chunk-size:100MB}") DataSize maxDecodedChunkSize
@@ -31,6 +37,17 @@ public class UploadSessionStorageService {
 		this.maxDecodedChunkSizeBytes = maxDecodedChunkSize.toBytes();
 	}
 
+	/**
+	 * 업로드 청크를 세션 디렉터리에 저장한다.
+	 *
+	 * @param sessionId 대상 업로드 세션 ID
+	 * @param chunkNumber 저장할 청크 번호
+	 * @param originalFilename 원본 파일명
+	 * @param bytes 저장할 디코딩된 청크 바이트
+	 * @return 저장된 청크의 파일 메타데이터
+	 * @throws UploadSessionChunkTooLargeException 청크가 허용 크기를 초과한 경우
+	 * @throws UploadSessionStorageException 파일 저장에 실패한 경우
+	 */
 	public StoredUploadPart store(UUID sessionId, int chunkNumber, String originalFilename, byte[] bytes) {
 		if (bytes.length > maxDecodedChunkSizeBytes) {
 			throw new UploadSessionChunkTooLargeException(maxDecodedChunkSizeBytes);
@@ -54,10 +71,24 @@ public class UploadSessionStorageService {
 		return new StoredUploadPart(safeOriginalFilename, storedFilename, storagePath, bytes.length);
 	}
 
+	/**
+	 * 저장소 루트를 기준으로 상대 저장 경로를 정규화된 파일 경로로 변환한다.
+	 *
+	 * @param storagePath 루트 기준 상대 저장 경로
+	 * @return 정규화된 파일 경로
+	 */
 	public Path resolve(String storagePath) {
 		return rootPath.resolve(storagePath).normalize();
 	}
 
+	/**
+	 * 청크를 이어 붙일 고유한 조립 대상 파일 경로를 생성한다.
+	 *
+	 * @param sessionId 대상 업로드 세션 ID
+	 * @param archiveName 원본 아카이브 파일명(호환성을 위해 받지만 경로에는 사용하지 않음)
+	 * @return 조립 결과를 저장할 파일 경로
+	 * @throws UploadSessionStorageException 세션 디렉터리 준비에 실패한 경우
+	 */
 	public Path createAssembledTarget(UUID sessionId, String archiveName) {
 		Path sessionDir = resolve(sessionId.toString());
 		// ponytail: unique per finalize so concurrent/retried finalizes never share one assembled file.
@@ -73,6 +104,13 @@ public class UploadSessionStorageService {
 		return assembledPath;
 	}
 
+	/**
+	 * 여러 청크 파일을 순서대로 읽어 하나의 대상 파일로 이어 붙인다.
+	 *
+	 * @param targetPath 조립 결과를 기록할 파일 경로
+	 * @param sourcePaths 순서대로 읽을 청크 파일 경로 목록
+	 * @throws UploadSessionStorageException 청크 읽기 또는 결과 파일 쓰기에 실패한 경우
+	 */
 	public void concatenate(Path targetPath, Iterable<Path> sourcePaths) {
 		try (var outputStream = Files.newOutputStream(targetPath)) {
 			for (Path sourcePath : sourcePaths) {
@@ -85,6 +123,13 @@ public class UploadSessionStorageService {
 		}
 	}
 
+	/**
+	 * 세션 디렉터리와 내부 파일을 best-effort 방식으로 삭제한다.
+	 *
+	 * <p>정리 실패는 이미 커밋된 업로드 처리 결과를 되돌리지 않도록 로그만 남긴다.</p>
+	 *
+	 * @param sessionId 삭제할 업로드 세션 ID
+	 */
 	public void deleteSessionDirectory(UUID sessionId) {
 		Path sessionDir = resolve(sessionId.toString());
 		if (!Files.exists(sessionDir)) {
@@ -107,10 +152,21 @@ public class UploadSessionStorageService {
 		}
 	}
 
+	/**
+	 * 디코딩된 청크 하나에 허용되는 최대 바이트 수를 반환한다.
+	 *
+	 * @return 디코딩된 청크 최대 크기(바이트)
+	 */
 	public long getMaxDecodedChunkSizeBytes() {
 		return maxDecodedChunkSizeBytes;
 	}
 
+	/**
+	 * 원본 경로에서 파일명 부분만 추출한다.
+	 *
+	 * @param filename 원본 파일명 또는 경로
+	 * @return 경로가 제거된 파일명, 입력이 비어 있으면 기본 파일명
+	 */
 	private String extractOriginalFilename(String filename) {
 		if (!StringUtils.hasText(filename)) {
 			return "chunk.bin";
@@ -118,6 +174,7 @@ public class UploadSessionStorageService {
 		return Path.of(filename).getFileName().toString();
 	}
 
+	/** 저장된 업로드 청크의 원본 및 저장 위치 메타데이터. */
 	public record StoredUploadPart(
 		String originalFilename,
 		String storedFilename,
