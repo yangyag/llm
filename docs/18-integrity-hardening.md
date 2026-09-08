@@ -44,10 +44,10 @@ docker stop llm-validation-postgres
 
 ## Spring Modulith 후속 검증 — 2026-09-08
 
-- `ApplicationModulesDiagnosticTest`의 strict verification과 Java 25 전체 backend `clean test`가 통과했습니다: 146개 발견, 143개 통과, 3개 조건부 건너뜀, 실패 0개·오류 0개.
-- disposable PostgreSQL `postgres:1.0`(PostgreSQL 17.10, localhost `55432`)에서 `PostgresMigrationTest` 1/1, `PostgresUploadFinalizeTest` 2/2가 통과했습니다. 운영 기준 PostgreSQL 18과는 별도 테스트 환경입니다.
-- finalize 본문 flush 이후 실패와 commit 단계 지연 삭제 실패는 검증했으며, 명시적 session/part 삭제 flush 뒤 본문 실패 시나리오는 production-only flush hook을 피하기 위해 미커버로 남겼습니다.
-- 최신 `llm-back:1.0` 이미지 재빌드 후 compose를 기동해 `llm-back`·`llm-front` health, front proxy 8083 health(`status=UP`), `GET /api/v1/posts?page=1` 목록 조회를 확인했습니다. 테스트 데이터 변경을 피하기 위해 실제 인증 ZIP upload/download smoke는 실행하지 않았습니다.
+- `ApplicationModulesDiagnosticTest`의 strict verification과 Java 25 전체 backend `clean test`가 통과했습니다: 147개 발견, 143개 통과, 4개 조건부 건너뜀, 실패 0개·오류 0개.
+- disposable PostgreSQL `postgres:1.0`(PostgreSQL 17.10, localhost `55432`)에서 `PostgresMigrationTest` 1/1, `PostgresUploadFinalizeTest` 3/3이 통과했습니다. 운영 기준 PostgreSQL 18과는 별도 테스트 환경입니다.
+- finalize 본문 flush 이후 실패, 테스트 전용 repository decorator를 통한 명시적 session/part 삭제 flush 뒤 본문 실패, commit 단계 지연 삭제 실패를 모두 검증했습니다. 시나리오 (b)는 운영 코드에 flush hook을 추가하지 않고 실제 삭제·flush·SQL 조회 주입으로 확인했습니다.
+- 최신 `llm-back:1.0` 이미지 재빌드 후 compose를 기동해 `llm-back`·`llm-front` health, front proxy 8083 health(`status=UP`), `GET /api/v1/posts?page=1` 목록 조회를 확인했습니다. 추가 격리 환경에서 실제 인증 ZIP upload/download smoke도 성공했으며, 상세 결과는 docs/10 및 계획서에 기록했습니다.
 - 이번 구조 전환은 Flyway V1~V18, 운영 schema, API 경로, 환경변수를 변경하지 않았습니다.
 
 ## 배포 시 확인
