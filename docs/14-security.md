@@ -2,7 +2,7 @@
 
 ## 인증과 인가
 
-현재 백엔드는 Spring Security filter chain을 쓰지 않고 각 컨트롤러가 공통 `JwtProvider.authenticate`를 호출하여 JWT와 현재 계정의 존재 여부를 검증합니다.
+현재 백엔드는 Spring Security filter chain을 쓰지 않는다. `auth` 외부 모듈의 보호 컨트롤러는 공개 계약인 `AuthenticationGateway.authenticate`를 호출하며, `auth.internal`의 `JwtProvider` 구현이 JWT와 현재 계정의 존재 여부를 검증한다. auth 내부 컨트롤러는 `JwtProvider`를 직접 사용할 수 있다.
 
 인증 필요:
 
@@ -29,7 +29,7 @@
 - 쓰기 기능(게시글 작성/댓글/AI 답변/업로드 세션)은 유효한 JWT만 있으면 `USER`도 전부 사용할 수 있습니다.
 - 게시글/댓글 **수정/삭제**는 작성자 본인 또는 `ADMIN`만 가능합니다. 작성자가 null인 레거시 글/댓글은 `ADMIN`만 수정/삭제할 수 있습니다. `USER`가 남의 글/댓글을 수정/삭제하면 403 `FORBIDDEN`입니다(코드: `BoardService.ensureCanManagePost`/`ensureCanManageReply`). AI 답변은 작성자 없음 + `AI_REPLY_LOCKED`로 수정/삭제가 차단됩니다. 게시글 일괄 삭제도 포함된 id 전부에 대해 소유권/ADMIN을 검사하며, 하나라도 권한이 없으면 전체가 403으로 실패합니다.
 - 역할 제한이 있는 기능(사용자 관리 API)은 `ADMIN` 전용이며, 이 외에는 게시글 소유권 검사가 추가로 적용됩니다.
-- 인가 방식은 인증과 마찬가지로 Spring Security filter chain이 아니라 컨트롤러별 직접 JWT 검증입니다. JWT에는 role을 넣지 않고 고유 계정 ID를 subject로, `tokenVersion=2`를 claim으로 넣습니다. 이전 username 토큰은 거부하며 재로그인이 필요합니다.
+- 인가 방식은 인증과 마찬가지로 Spring Security filter chain이 아니라 컨트롤러에서 공개 인증 계약을 호출하는 방식입니다. `auth` 외부 모듈은 `AuthenticationGateway.authenticate`를 사용하고, `auth.internal`의 `JwtProvider`가 실제 JWT 검증을 수행합니다. JWT에는 role을 넣지 않고 고유 계정 ID를 subject로, `tokenVersion=2`를 claim으로 넣습니다. 이전 username 토큰은 거부하며 재로그인이 필요합니다.
 - ADMIN 여부 판단은 `UserManagementService`에서 매 요청마다 계정 ID로 DB를 조회해 수행합니다. 토큰에 역할 정보가 내장되지 않으므로, 강등이나 계정 삭제가 다음 요청부터 즉시 반영됩니다.
 - `USER`가 사용자 관리 API를 호출하면 403 `FORBIDDEN`입니다. 계정이 삭제된 경우 그 계정 JWT는 이후 요청에서 401 `INVALID_CREDENTIALS`로 거부됩니다.
 - 마지막 남은 ADMIN은 삭제하거나 USER로 강등할 수 없습니다(409 `LAST_ADMIN_PROTECTED`). 자기 자신의 계정 삭제도 불가합니다(409 `SELF_DELETE_NOT_ALLOWED`).
