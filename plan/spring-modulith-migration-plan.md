@@ -1,6 +1,6 @@
 # Spring Modulith 기반 모듈형 모놀리스 전환 계획서
 
-- 상태: 구현 완료 — Phase 0~7 완료, Phase 8은 컨테이너·공개 조회 검증 완료 및 인증 ZIP smoke 미실행
+- 상태: 구현 완료 — Phase 0~8 완료, Phase 8의 격리 환경 인증 ZIP HTTP smoke까지 검증 완료 (PostgreSQL finalize 시나리오 (b)는 미커버)
 - 작성일: 2026-09-07
 - 최종 갱신: 2026-09-08
 - 대상: `back/` Spring Boot 백엔드
@@ -8,9 +8,9 @@
 - 현재 기술: Spring Boot 3.5.11, Java 25, JPA, PostgreSQL, Flyway
 - 목적: 하나의 애플리케이션을 유지하면서 업무 경계와 공개 계약을 명확히 하고, 경계 위반을 테스트로 검출한다.
 
-이 문서는 구현 결과와 검증 기록으로 갱신한 계획서다. Spring Modulith 의존성·패키지 경계·공개 계약·업로드 회귀 테스트가 로컬 작업 트리에 반영되었고, 엄격한 `ApplicationModules.verify()`가 통과했다. `auth` 패키지는 `identity`로 이름을 바꾸지 않고 `api`/`internal` 하위 패키지로 정리했다. 2026-09-08 최신 소스로 백엔드 이미지를 다시 빌드한 뒤 compose를 기동해 back/front health, front proxy의 8083 health와 게시글 목록 조회까지 확인했다. 인증이 필요한 실제 ZIP 업로드·다운로드 smoke는 테스트 데이터 변경을 피하기 위해 실행하지 않았다.
+이 문서는 구현 결과와 검증 기록으로 갱신한 계획서다. Spring Modulith 의존성·패키지 경계·공개 계약·업로드 회귀 테스트가 로컬 작업 트리에 반영되었고, 엄격한 `ApplicationModules.verify()`가 통과했다. `auth` 패키지는 `identity`로 이름을 바꾸지 않고 `api`/`internal` 하위 패키지로 정리했다. 2026-09-08 최신 소스로 백엔드 이미지를 다시 빌드한 뒤 compose를 기동해 back/front health, front proxy의 8083 health와 게시글 목록 조회를 확인했으며, 별도 격리 환경에서 실제 HTTP 로그인·ZIP 업로드·다운로드 smoke도 성공했다. 기존 서비스에 영향을 주지 않도록 격리 컨테이너·네트워크·볼륨은 검증 후 제거하고 원본 front 네트워크를 복원했다.
 
-이 문서의 완료 표시는 코드와 실제 검증 결과에만 근거한다. 확인하지 못한 PostgreSQL 시나리오나 HTTP upload smoke 결과를 성공으로 기록하지 않는다.
+이 문서의 완료 표시는 코드와 실제 검증 결과에만 근거한다. 확인하지 못한 PostgreSQL finalize 시나리오 (b)는 완료로 기록하지 않는다.
 
 ## 1. 추진 배경과 기대 효과
 
@@ -184,7 +184,7 @@ PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) �
 
 ## 7. Phase별 실행·중단·재개 계획
 
-각 Phase를 독립적으로 검토하고 중단할 수 있는 작업 단위로 관리한다. 구현과 주요 통합 검증은 완료되었고, 아래 상태는 실제 코드·테스트 결과와 실행하지 않은 인증 ZIP smoke를 구분한다.
+각 Phase를 독립적으로 검토하고 중단할 수 있는 작업 단위로 관리한다. 구현과 주요 통합 검증은 완료되었고, 아래 상태는 실제 코드·테스트 결과와 격리 환경에서 완료한 인증 ZIP smoke를 구분한다.
 
 ### 구현·검증 테스트
 
@@ -203,9 +203,9 @@ PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) �
 | 5 | 게시판 공개 API 도입 | 완료 | `board.api.upload` 공개 생성·정책 계약, `GeneratedAttachmentPolicyTest`, H2 회귀 및 PostgreSQL finalize 검증이 통과했다. |
 | 6 | 업로드 모듈 분리 | 완료 | `upload` 모듈이 세션·청크·복원·wire codec을 소유하고 `auth.api`/`board.api.upload`만 사용한다. |
 | 7 | 전체 경계 강제·문서화 | 완료 | `ApplicationModulesDiagnosticTest`가 일반 `clean test`에 포함되어 통과했고 관련 문서를 구현 결과에 맞게 갱신했다. |
-| 8 | 최종 통합 검증 | 부분 완료·인증 ZIP smoke 미실행 | 전체 백엔드·focused PostgreSQL·최신 이미지 기동·back/front health·8083 health·게시글 목록 조회는 통과했다. 인증이 필요한 실제 HTTP ZIP 업로드·다운로드는 데이터 변경을 피하기 위해 실행하지 않았다. |
+| 8 | 최종 통합 검증 | 완료·인증 ZIP HTTP smoke 성공 | 전체 백엔드·focused PostgreSQL·최신 이미지 기동·back/front health·8083 health·게시글 목록 조회와 격리 환경의 실제 HTTP 로그인·암호화 청크 1건·finalize·다운로드를 통과했다. `m2-llm-back:smoke`(`sha256:8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef`)와 `m2-llm-front:smoke`(`sha256:55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`)를 사용했다. |
 
-상태는 `미착수 / 진행 중 / 중단 / 차단 / 완료`로 기록한다. Phase 8은 테스트와 컨테이너 검증 완료, 인증 ZIP smoke 미실행을 구분해 부분 완료로 남긴다.
+상태는 `미착수 / 진행 중 / 중단 / 차단 / 완료`로 기록한다. Phase 8은 격리 환경의 인증 ZIP smoke까지 성공해 완료로 기록한다. PostgreSQL finalize 시나리오 (b)는 별도 미커버 항목으로 유지한다.
 
 ### Phase 0 — 환경·기준선 확보
 
@@ -221,9 +221,9 @@ PostgreSQL focused 검증은 이 경계를 다음과 같이 확인했다. (a) �
 - disposable PostgreSQL은 Docker 이미지 `postgres:1.0`으로 실행했고, 호스트 포트 `55432`에서 PostgreSQL 17.10으로 확인했다. 운영 문서의 stated production PostgreSQL 18과 다른 테스트 환경이다.
 - `LLM_TEST_POSTGRES_URL`을 지정하면 PostgreSQL 전용 테스트가 활성화되고, 지정하지 않으면 해당 테스트는 조건부로 건너뛴다. 테스트는 전용 무작위 schema와 격리된 임시 파일 저장소를 사용한다.
 - 최신 소스로 `llm-back:1.0`을 다시 빌드하고 compose를 기동했다. `llm-back`·`llm-front`가 healthy이며 `http://127.0.0.1:8083/api/v1/health`가 `status=UP`을 반환했고, `GET /api/v1/posts?page=1` 목록 조회도 성공했다.
-- 인증이 필요한 실제 HTTP ZIP 업로드·다운로드는 테스트 데이터 변경을 피하기 위해 실행하지 않았다.
+- 후속 격리 환경에서 `m2-llm-back:smoke` sha256 `8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef`와 `m2-llm-front:smoke` sha256 `55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`로 실제 HTTP 로그인·AES-GCM alias 세션·암호화 청크 1건·finalize·다운로드를 성공했다. PostgreSQL 17, database `llm_m2_smoke`, schema `llm`, Flyway V1~V18이 모두 성공했고, 원본·다운로드 ZIP SHA-256과 바이트가 일치했다.
 
-**중단 지점:** 테스트와 컨테이너 health·공개 조회 결과 및 인증 ZIP smoke 미실행을 기록한 상태. 비밀번호·토큰·secret은 기록하지 않는다.
+**최종 기록:** 테스트·컨테이너 health·공개 조회·인증 ZIP smoke 결과를 모두 기록했다. 비밀번호·토큰·secret은 기록하지 않는다.
 
 ### Phase 1 — 회귀 테스트 선행 작성
 
@@ -269,9 +269,9 @@ Spring Boot 3.5.11·Java 25에 맞춰 Spring Modulith BOM `1.4.13`, `spring-modu
 
 ### Phase 8 — 최종 통합 검증
 
-**상태: 부분 완료 — 인증 ZIP smoke 미실행**
+**상태: 완료 — 인증 ZIP HTTP smoke 성공**
 
-전체 H2 backend test와 별도 disposable PostgreSQL migration/finalize 검증을 완료했다. 최신 소스로 `llm-back:1.0` 이미지를 다시 빌드하고 compose를 기동했으며, `llm-back`·`llm-front` health, `127.0.0.1:8083/api/v1/health`의 `status=UP`, `GET /api/v1/posts?page=1` 목록 조회를 확인했다. 인증이 필요한 실제 HTTP ZIP 업로드·다운로드 smoke는 테스트 데이터 변경을 피하기 위해 실행하지 않았다. 이 제한은 코드·테스트·컨테이너 health 검증과 구분한다.
+전체 H2 backend test와 별도 disposable PostgreSQL migration/finalize 검증을 완료했다. 기존 compose의 `llm-back`·`llm-front` health, `127.0.0.1:8083/api/v1/health`의 `status=UP`, `GET /api/v1/posts?page=1` 목록 조회를 확인했다. 추가로 격리 네트워크에서 `m2-llm-back:smoke`(`sha256:8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef`)와 `m2-llm-front:smoke`(`sha256:55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`)를 사용해 front proxy `18083` 경유 실제 HTTP 로그인과 `upload_zip_post.py` 실행을 검증했다. AES-GCM alias 세션 생성, 암호화 청크 1건 전송, finalize가 exit 0으로 성공했고, 생성 결과는 `post id=1`, `FILE_CONVERSION_REQUEST`, `conversionReady=true`, `authorUserId=2`, 첨부 `/api/v1/posts/1/attachments/1`이었다. 원본·다운로드 ZIP SHA-256은 각각 `a7a184d93123d7f52442f8bd6b4897f3665cc8f00cbc7aa647699b48279f2904`로 일치했고, 바이트 비교 및 다운로드 HTTP 200/application/zip 길이 일치도 통과했다. PostgreSQL `17` 이미지의 격리 database `llm_m2_smoke`, schema `llm`에서 Flyway V1~V18이 모두 성공했다. 검증 후 격리 컨테이너·네트워크·볼륨을 제거하고 원본 front 네트워크를 복원했으며, 기존 `llm-front`·`llm-back`·PostgreSQL에는 영향을 주지 않았다.
 
 ### 중단·재개 운영 규칙
 
@@ -294,9 +294,9 @@ Spring Boot 3.5.11·Java 25에 맞춰 Spring Modulith BOM `1.4.13`, `spring-modu
 ```text
 기록 일시: 2026-09-08
 승인 범위: Spring Modulith 구현 결과와 문서 상태 갱신
-구현 상태: Phase 0~7 완료; Phase 8은 인증 ZIP smoke만 미실행
-현재 Phase: 8 (백엔드·PostgreSQL·컨테이너 health·공개 목록 조회 완료)
-마지막 완료 Phase: 7
+구현 상태: Phase 0~8 완료; PostgreSQL finalize 시나리오 (b)는 미커버
+현재 Phase: 8 (백엔드·PostgreSQL·컨테이너 health·공개 목록 조회·인증 ZIP HTTP smoke 완료)
+마지막 완료 Phase: 8
 기준 커밋/브랜치: main / 구현 변경은 작업 트리에 존재하며 이번 요청은 문서만 수정
 이번 작업 파일: plan/spring-modulith-migration-plan.md 및 관련 docs/*.md
 구조 구현: Spring Modulith BOM 1.4.13; auth 이름 유지(auth.api/auth.internal); board.api.upload 계약; upload 모듈; root GlobalExceptionHandler
@@ -305,10 +305,11 @@ Spring Boot 3.5.11·Java 25에 맞춰 Spring Modulith BOM `1.4.13`, `spring-modu
 PostgreSQL focused: `PostgresMigrationTest` 1/1 통과, `PostgresUploadFinalizeTest` 2/2 통과; disposable Docker image postgres:1.0, PostgreSQL 17.10, localhost port 55432
 PostgreSQL 범위: migration V1~V18 및 Hibernate validate, finalize 시나리오 (a) 본문 flush 이후 실패와 (c) 실제 commit 단계 지연 삭제 실패 통과; (b) 명시적 session/part 삭제 flush 뒤 본문 실패는 미커버
 컨테이너 검증: 최신 `llm-back:1.0` 이미지 재빌드·compose 기동, `llm-back`·`llm-front` healthy, 8083 health `status=UP`, `GET /api/v1/posts?page=1` 성공
-인증 smoke: 실제 HTTP ZIP 업로드·다운로드는 테스트 데이터 변경을 피하기 위해 미실행
-DB/스키마: 이번 refactor에서 Flyway V1~V18 및 schema 변경 없음
-다음 작업: 별도 테스트 데이터/격리 DB를 준비하면 인증 ZIP 업로드·다운로드 smoke를 수행할 수 있음
-미확정 사항: 인증 ZIP smoke와 PostgreSQL finalize 시나리오 (b)는 미검증
+인증 smoke: 격리 환경에서 `m2-llm-back:smoke` sha256 `8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef` 및 `m2-llm-front:smoke` sha256 `55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`로 실제 HTTP 로그인·AES-GCM alias 세션·암호화 청크 1건·finalize·다운로드 성공
+인증 smoke 결과: post id=1, mode FILE_CONVERSION_REQUEST, conversionReady=true, authorUserId=2, 첨부 `/api/v1/posts/1/attachments/1`; 원본·다운로드 SHA-256 `a7a184d93123d7f52442f8bd6b4897f3665cc8f00cbc7aa647699b48279f2904` 일치, 바이트·HTTP 200/application/zip 길이 비교 통과
+DB/스키마: PostgreSQL 17 이미지, database `llm_m2_smoke`, schema `llm`, Flyway V1~V18 모두 success; 이번 refactor에서 운영 Flyway/schema 변경 없음
+정리: 격리 컨테이너·네트워크·볼륨 제거 및 원본 front 네트워크 복원, `upload_sessions=0`, `upload_session_parts=0`, 세션 임시 volume empty, 영구 첨부 volume에 ZIP 존재; 기존 서비스 영향 없음
+미확정 사항: PostgreSQL finalize 시나리오 (b)는 미검증
 ```
 
 
@@ -333,7 +334,9 @@ DB/스키마: 이번 refactor에서 Flyway V1~V18 및 schema 변경 없음
 - PostgreSQL focused: `PostgresMigrationTest` **1/1**, `PostgresUploadFinalizeTest` **2/2** 통과.
 - PostgreSQL focused 환경: disposable Docker image `postgres:1.0`, PostgreSQL **17.10**, localhost port **55432**. stated production PostgreSQL 18과 구분한다.
 - finalize 범위: 시나리오 (a) 본문 flush 이후 실패와 (c) 실제 commit 단계 지연 삭제 실패 통과. 시나리오 (b) 명시적 session/part 삭제 flush 뒤 본문 실패는 production-only flush hook을 추가하지 않아 미커버.
-- 컨테이너 통합: 최신 `llm-back:1.0` 이미지 재빌드 후 compose를 기동했고 `llm-back`·`llm-front`가 healthy였다. `127.0.0.1:8083/api/v1/health`는 `status=UP`을 반환했고 `GET /api/v1/posts?page=1` 목록 조회가 성공했다. 인증이 필요한 HTTP upload/download smoke는 실행하지 않았다.
+- 컨테이너 통합: 최신 `llm-back:1.0` 이미지 재빌드 후 compose를 기동했고 `llm-back`·`llm-front`가 healthy였다. `127.0.0.1:8083/api/v1/health`는 `status=UP`을 반환했고 `GET /api/v1/posts?page=1` 목록 조회가 성공했다.
+- 인증 ZIP HTTP smoke: 격리 네트워크의 back `18080`·front proxy `18083`에서 실제 로그인, `upload_zip_post.py` exit 0, AES-GCM alias 세션·암호화 청크 1건·finalize·다운로드를 성공했다. 이미지 `m2-llm-back:smoke` sha256 `8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef`, `m2-llm-front:smoke` sha256 `55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`; PostgreSQL 17, database `llm_m2_smoke`, schema `llm`, Flyway V1~V18 success. 결과 게시글은 id 1, `FILE_CONVERSION_REQUEST`, `conversionReady=true`, `authorUserId=2`, 첨부 URL `/api/v1/posts/1/attachments/1`; 원본·다운로드 SHA-256 `a7a184d93123d7f52442f8bd6b4897f3665cc8f00cbc7aa647699b48279f2904` 일치 및 바이트 비교 통과.
+- smoke 정리: `posts=1`, `post_attachments=1`, `upload_sessions=0`, `upload_session_parts=0`, 세션 임시 volume empty, 영구 첨부 volume에 ZIP 존재. 격리 컨테이너·네트워크·볼륨 제거 후 원본 front 네트워크를 복원했으며 기존 서비스 영향은 없었다.
 
 
 
@@ -466,16 +469,15 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 - [ ] `PostgreSQL` finalize의 모든 계획 시나리오가 검증되었다 — (a)/(c)는 통과했지만 (b) 명시적 삭제 flush 뒤 본문 실패는 미커버다.
 - [x] PostgreSQL migration/finalize focused 검증 결과와 H2/full test 결과가 구분되어 기록되었다.
 - [x] 문자열에 포함된 이전 패키지 경로를 점검하고 JPQL·게시글 목록 조회를 회귀 테스트로 실행했다.
-- [ ] 전체 백엔드 테스트와 인증 ZIP HTTP smoke까지 모두 기록되었다 — backend 테스트·compose 기동·컨테이너 health·8083 health·공개 목록 조회는 기록했지만 인증 ZIP upload/download는 실행하지 않았다.
+- [x] 전체 백엔드 테스트와 인증 ZIP HTTP smoke까지 모두 기록되었다 — 격리 환경에서 이미지 식별자, PostgreSQL 17/`llm_m2_smoke`/`llm` 및 Flyway V1~V18 성공, 실제 로그인·암호화 청크·finalize·다운로드, SHA-256/바이트 일치와 세션·part·임시 volume 정리를 확인했다.
 - [x] API·환경 변수·DB 스키마 변경 없이 목표를 달성했다. 이번 refactor는 Flyway V1~V18과 schema를 변경하지 않았다.
 - [x] 실제 모듈 구조와 관련 개발 안내가 갱신되었다.
 
 ## 구현 후 남은 확인 사항
 
-1. 격리된 테스트 데이터와 DB를 준비할 수 있을 때 인증 ZIP 업로드·다운로드 HTTP smoke를 수행한다.
-2. 필요성이 확인되면 명시적 세션·part 삭제 flush 뒤 본문 실패인 PostgreSQL 시나리오 (b)를 별도 test seam으로 검토한다.
+1. 필요성이 확인되면 명시적 세션·part 삭제 flush 뒤 본문 실패인 PostgreSQL 시나리오 (b)를 별도 test seam으로 검토한다.
 
-그 외의 구현 설계 항목은 실제 코드와 테스트로 확정했다. 이 문서는 확인되지 않은 시나리오를 완료로 표시하지 않는다.
+그 외의 구현 설계 항목과 인증 ZIP HTTP smoke는 실제 코드와 격리 환경 검증으로 확정했다. 이 문서는 확인되지 않은 시나리오 (b)를 완료로 표시하지 않는다.
 
 ## 13. 참고 자료
 

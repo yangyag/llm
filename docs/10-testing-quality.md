@@ -23,7 +23,7 @@ npm run typecheck
 npm run build
 ```
 
-통합 명령은 compose 스택과 외부 PostgreSQL이 준비된 환경에서 실행합니다. 2026-09-08 최신 `llm-back:1.0` 이미지로 compose를 기동해 `llm-back`·`llm-front` health, 8083 health, 공개 게시글 목록 조회를 확인했습니다. 테스트 데이터 변경을 피하기 위해 인증이 필요한 실제 HTTP ZIP upload/download smoke는 실행하지 않았습니다.
+통합 명령은 compose 스택과 외부 PostgreSQL이 준비된 환경에서 실행합니다. 2026-09-08 최신 `llm-back:1.0` 이미지로 compose를 기동해 `llm-back`·`llm-front` health, 8083 health, 공개 게시글 목록 조회를 확인했고, 별도 격리 환경에서 실제 인증 ZIP HTTP upload/download smoke도 성공했습니다. smoke는 `m2-llm-back:smoke` sha256 `8572eaceed6e2df0b9211d3bfdb47e67a7bfbe9ea644d570a2152086ac2d68ef` 및 `m2-llm-front:smoke` sha256 `55f49492d323754df8972a4a6177771a16290154c75d68cc4f8e1e521ad61582`를 사용했습니다. PostgreSQL 17, database `llm_m2_smoke`, schema `llm`, Flyway V1~V18이 모두 성공했고, 검증 후 격리 자원을 제거하고 원본 front 네트워크를 복원했습니다.
 
 ## 백엔드 테스트 구성
 
@@ -91,7 +91,7 @@ Remove-Item Env:LLM_TEST_POSTGRES_URL
 
 ## 수동 smoke test
 
-아래 절차는 compose 스택이 실행 중이고 외부 PostgreSQL이 준비된 환경에서 수행합니다. 2026-09-08에는 최신 백엔드 이미지로 compose 기동, 컨테이너 health, 8083 health와 공개 게시글 목록 조회까지 확인했습니다. 인증이 필요한 실제 ZIP upload/download smoke는 테스트 데이터 변경을 피하기 위해 실행하지 않았습니다.
+아래 절차는 compose 스택이 실행 중이고 외부 PostgreSQL이 준비된 환경에서 수행합니다. 2026-09-08에는 최신 백엔드 이미지로 compose 기동, 컨테이너 health, 8083 health와 공개 게시글 목록 조회를 확인했습니다. 이어 격리 네트워크(back 18080, front proxy 18083)에서 실제 HTTP 로그인과 `upload_zip_post.py`의 AES-GCM alias 세션 생성, 암호화 청크 1건, finalize, 다운로드를 성공했습니다. `upload_zip_post.py`는 exit 0이었고, 결과 게시글은 `FILE_CONVERSION_REQUEST`, `conversionReady=true`, `authorUserId=2`, 첨부 `/api/v1/posts/1/attachments/1`이었습니다. 원본·다운로드 ZIP SHA-256 `a7a184d93123d7f52442f8bd6b4897f3665cc8f00cbc7aa647699b48279f2904`가 일치하고 바이트 비교 및 다운로드 HTTP 200/application/zip 길이 비교가 통과했습니다. 정리 후 `upload_sessions=0`, `upload_session_parts=0`, 세션 임시 volume empty, 영구 첨부 volume에 ZIP이 남았습니다.
 
 1. `docker compose up -d --wait`
 2. `http://localhost:8083` 접속
