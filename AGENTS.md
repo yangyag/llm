@@ -48,7 +48,7 @@
 - 게시글/댓글 본문은 `bodyBase64`(UTF-8→Base64, 보안 아님). 생성/수정은 `multipart/form-data`.
 - 운영에서 `docker compose down -v` / 무분별한 volume·prune 금지 (첨부 데이터 손실). 수동 compose는 `LLM_ENV_FILE=/home/ubuntu/llm/.env`를 설정하고 `--project-name ubuntu --env-file .env -f docker-compose.yml`을 명시.
 - 로컬 `.env`의 `LLM_FRONT_IMAGE`/`LLM_BACK_IMAGE`는 `llm-front:1.0`/`llm-back:1.0`(compose 기본값) 유지. 다른 태그로 이탈하면 규약대로 빌드한 이미지가 컨테이너에 안 붙음(2026-09-04 확인). 의심되면 `docker compose config`의 해석 image와 `docker inspect --format '{{.Config.Image}}' llm-front llm-back`을 대조.
-- 빌드/배포: Hub를 쓰지 않는다. Windows에서 이미지 빌드 → `docker save` tar → EC2 `~/llm/` scp → `docker load` → compose up. 프론트 `.\aws\deploy-front.ps1` (`llm-front:1.0`, `mem_limit: 64m`), 백엔드 `.\aws\deploy-back.ps1` (`llm-back:1.0`). 둘 다 `pull_policy: never`. EC2에서 소스 빌드하지 않는다.
+- 빌드/배포: Hub를 쓰지 않는다. Windows에서 이미지 빌드 → 저장소 `docker/` 폴더에 `docker save` tar 생성 → EC2 `~/llm/` scp → `docker load` → compose up. 프론트 `.\aws\deploy-front.ps1` (`llm-front:1.0`, `mem_limit: 64m`), 백엔드 `.\aws\deploy-back.ps1` (`llm-back:1.0`). 둘 다 `pull_policy: never`. EC2에서 소스 빌드하지 않는다.
 
 
 ## README에서 이관한 개발·운영 안내
@@ -185,8 +185,8 @@ docker compose up -d --wait
 EC2 배포도 루트 [`docker-compose.yml`](docker-compose.yml) 하나를 사용합니다. 운영 파일은 EC2의 `/home/ubuntu/llm` 아래에서 관리하고, 환경값은 `/home/ubuntu/llm/.env`에 둡니다. 시작점은 저장소의 `.env.example`입니다.
 
 사용 이미지:
-- `llm-front:1.0` (Windows에서 빌드 후 tar로 EC2 `docker load`. Hub 없음)
-- `llm-back:1.0` (Windows에서 빌드 후 tar로 EC2 `docker load`. Hub 없음)
+- `llm-front:1.0` (Windows에서 빌드 후 `docker/` 폴더에 tar 저장, EC2 `docker load`. Hub 없음)
+- `llm-back:1.0` (Windows에서 빌드 후 `docker/` 폴더에 tar 저장, EC2 `docker load`. Hub 없음)
 
 준비 절차:
 
@@ -232,7 +232,7 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 - `git commit` 메시지는 한글로 작성합니다.
 
 #### 배포
-- Docker Hub를 쓰지 않습니다. Windows에서 이미지를 만들고 tar로 EC2에 `docker load`합니다.
+- Docker Hub를 쓰지 않습니다. Windows에서 이미지를 만들고 저장소 `docker/` 폴더에 tar를 저장한 뒤 EC2에 `docker load`합니다.
 - 프론트: `.\aws\deploy-front.ps1` (`llm-front:1.0`)
 - 백엔드: `.\aws\deploy-back.ps1` (`llm-back:1.0`)
 
