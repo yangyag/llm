@@ -3,6 +3,10 @@ package com.llm.app.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assertions.assertTimeout;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 
 import com.llm.app.LlmApplication;
 import com.llm.app.auth.api.UserRole;
@@ -45,6 +49,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -54,10 +59,6 @@ import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * Finalize transaction boundaries against a disposable localhost PostgreSQL only.
- *
- * Scenario (b), a body failure after an explicit session/part deletion flush, is intentionally not covered:
- * adding a production-only flush hook solely for that injection point would make the test seam invasive. The
- * deferred delete constraint in scenario (c) verifies the corresponding commit-time rollback boundary.
  */
 @EnabledIfEnvironmentVariable(named = "LLM_TEST_POSTGRES_URL", matches = "jdbc:postgresql://127\\.0\\.0\\.1:[0-9]+/postgres")
 @SpringBootTest(
@@ -84,6 +85,7 @@ class PostgresUploadFinalizeTest {
     private static final byte[] ZIP_BYTES = "PK-postgres-upload-fixture".getBytes(StandardCharsets.UTF_8);
     private static final Duration DATABASE_OPERATION_TIMEOUT = Duration.ofSeconds(5);
     private static final String INJECTED_FAILURE = "injected board creator failure";
+    private static final String DELETE_FLUSH_FAILURE = "injected session delete flush failure";
     private static final String DEFERRED_FAILURE = "deferred upload session delete rejection";
     private static final String TRIGGER_NAME = "reject_upload_session_delete";
     private static final String FUNCTION_NAME = "reject_upload_session_delete";
@@ -110,7 +112,13 @@ class PostgresUploadFinalizeTest {
     private UploadSessionPartRepository parts;
 
     @Autowired
+    private EntityManager entityManager;
+
+    @Autowired
     private UploadSessionService uploadSessionService;
+
+    @Autowired
+    private DeleteFailureControl deleteFailureControl;
 
     @Autowired
     private TestUploadedPostCreator uploadedPostCreator;
@@ -129,6 +137,7 @@ class PostgresUploadFinalizeTest {
     @BeforeEach
     void setUp() {
         uploadedPostCreator.reset();
+        deleteFailureControl.reset();
         deleteRows();
         deleteRecursively(DATA_ROOT);
     }
@@ -136,6 +145,7 @@ class PostgresUploadFinalizeTest {
     @AfterEach
     void tearDown() {
         uploadedPostCreator.reset();
+        deleteFailureControl.reset();
         deleteRows();
         deleteRecursively(DATA_ROOT);
     }
@@ -150,6 +160,43 @@ class PostgresUploadFinalizeTest {
         } finally {
             deleteRecursively(DATA_ROOT);
         }
+    }
+
+    @Test
+    @Timeout(value = 20, unit = TimeUnit.SECONDS)
+    void bodyFailureAfterSessionAndPartDeleteFlushPreservesOriginalFailureAndLeavesRetryableSession() throws Exception {
+        Long userId = saveUser("upload_delete_flush_" + UUID.randomUUID()).getId();
+        UUID sessionId = createUploadedSession(userId, "delete-flush-failure.zip");
+        UploadSessionPart originalPart = parts.findBySession_IdAndChunkNumber(sessionId, 1).orElseThrow();
+        Path originalChunk = DATA_ROOT.resolve("sessions").resolve(originalPart.getStoragePath());
+        assertThat(Files.readAllBytes(originalChunk)).containsExactly(ZIP_BYTES);
+
+        deleteFailureControl.failAfterSessionDeleteFlush();
+        Throwable failure = catchThrowable(() -> assertTimeout(
+            DATABASE_OPERATION_TIMEOUT,
+            () -> uploadSessionService.finalizeSession(userId, sessionId)
+        ));
+
+        assertThat(deleteFailureControl.observed()).withFailMessage("failure=%s", failure).isTrue();
+        assertThat(failure).isInstanceOf(IllegalStateException.class)
+            .hasMessage(DELETE_FLUSH_FAILURE);
+        assertThat(posts.count()).isZero();
+        assertThat(attachments.count()).isZero();
+        assertThat(attachmentFileDeletions.count()).isZero();
+        assertThat(listFiles(DATA_ROOT.resolve("attachments"))).isEmpty();
+        assertThat(uploadedPostCreator.lastAssembledPath()).isNotNull();
+        assertThat(uploadedPostCreator.lastAssembledPath()).doesNotExist();
+        assertThat(sessions.findById(sessionId).orElseThrow().getStatus()).isEqualTo(UploadSessionStatus.FAILED);
+        assertThat(parts.findBySession_IdOrderByChunkNumberAsc(sessionId)).hasSize(1);
+        assertThat(Files.exists(originalChunk)).isTrue();
+        assertThat(Files.readAllBytes(originalChunk)).containsExactly(ZIP_BYTES);
+        assertThat(assembledFiles(sessionId)).isEmpty();
+
+        assertThat(catchThrowable(() -> assertTimeout(
+            DATABASE_OPERATION_TIMEOUT,
+            () -> uploadSessionService.getSession(userId, sessionId)
+        ))).isNull();
+        assertThat(sessions.findById(sessionId).orElseThrow().getStatus()).isEqualTo(UploadSessionStatus.FAILED);
     }
 
     @Test
@@ -352,6 +399,62 @@ class PostgresUploadFinalizeTest {
         @Primary
         TestUploadedPostCreator uploadedPostCreator(BoardUploadedPostCreator delegate, EntityManager entityManager) {
             return new TestUploadedPostCreator(delegate, entityManager);
+        }
+
+        @Bean
+        DeleteFailureControl deleteFailureControl(
+            @Qualifier("uploadSessionRepository") UploadSessionRepository uploadSessionRepository,
+            EntityManager entityManager
+        ) {
+            return new DeleteFailureControl(uploadSessionRepository, entityManager);
+        }
+
+        @Bean
+        @Primary
+        UploadSessionRepository uploadSessionRepositoryDecorator(DeleteFailureControl control) {
+            return control.repository();
+        }
+    }
+
+    static class DeleteFailureControl {
+        private final UploadSessionRepository delegate;
+        private final EntityManager entityManager;
+        private volatile boolean observed;
+        private final UploadSessionRepository repository;
+
+        DeleteFailureControl(UploadSessionRepository delegate, EntityManager entityManager) {
+            this.delegate = delegate;
+            this.entityManager = entityManager;
+            this.repository = mock(UploadSessionRepository.class, delegatesTo(delegate));
+        }
+
+        UploadSessionRepository repository() {
+            return repository;
+        }
+
+        void failAfterSessionDeleteFlush() {
+            doAnswer(invocation -> {
+                delegate.delete(invocation.getArgument(0));
+                entityManager.flush();
+                UploadSession session = invocation.getArgument(0);
+                long remainingSessions = ((Number) entityManager.createNativeQuery(
+                    "select count(*) from " + quoteIdentifier(SCHEMA) + ".upload_sessions where id = :id"
+                ).setParameter("id", session.getId()).getSingleResult()).longValue();
+                long remainingParts = ((Number) entityManager.createNativeQuery(
+                    "select count(*) from " + quoteIdentifier(SCHEMA) + ".upload_session_parts where session_id = :id"
+                ).setParameter("id", session.getId()).getSingleResult()).longValue();
+                observed = remainingSessions == 0 && remainingParts == 0;
+                throw new IllegalStateException(DELETE_FLUSH_FAILURE);
+            }).when(repository).delete(any(UploadSession.class));
+        }
+
+        boolean observed() {
+            return observed;
+        }
+
+        void reset() {
+            observed = false;
+            org.mockito.Mockito.reset(repository);
         }
     }
 
