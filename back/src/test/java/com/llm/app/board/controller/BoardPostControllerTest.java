@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -24,6 +25,7 @@ import com.llm.app.board.ai.AiReplyGenerator;
 import com.llm.app.upload.dto.CreateUploadSessionRequest;
 import com.llm.app.upload.dto.UploadSessionStatusResponse;
 import com.llm.app.board.model.BoardAttachment;
+import com.llm.app.board.model.BoardAttachmentKind;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardPostMode;
 import com.llm.app.board.model.BoardReply;
@@ -140,6 +142,8 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.mode").value("NORMAL"))
 			.andExpect(jsonPath("$.authorUsername").value("admin"))
 			.andExpect(jsonPath("$.conversionReady").value(false))
+			.andExpect(jsonPath("$.bodyFormat").value("PLAIN_TEXT"))
+			.andExpect(jsonPath("$.bodyDocument").value(nullValue()))
 			.andExpect(jsonPath("$.attachments", hasSize(0)))
 			.andReturn();
 
@@ -178,7 +182,9 @@ class BoardPostControllerTest {
 				.param("bodyBase64", encode("수정된 본문")))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.title").value("수정된 글"))
-			.andExpect(jsonPath("$.body").value("수정된 본문"));
+			.andExpect(jsonPath("$.body").value("수정된 본문"))
+			.andExpect(jsonPath("$.bodyFormat").value("PLAIN_TEXT"))
+			.andExpect(jsonPath("$.bodyDocument").value(nullValue()));
 
 		mockMvc.perform(put("/api/v1/posts/replies/{id}", replyId)
 				.header("Authorization", "Bearer " + token)
@@ -228,6 +234,9 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.attachments", hasSize(2)))
 			.andExpect(jsonPath("$.attachments[0].originalFilename").value("guide.txt"))
 			.andExpect(jsonPath("$.attachments[1].originalFilename").value("notes.txt"))
+			.andExpect(jsonPath("$.attachments[0].attachmentKind").value("DOWNLOAD"))
+			.andExpect(jsonPath("$.attachments[0].inlineKey").value(nullValue()))
+			.andExpect(jsonPath("$.attachments[0].contentUrl").value(nullValue()))
 			.andReturn();
 
 		long postId = extractId(createResult.getResponse().getContentAsString());
@@ -237,6 +246,9 @@ class BoardPostControllerTest {
 		assertThat(firstDownloadUrl).isEqualTo("/api/v1/posts/" + postId + "/attachments/" + firstAttachmentId);
 
 		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).hasSize(2);
+		BoardAttachment firstAttachmentEntity = boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId).get(0);
+		assertThat(firstAttachmentEntity.getAttachmentKind()).isEqualTo(BoardAttachmentKind.DOWNLOAD);
+		assertThat(firstAttachmentEntity.getInlineKey()).isNull();
 
 		mockMvc.perform(get("/api/v1/posts"))
 			.andExpect(status().isOk())

@@ -1,12 +1,16 @@
 package com.llm.app.upload.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 public record UploadedPostResponse(
     Long id,
     String title,
     String body,
+    String bodyFormat,
+    JsonNode bodyDocument,
     String mode,
     boolean conversionReady,
     String authorUsername,
@@ -26,7 +30,10 @@ public record UploadedPostResponse(
         String originalFilename,
         long size,
         String contentType,
-        String downloadUrl
+        String attachmentKind,
+        UUID inlineKey,
+        String downloadUrl,
+        String contentUrl
     ) {
     }
 

@@ -2,6 +2,8 @@ package com.llm.app.board.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -10,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "post_attachments")
@@ -33,6 +36,13 @@ public class BoardAttachment {
 
 	@Column(name = "content_type", length = 255)
 	private String contentType;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "attachment_kind", nullable = false, length = 30)
+	private BoardAttachmentKind attachmentKind = BoardAttachmentKind.DOWNLOAD;
+
+	@Column(name = "inline_key")
+	private UUID inlineKey;
 
 	@Column(nullable = false)
 	private long size;
@@ -79,6 +89,14 @@ public class BoardAttachment {
 
 	public String getContentType() {
 		return contentType;
+	}
+
+	public BoardAttachmentKind getAttachmentKind() {
+		return attachmentKind;
+	}
+
+	public UUID getInlineKey() {
+		return inlineKey;
 	}
 
 	public long getSize() {

@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -190,6 +191,11 @@ class UploadSessionControllerTest {
 			.andExpect(jsonPath("$.authorUsername").value("admin"))
 			.andExpect(jsonPath("$.attachments", hasSize(1)))
 			.andExpect(jsonPath("$.attachments[0].originalFilename").value("bundle.zip"))
+			.andExpect(jsonPath("$.attachments[0].attachmentKind").value("DOWNLOAD"))
+			.andExpect(jsonPath("$.attachments[0].inlineKey").value(nullValue()))
+			.andExpect(jsonPath("$.attachments[0].contentUrl").value(nullValue()))
+			.andExpect(jsonPath("$.bodyFormat").value("PLAIN_TEXT"))
+			.andExpect(jsonPath("$.bodyDocument").value(nullValue()))
 			.andExpect(jsonPath("$.title").value("[bundle.zip] 업로드 완료"))
 			.andExpect(jsonPath("$.body").value(containsString("SHA-256 검증: 성공")))
 			.andReturn();

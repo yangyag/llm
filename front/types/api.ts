@@ -6,6 +6,9 @@ export type AiProvider = "GPT" | "CLAUDE" | "GROK";
 
 export type PostMode = "NORMAL" | "FILE_CONVERSION_REQUEST";
 
+export type PostBodyFormat = "PLAIN_TEXT" | "TIPTAP_JSON";
+export type AttachmentKind = "DOWNLOAD" | "INLINE_IMAGE";
+
 /** 사용자 레벨. ADMIN은 사용자 관리 가능, USER는 게시판 쓰기만 가능. */
 export type UserRole = "ADMIN" | "USER";
 
@@ -32,7 +35,10 @@ export interface Attachment {
   originalFilename: string;
   size: number;
   contentType: string;
+  attachmentKind: AttachmentKind;
+  inlineKey: string | null;
   downloadUrl: string;
+  contentUrl: string | null;
 }
 
 export interface Reply {
@@ -72,6 +78,8 @@ export interface PostSummary extends Post {
 /** GET /posts/{id} 상세 */
 export interface PostDetail extends Post {
   body: string;
+  bodyFormat: PostBodyFormat;
+  bodyDocument: unknown | null;
   updatedAt: string;
   attachments: Attachment[];
   replies: Reply[];

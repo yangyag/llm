@@ -6,6 +6,7 @@ import com.llm.app.board.dto.BoardPostSummaryDto;
 import com.llm.app.board.dto.BoardReplyDto;
 import com.llm.app.board.dto.BoardAttachmentDto;
 import com.llm.app.board.model.BoardAttachment;
+import com.llm.app.board.model.BoardAttachmentKind;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardReply;
 import com.llm.app.board.repository.BoardPostSummaryProjection;
@@ -53,6 +54,8 @@ public class BoardMapper {
 			post.getId(),
 			post.getTitle(),
 			post.getBody(),
+			post.getBodyFormat(),
+			null,
 			post.getMode(),
 			post.getMode() == com.llm.app.board.model.BoardPostMode.FILE_CONVERSION_REQUEST && !safeAttachments.isEmpty(),
 			post.getAuthorUsername(),
@@ -65,12 +68,16 @@ public class BoardMapper {
 	}
 
 	private BoardAttachmentDto toAttachmentDto(Long postId, BoardAttachment attachment) {
+		String downloadUrl = "/api/v1/posts/" + postId + "/attachments/" + attachment.getId();
 		return new BoardAttachmentDto(
 			attachment.getId(),
 			attachment.getOriginalFilename(),
 			attachment.getSize(),
 			attachment.getContentType(),
-			"/api/v1/posts/" + postId + "/attachments/" + attachment.getId()
+			attachment.getAttachmentKind(),
+			attachment.getInlineKey(),
+			downloadUrl,
+			attachment.getAttachmentKind() == BoardAttachmentKind.INLINE_IMAGE ? downloadUrl + "/content" : null
 		);
 	}
 

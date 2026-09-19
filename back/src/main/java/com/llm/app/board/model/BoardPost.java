@@ -30,6 +30,13 @@ public class BoardPost {
 	private String body;
 
 	@Enumerated(EnumType.STRING)
+	@Column(name = "body_format", nullable = false, length = 30)
+	private PostBodyFormat bodyFormat = PostBodyFormat.PLAIN_TEXT;
+
+	@Column(name = "body_document", columnDefinition = "text")
+	private String bodyDocument;
+
+	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 40)
 	private BoardPostMode mode;
 
@@ -91,6 +98,14 @@ public class BoardPost {
 		return body;
 	}
 
+	public PostBodyFormat getBodyFormat() {
+		return bodyFormat;
+	}
+
+	public String getBodyDocument() {
+		return bodyDocument;
+	}
+
 	public BoardPostMode getMode() {
 		return mode;
 	}
@@ -114,6 +129,8 @@ public class BoardPost {
 	public void update(String title, String body, BoardPostMode mode, Instant updatedAt) {
 		this.title = title;
 		this.body = body;
+		this.bodyFormat = PostBodyFormat.PLAIN_TEXT;
+		this.bodyDocument = null;
 		this.mode = mode;
 		this.updatedAt = updatedAt;
 	}

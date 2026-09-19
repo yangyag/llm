@@ -14,7 +14,10 @@ public class UploadedPostResultMapper {
                 attachment.originalFilename(),
                 attachment.size(),
                 attachment.contentType(),
-                "/api/v1/posts/" + result.id() + "/attachments/" + attachment.id()
+                "DOWNLOAD",
+                null,
+                "/api/v1/posts/" + result.id() + "/attachments/" + attachment.id(),
+                null
             ))
             .toList();
         List<UploadedPostResponse.Reply> replies = result.replies().stream()
@@ -35,6 +38,8 @@ public class UploadedPostResultMapper {
             result.id(),
             result.title(),
             result.body(),
+            "PLAIN_TEXT",
+            null,
             result.mode(),
             result.conversionReady(),
             result.authorUsername(),
