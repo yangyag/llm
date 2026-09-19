@@ -16,6 +16,12 @@ import java.util.List;
 
 @Component
 public class BoardMapper {
+	private final BoardRichDocumentCodec richDocumentCodec;
+
+	public BoardMapper(BoardRichDocumentCodec richDocumentCodec) {
+		this.richDocumentCodec = richDocumentCodec;
+	}
+
 	public BoardPostListResponse toListResponse(Page<BoardPostSummaryProjection> posts) {
 		return new BoardPostListResponse(
 			posts.stream()
@@ -55,7 +61,7 @@ public class BoardMapper {
 			post.getTitle(),
 			post.getBody(),
 			post.getBodyFormat(),
-			null,
+			richDocumentCodec.readStoredDocument(post.getBodyFormat(), post.getBodyDocument()),
 			post.getMode(),
 			post.getMode() == com.llm.app.board.model.BoardPostMode.FILE_CONVERSION_REQUEST && !safeAttachments.isEmpty(),
 			post.getAuthorUsername(),

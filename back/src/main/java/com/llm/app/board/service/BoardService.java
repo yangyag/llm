@@ -22,9 +22,12 @@ import com.llm.app.board.exception.FileConversionLockedException;
 import com.llm.app.board.exception.NotFoundException;
 import com.llm.app.board.exception.InvalidFileConversionRequestException;
 import com.llm.app.board.exception.InvalidAttachmentRequestException;
+import com.llm.app.board.exception.InvalidRichDocumentException;
+import com.llm.app.board.exception.RichTextClientRequiredException;
 import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardPostMode;
+import com.llm.app.board.model.PostBodyFormat;
 import com.llm.app.board.model.BoardReply;
 import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
@@ -54,6 +57,7 @@ public class BoardService {
 	private final BoardAttachmentRepository boardAttachmentRepository;
 	private final IdentityAccess identityAccess;
 	private final BoardContentCodec boardContentCodec;
+	private final BoardRichDocumentCodec richDocumentCodec;
 	private final BoardMapper boardMapper;
 	private final AiReplyGenerator aiReplyGenerator;
 	private final AttachmentStorageService attachmentStorageService;
@@ -80,6 +84,7 @@ public class BoardService {
 		BoardAttachmentRepository boardAttachmentRepository,
 		IdentityAccess identityAccess,
 		BoardContentCodec boardContentCodec,
+		BoardRichDocumentCodec richDocumentCodec,
 		BoardMapper boardMapper,
 		AiReplyGenerator aiReplyGenerator,
 		AttachmentStorageService attachmentStorageService,
@@ -91,6 +96,7 @@ public class BoardService {
 		this.boardAttachmentRepository = boardAttachmentRepository;
 		this.identityAccess = identityAccess;
 		this.boardContentCodec = boardContentCodec;
+		this.richDocumentCodec = richDocumentCodec;
 		this.boardMapper = boardMapper;
 		this.aiReplyGenerator = aiReplyGenerator;
 		this.attachmentStorageService = attachmentStorageService;
@@ -138,14 +144,18 @@ public class BoardService {
 		AuthenticatedUser author = requireExistingUser(authorUserId);
 		Instant now = Instant.now();
 		BoardPostMode mode = request.getMode();
+		ResolvedPostBody body = resolvePostBody(
+			mode, request.getBodyFormat(), request.getBodyBase64(), request.getBodyDocumentBase64());
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
-			resolvePostBody(mode, request.getBodyBase64()),
+			body.plainText(),
 			mode,
 			author.username(),
 			now,
 			now,
-			author.userId()
+			author.userId(),
+			body.format(),
+			body.document()
 		));
 		syncAttachments(savedPost, request.getAttachments(), null, now);
 		return toDetailResponse(savedPost);
@@ -163,10 +173,18 @@ public class BoardService {
 		BoardPost post = findPostWithReplies(id);
 		ensureCanManagePost(actorUserId, post);
 		ensurePostIsEditable(post);
+		if (post.getBodyFormat() == PostBodyFormat.TIPTAP_JSON
+			&& request.getBodyFormat() != PostBodyFormat.TIPTAP_JSON) {
+			throw new RichTextClientRequiredException("rich text posts require a rich text capable client");
+		}
 		BoardPostMode mode = request.getMode();
+		ResolvedPostBody body = resolvePostBody(
+			mode, request.getBodyFormat(), request.getBodyBase64(), request.getBodyDocumentBase64());
 		post.update(
 			request.getTitle().trim(),
-			resolvePostBody(mode, request.getBodyBase64()),
+			body.plainText(),
+			body.format(),
+			body.document(),
 			mode,
 			Instant.now()
 		);
@@ -463,16 +481,40 @@ public class BoardService {
 		return "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
 	}
 
+	private record ResolvedPostBody(String plainText, PostBodyFormat format, String document) {
+	}
+
 	/**
-	 * 게시글 본문이 수동 작성 가능한 모드인지 확인한 뒤 디코딩한다.
+	 * 게시글 본문이 수동 작성 가능한 모드인지 확인한 뒤 형식에 맞게 디코딩한다.
 	 *
 	 * @param mode 게시글 모드
+	 * @param bodyFormat 본문 형식
 	 * @param bodyBase64 Base64로 인코딩된 본문
-	 * @return 디코딩된 게시글 본문
+	 * @param bodyDocumentBase64 Base64로 인코딩된 rich 문서
+	 * @return 해석된 게시글 본문
 	 */
-	private String resolvePostBody(BoardPostMode mode, String bodyBase64) {
+	private ResolvedPostBody resolvePostBody(
+		BoardPostMode mode,
+		PostBodyFormat bodyFormat,
+		String bodyBase64,
+		String bodyDocumentBase64
+	) {
 		ensureManualPostMode(mode);
-		return boardContentCodec.decodeOptionalBody(bodyBase64);
+		PostBodyFormat format = bodyFormat == null ? PostBodyFormat.PLAIN_TEXT : bodyFormat;
+		if (format == PostBodyFormat.PLAIN_TEXT) {
+			if (bodyDocumentBase64 != null) {
+				throw new InvalidRichDocumentException("bodyDocumentBase64 requires a rich text body format");
+			}
+			return new ResolvedPostBody(boardContentCodec.decodeOptionalBody(bodyBase64), format, null);
+		}
+		if (bodyBase64 != null) {
+			throw new InvalidRichDocumentException("bodyBase64 is not allowed for rich text posts");
+		}
+		BoardRichDocumentCodec.DecodedDocument document = richDocumentCodec.decode(bodyDocumentBase64);
+		if (!document.imageKeys().isEmpty()) {
+			throw new InvalidRichDocumentException("inline images are not supported yet");
+		}
+		return new ResolvedPostBody(document.plainText(), format, document.canonicalJson());
 	}
 
 	/**

@@ -28,6 +28,7 @@ import com.llm.app.board.model.BoardAttachment;
 import com.llm.app.board.model.BoardAttachmentKind;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardPostMode;
+import com.llm.app.board.model.PostBodyFormat;
 import com.llm.app.board.model.BoardReply;
 import com.llm.app.board.repository.BoardAttachmentRepository;
 import com.llm.app.board.repository.BoardPostRepository;
@@ -368,6 +369,212 @@ class BoardPostControllerTest {
 
 		assertThat(boardPostRepository.findById(postId)).isPresent();
 		assertThat(boardPostRepository.findById(postId).orElseThrow().getBody()).isEmpty();
+	}
+
+	@Test
+	void richPostCreateShouldStoreCanonicalDocumentAndExtractPlainBody() throws Exception {
+		String document = """
+			{"type":"doc","content":[
+				{"type":"paragraph","content":[{"type":"text","text":"리치 본문"}]},
+				{"type":"orderedList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"항목"}]}]}]}
+			]}""";
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "리치 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(document)))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.bodyFormat").value("TIPTAP_JSON"))
+			.andExpect(jsonPath("$.body").value("리치 본문\n1. 항목"))
+			.andExpect(jsonPath("$.bodyDocument").isMap())
+			.andExpect(jsonPath("$.bodyDocument.type").value("doc"))
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		BoardPost saved = boardPostRepository.findById(postId).orElseThrow();
+		assertThat(saved.getBodyFormat()).isEqualTo(PostBodyFormat.TIPTAP_JSON);
+		assertThat(saved.getBody()).isEqualTo("리치 본문\n1. 항목");
+		assertThat(saved.getBodyDocument()).isEqualTo(
+			"{\"type\":\"doc\",\"content\":["
+				+ "{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"리치 본문\"}]},"
+				+ "{\"type\":\"orderedList\",\"content\":[{\"type\":\"listItem\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"항목\"}]}]}],\"attrs\":{\"start\":1,\"type\":null}}]}"
+		);
+
+		mockMvc.perform(get("/api/v1/posts/{id}", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.bodyFormat").value("TIPTAP_JSON"))
+			.andExpect(jsonPath("$.bodyDocument").isMap())
+			.andExpect(jsonPath("$.bodyDocument.type").value("doc"));
+	}
+
+	@Test
+	void plainPostShouldBeUpdatableToRichDocument() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "평문 글")
+				.param("bodyBase64", encode("평문 본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "리치로 수정")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"리치 수정\"}]}]}")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.title").value("리치로 수정"))
+			.andExpect(jsonPath("$.bodyFormat").value("TIPTAP_JSON"))
+			.andExpect(jsonPath("$.body").value("리치 수정"))
+			.andExpect(jsonPath("$.bodyDocument.type").value("doc"));
+
+		BoardPost saved = boardPostRepository.findById(postId).orElseThrow();
+		assertThat(saved.getBodyFormat()).isEqualTo(PostBodyFormat.TIPTAP_JSON);
+		assertThat(saved.getBodyDocument()).isEqualTo(
+			"{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"리치 수정\"}]}]}");
+	}
+
+	@Test
+	void richPostShouldBeUpdatableWithRichDocument() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "리치 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"원본\"}]}]}")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "리치 글 수정")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"수정됨\"}]}]}")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.bodyFormat").value("TIPTAP_JSON"))
+			.andExpect(jsonPath("$.body").value("수정됨"))
+			.andExpect(jsonPath("$.bodyDocument.type").value("doc"));
+	}
+
+	@Test
+	void emptyRichDocumentShouldBeAccepted() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "빈 리치 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\"}")))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.bodyFormat").value("TIPTAP_JSON"))
+			.andExpect(jsonPath("$.body").value(""))
+			.andExpect(jsonPath("$.bodyDocument.type").value("doc"))
+			.andExpect(jsonPath("$.bodyDocument.content", hasSize(0)));
+	}
+
+	@Test
+	void richCreateShouldRejectConflictingPlainFields() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "충돌 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyBase64", encode("평문"))
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\"}")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_RICH_DOCUMENT"));
+		assertThat(boardPostRepository.count()).isZero();
+	}
+
+	@Test
+	void plainCreateShouldRejectBodyDocument() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "충돌 글")
+				.param("bodyBase64", encode("평문"))
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\"}")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_RICH_DOCUMENT"));
+
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "충돌 글")
+				.param("bodyFormat", "PLAIN_TEXT")
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\"}")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_RICH_DOCUMENT"));
+
+		assertThat(boardPostRepository.count()).isZero();
+	}
+
+	@Test
+	void invalidRichDocumentShouldBeRejected() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "잘못된 리치 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\",\"content\":[{\"type\":\"video\"}]}")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_RICH_DOCUMENT"));
+
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "잘못된 리치 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode("{broken")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_RICH_DOCUMENT"));
+
+		assertThat(boardPostRepository.count()).isZero();
+	}
+
+	@Test
+	void richDocumentWithInlineImageShouldBeRejectedUntilPhase3() throws Exception {
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "이미지 리치 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(
+					"{\"type\":\"doc\",\"content\":[{\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\"b1e09b73-1111-4444-8888-123456789abc\"}}]}")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_RICH_DOCUMENT"));
+
+		assertThat(boardPostRepository.count()).isZero();
+	}
+
+	@Test
+	void legacyClientUpdateOnRichPostShouldReturnConflict() throws Exception {
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "리치 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode("{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"리치 원본\"}]}]}")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		BoardPost original = boardPostRepository.findById(postId).orElseThrow();
+		String originalTitle = original.getTitle();
+		String originalBody = original.getBody();
+		String originalDocument = original.getBodyDocument();
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "레거시 클라이언트 수정")
+				.param("bodyBase64", encode("덮어쓰기")))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("RICH_TEXT_CLIENT_REQUIRED"));
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "레거시 클라이언트 수정")
+				.param("bodyFormat", "PLAIN_TEXT")
+				.param("bodyBase64", encode("덮어쓰기")))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("RICH_TEXT_CLIENT_REQUIRED"));
+
+		BoardPost reloaded = boardPostRepository.findById(postId).orElseThrow();
+		assertThat(reloaded.getTitle()).isEqualTo(originalTitle);
+		assertThat(reloaded.getBody()).isEqualTo(originalBody);
+		assertThat(reloaded.getBodyDocument()).isEqualTo(originalDocument);
+		assertThat(reloaded.getBodyFormat()).isEqualTo(PostBodyFormat.TIPTAP_JSON);
 	}
 
 	@Test

@@ -19,7 +19,9 @@ import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidAiProviderException;
 import com.llm.app.board.exception.InvalidEncodedBodyException;
 import com.llm.app.board.exception.InvalidFileConversionRequestException;
+import com.llm.app.board.exception.InvalidRichDocumentException;
 import com.llm.app.board.exception.NotFoundException;
+import com.llm.app.board.exception.RichTextClientRequiredException;
 import com.llm.app.upload.exception.UploadSessionChunkTooLargeException;
 import com.llm.app.upload.exception.InvalidUploadSessionRequestException;
 import com.llm.app.upload.exception.UploadSessionNotFoundException;
@@ -139,6 +141,22 @@ public class GlobalExceptionHandler {
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_FILE_CONVERSION_REQUEST", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ InvalidRichDocumentException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleInvalidRichDocument(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_RICH_DOCUMENT", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler({ RichTextClientRequiredException.class })
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleRichTextClientRequired(
+		RuntimeException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.CONFLICT, "RICH_TEXT_CLIENT_REQUIRED", exception.getMessage(), request);
 	}
 
 	@ExceptionHandler({ InvalidUploadSessionRequestException.class })

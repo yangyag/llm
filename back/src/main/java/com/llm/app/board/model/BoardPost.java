@@ -82,6 +82,13 @@ public class BoardPost {
 		this.authorUserId = authorUserId;
 	}
 
+	public BoardPost(String title, String body, BoardPostMode mode, String authorUsername,
+		Instant createdAt, Instant updatedAt, Long authorUserId,
+		PostBodyFormat bodyFormat, String bodyDocument) {
+		this(title, body, mode, authorUsername, createdAt, updatedAt, authorUserId);
+		setBody(body, bodyFormat, bodyDocument);
+	}
+
 	public Long getAuthorUserId() {
 		return authorUserId;
 	}
@@ -127,11 +134,28 @@ public class BoardPost {
 	}
 
 	public void update(String title, String body, BoardPostMode mode, Instant updatedAt) {
+		update(title, body, PostBodyFormat.PLAIN_TEXT, null, mode, updatedAt);
+	}
+
+	public void update(String title, String body, PostBodyFormat bodyFormat, String bodyDocument,
+		BoardPostMode mode, Instant updatedAt) {
+		setBody(body, bodyFormat, bodyDocument);
 		this.title = title;
-		this.body = body;
-		this.bodyFormat = PostBodyFormat.PLAIN_TEXT;
-		this.bodyDocument = null;
 		this.mode = mode;
 		this.updatedAt = updatedAt;
+	}
+
+	private void setBody(String body, PostBodyFormat bodyFormat, String bodyDocument) {
+		if (body == null || bodyFormat == null) {
+			throw new IllegalArgumentException("body and bodyFormat must not be null");
+		}
+		boolean valid = (bodyFormat == PostBodyFormat.PLAIN_TEXT && bodyDocument == null)
+			|| (bodyFormat == PostBodyFormat.TIPTAP_JSON && bodyDocument != null);
+		if (!valid) {
+			throw new IllegalArgumentException("body document does not match the body format");
+		}
+		this.body = body;
+		this.bodyFormat = bodyFormat;
+		this.bodyDocument = bodyDocument;
 	}
 }

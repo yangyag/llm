@@ -1,6 +1,6 @@
 # 게시글 본문 이미지 붙여넣기·영구 저장 구현 계획서
 
-- 상태: 구현 진행 — Phase 0~1 완료, Phase 2 미착수
+- 상태: 구현 진행 — Phase 0~2 완료, Phase 3 미착수
 - 작성일: 2026-09-20
 - 대상: `front/` Nuxt 3·Vue 3 게시글 작성/수정/조회, `back/` Spring Boot 게시판·첨부 모듈, Flyway
 - 목표: 게시글 작성·수정 중 클립보드 이미지를 즉시 본문에 표시하고, 게시글 저장 후에도 텍스트·이미지 순서와 위치를 유지한다.
@@ -279,7 +279,7 @@ inline 이미지 설정 이름:
 | --- | --- | --- | --- |
 | 0 | 기준선·계약·한도 확정 | 완료 | 기준선·의존성·API/DB/한도 계약과 환경 제약 기록 완료 |
 | 1 | Flyway·엔티티·응답 metadata 확장 | 완료 | V19·JPA·응답 metadata와 PostgreSQL 제약 검증 완료 |
-| 2 | rich 문서 codec·검증·평문 추출 | 미착수 | 이미지 없이 rich 문서 생성·수정 API 통과 |
+| 2 | rich 문서 codec·검증·평문 추출 | 완료 | canonical JSON·평문·한도·HTTP rich 계약 검증 완료 |
 | 3 | inline 이미지 저장·조회 backend | 미착수 | MockMvc로 생성·content 조회·롤백 검증 통과 |
 | 4 | Tiptap editor·reader 기반 도입 | 미착수 | 이미지 없이 plain/rich 작성·수정·조회 가능 |
 | 5 | 이미지 붙여넣기 임시 보관·글 생성 | 미착수 | 새 글에서 붙여넣기→저장→조회 통과 |
@@ -447,7 +447,7 @@ Phase 1 완료 조건을 모두 충족했다. 다음 작업은 Phase 2의 rich �
 
 ### Phase 2 — rich 문서 codec·검증·평문 추출
 
-**상태: 미착수**
+**상태: 완료 — 2026-09-20**
 
 #### 진입 전 한도 게이트
 
@@ -491,6 +491,36 @@ cd back
 #### 안전 중단점
 
 backend가 plain/rich 문서를 모두 처리하지만 inline 이미지 파일은 아직 거부한다.
+
+#### Phase 2 완료 기록 — 2026-09-20
+
+- 사용량 상태는 확인 수단이 없어 `알 수 없음`으로 유지하고, codec 계약 확정 → 선행 red → 구현 → focused/full 검증 → diff 검토 체크포인트로 나눴다.
+- 최초 선행 테스트는 `BoardRichDocumentCodec`·신규 예외·DTO accessor 미존재로 `compileTestJava` 26건이 실패해 의도한 red 상태를 확인했다.
+- diff 검토 후 저장 문서 schema 미검증과 단독 surrogate 허용을 재현하는 테스트 2건이 추가로 실패했고, 보강 후 green을 확인했다.
+- `BoardRichDocumentCodec`은 최대 5MiB Base64/UTF-8 JSON을 strict decode하고 node·field·attribute·mark whitelist로 canonical JSON을 생성한다.
+- 허용 범위는 링크를 제외한 paragraph/heading/blockquote/list/codeBlock/horizontalRule, 기본 text marks와 `inlineAttachmentImage`다. raw HTML, `src`, unknown field/node/mark, 중복 mark/key, 잘못된 UUID를 거부한다.
+- decoded bytes 5MiB, 평문 1,000,000자, node 20,000개, depth 20, alt 200자 경계를 구현·검증했다.
+- NUL과 단독 UTF-16 surrogate를 거부하고 정상 surrogate pair는 평문에 보존한다.
+- canonical 문서에서 검색·복사용 평문과 image key 집합을 추출한다. 저장 문서도 조회 시 같은 schema·한도를 검증하고 canonical JSON object로 응답한다.
+- `CreateBoardPostRequest`·`UpdateBoardPostRequest`에 `bodyFormat`과 `bodyDocumentBase64`를 추가했다.
+- plain+document, rich+bodyBase64 충돌과 잘못된 rich 문서는 400 `INVALID_RICH_DOCUMENT`다.
+- 기존 rich 글을 구형 plain 요청으로 수정하면 409 `RICH_TEXT_CLIENT_REQUIRED`이며 title/body/document가 변하지 않는다.
+- plain→rich, rich→rich, 빈 rich 문서 생성·수정·조회가 동작한다. 도메인 update는 body invariant를 먼저 검증해 부분 필드 변경을 막는다.
+- Phase 3 전에는 image key가 포함된 rich API 요청을 400으로 거부하며 파일·manifest 저장은 구현하지 않았다.
+
+검증 결과:
+
+- `BoardRichDocumentCodecTest`: 12/12 통과.
+- `BoardPostControllerTest`: 56/56 통과.
+- `UploadSessionControllerTest`와 `SecurityAndStorageRegressionTest`: 통과.
+- backend 전체 `clean test`: 168건 발견, 164건 통과, PostgreSQL 조건부 4건 skip, 실패·오류 0.
+- PostgreSQL 조건부 4건은 `LLM_TEST_POSTGRES_URL` 미설정으로 실행하지 않았으며 Phase 1의 V19 PostgreSQL 검증 결과를 대체하지 않는다.
+- frontend는 변경하지 않아 Phase 2에서 재실행하지 않았다. 최신 front 기준선은 Phase 1의 test 7/7, typecheck·generate 성공이다.
+- 비차단 warning은 기존 dep-ann 3건, `@MockBean` removal 2건, unchecked/CDS와 동일하다.
+- Gradle daemon을 정리했고 shared PostgreSQL·Docker·서버는 건드리지 않았다.
+- 최종 diff 검토와 보강 후 잔여 결함을 발견하지 못했다.
+
+Phase 2 완료 조건을 모두 충족했다. 다음 작업은 Phase 3의 inline image validator·manifest/file 집합·영구 저장·content endpoint 구현이다.
 
 ### Phase 3 — inline 이미지 저장·조회 backend
 
@@ -963,27 +993,27 @@ Docker/health/smoke 결과:
 
 기록에는 secret, JWT, 비밀번호, `.env` 값, PEM 내용, 민감한 이미지 내용, 전체 환경변수 덤프를 넣지 않는다.
 
-## 12. 최신 재개 기록 — Phase 1 완료
+## 12. 최신 재개 기록 — Phase 2 완료
 
 ```text
 기록 일시: 2026-09-20
 사용량 상태: 알 수 없음
-현재 Phase: 2
+현재 Phase: 3
 Phase 상태: 미착수
-마지막 완료 Phase: 1
-기준 브랜치/커밋: main / 5a151823e6846074e2f29bf4eb0b0fb100e7b01d
-작업 전 git status: ?? plan/post-inline-image-editor-plan.md
-이번 변경 파일: V19 migration, PostBodyFormat/BoardAttachmentKind, BoardPost/BoardAttachment, board/upload DTO·mapper, 3 backend test files, front/types/api.ts, 계획서
-완료한 계약: 기존 row PLAIN_TEXT/DOWNLOAD default, body/attachment metadata additive 응답, format-document와 kind-key check, partial unique inline key; rich 입력·content endpoint는 미활성
-통과한 좁은 테스트: BoardPostControllerTest + UploadSessionControllerTest; PostgresMigrationTest 1/1
-최신 전체 backend 테스트: disposable PostgreSQL 18 URL을 지정한 clean test 147/147 passed, 0 skipped, 0 failures, 0 errors
-최신 front test/typecheck/build: npm test 7/7, typecheck 성공, generate 성공(5 routes)
-PostgreSQL focused 결과: V16 fixture→V17/V18/V19 3 migrations, legacy defaults, 세 constraint/unique 위반, Hibernate validate 통과
-Docker/health/smoke 결과: phase1 전용 postgres:18 container만 사용 후 제거; 애플리케이션 compose/8083 smoke는 실행하지 않음
-실행 중인 프로세스: 없음; phase1 container 제거 및 Gradle daemon 종료 확인
-알려진 실패·차단: bare Gradle은 PATH Java 21로 실패하므로 Windows 명령에 -Porg.gradle.java.installations.paths=C:\jdk\jdk-25.0.4.1+1 필요. Phase 2 blocker 없음
-다음 정확한 작업: Phase 2 rich document codec의 선행 실패 테스트 작성 후 Base64 decode·schema validation·canonical JSON·plain text extraction과 rich create/update 계약 구현
-주의할 사용자 기존 변경: Phase 1 시작 전 존재한 요청 계획서는 untracked였으며 유지; 그 외 사용자 기존 source 변경 없음
+마지막 완료 Phase: 2
+기준 브랜치/커밋: main / ebb16da5432ee26185ffaffdf23ea8d29407f3b6
+작업 전 git status: clean
+이번 변경 파일: GlobalExceptionHandler, create/update post DTO, BoardPost, BoardService, BoardMapper, rich document codec·예외 2개, codec/controller tests, 계획서
+완료한 계약: strict Tiptap schema/canonical JSON/plain extraction/image key set, rich create/update, INVALID_RICH_DOCUMENT 400, RICH_TEXT_CLIENT_REQUIRED 409, Phase 3 전 image key 차단
+통과한 좁은 테스트: BoardRichDocumentCodecTest 12/12, BoardPostControllerTest 56/56, UploadSessionControllerTest와 SecurityAndStorageRegressionTest
+최신 전체 backend 테스트: clean test 168 discovered, 164 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors
+최신 front test/typecheck/build: Phase 2 frontend 변경 없음; Phase 1 기준 npm test 7/7, typecheck·generate 성공 유지
+PostgreSQL focused 결과: Phase 2에서 미실행; Phase 1 V19 migration/constraint/Hibernate validate 통과 결과 유지
+Docker/health/smoke 결과: Phase 2에서 Docker·애플리케이션 compose/8083 smoke 미실행
+실행 중인 프로세스: 없음; Gradle daemon 종료 확인
+알려진 실패·차단: bare Gradle은 PATH Java 21로 실패하므로 Windows 명령에 -Porg.gradle.java.installations.paths=C:\jdk\jdk-25.0.4.1+1 필요. Phase 3 blocker 없음
+다음 정확한 작업: Phase 3 선행 테스트 후 inline image validator, manifest/file/document key 집합 검증, attachment 저장과 public content endpoint 구현
+주의할 사용자 기존 변경: Phase 2 시작 전 작업 트리 clean; 사용자 기존 변경 없음
 ```
 
 ## 13. 최종 완료 기준
