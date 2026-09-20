@@ -20,7 +20,9 @@ function loadModule(relativePath, modules) {
 }
 
 const post = id => ({ id, title: `Post ${id}`, body: `Body ${id}`, mode: 'NORMAL',
-  authorUsername: 'member', authorUserId: 1, attachments: [], replies: [] });
+  bodyFormat: 'PLAIN_TEXT', bodyDocument: null, conversionReady: false,
+  authorUsername: 'member', authorUserId: 1, attachments: [], replies: [],
+  createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function setup(overrides = {}) {
@@ -39,6 +41,17 @@ function setup(overrides = {}) {
     '~/services/api': api,
     '~/utils/clipboard': {},
     '~/utils/post': { MAX_ATTACHMENTS: 5 },
+    '~/utils/postDocument': {
+      emptyPostDocument: () => ({ type: 'doc', content: [{ type: 'paragraph' }] }),
+      resolvePostDocument: (bodyFormat, bodyDocument, plainBody) => (
+        bodyFormat === 'TIPTAP_JSON' && bodyDocument ? bodyDocument : {
+          type: 'doc',
+          content: String(plainBody ?? '').split('\n').map(line => line
+            ? { type: 'paragraph', content: [{ type: 'text', text: line }] }
+            : { type: 'paragraph' })
+        }
+      )
+    },
     './auth': { useAuthStore: () => ({ token: 'synthetic-test-token', userId: 1 }) },
     './posts': { usePostsStore: () => ({ currentPage: 1, loadPosts: async () => {} }) }
   });

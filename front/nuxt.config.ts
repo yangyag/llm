@@ -20,7 +20,7 @@ export default defineNuxtConfig({
     },
     devProxy: {
       "/api": {
-        target: "http://localhost:8082",
+        target: "http://localhost:8082/api",
         changeOrigin: true
       }
     }

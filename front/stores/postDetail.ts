@@ -10,7 +10,7 @@ import {
   updatePost,
   updateReply
 } from "~/services/api";
-import type { AiProvider, ApiError, PostDetail } from "~/types/api";
+import type { AiProvider, ApiError, PostDetail, PostDocument } from "~/types/api";
 import { clipboardUserMessage, writeClipboardText } from "~/utils/clipboard";
 import {
   ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE,
@@ -18,11 +18,15 @@ import {
   attachmentFileKey,
   mergeAttachmentFiles
 } from "~/utils/post";
+import { emptyPostDocument, resolvePostDocument } from "~/utils/postDocument";
 import { useAuthStore } from "./auth";
 import { usePostsStore } from "./posts";
 
-const EMPTY_POST_FORM = { title: "", body: "" };
 const EMPTY_REPLY_FORM = { body: "" };
+
+function createEmptyPostForm(): PostFormState {
+  return { title: "", bodyDocument: emptyPostDocument() };
+}
 
 let postLinkCopyTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -36,7 +40,7 @@ type PostActionMode = "none" | "edit";
 
 interface PostFormState {
   title: string;
-  body: string;
+  bodyDocument: PostDocument;
 }
 
 interface ReplyEditState {
@@ -84,8 +88,8 @@ export const usePostDetailStore = defineStore("postDetail", {
     detailLoading: false,
     detailRequestVersion: 0,
     postActionMode: "none",
-    postForm: { ...EMPTY_POST_FORM },
-    postEditForm: { ...EMPTY_POST_FORM },
+    postForm: createEmptyPostForm(),
+    postEditForm: createEmptyPostForm(),
     postAttachmentFiles: [],
     postEditAttachmentFiles: [],
     postAttachmentConfirmed: false,
@@ -132,7 +136,7 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.selectedPostId = null;
       this.detailLoading = false;
       this.view = "write";
-      this.postForm = { ...EMPTY_POST_FORM };
+      this.postForm = createEmptyPostForm();
       this.postAttachmentFiles = [];
       this.postAttachmentConfirmed = false;
       this.postAttachmentInputKey += 1;
@@ -174,7 +178,10 @@ export const usePostDetailStore = defineStore("postDetail", {
         if (!this.isCurrentDetailRequest(postId, version)) return;
         if (payload.id !== postId) throw new Error("요청한 게시글과 응답이 일치하지 않습니다.");
         this.selectedPost = payload;
-        this.postEditForm = { title: payload.title, body: payload.body };
+        this.postEditForm = {
+          title: payload.title,
+          bodyDocument: resolvePostDocument(payload.bodyFormat, payload.bodyDocument, payload.body)
+        };
         this.postEditAttachmentFiles = [];
         this.postEditAttachmentConfirmed = false;
         this.postEditAttachmentInputKey += 1;
@@ -198,7 +205,14 @@ export const usePostDetailStore = defineStore("postDetail", {
       if (!this.canActOnSelectedPost() || !this.selectedPost || this.selectedPost.conversionReady || this.selectedPost.mode === "FILE_CONVERSION_REQUEST") {
         return;
       }
-      this.postEditForm = { title: this.selectedPost.title, body: this.selectedPost.body };
+      this.postEditForm = {
+        title: this.selectedPost.title,
+        bodyDocument: resolvePostDocument(
+          this.selectedPost.bodyFormat,
+          this.selectedPost.bodyDocument,
+          this.selectedPost.body
+        )
+      };
       this.postEditAttachmentFiles = [];
       this.postEditAttachmentConfirmed = false;
       this.postEditAttachmentInputKey += 1;
@@ -263,6 +277,10 @@ export const usePostDetailStore = defineStore("postDetail", {
     },
     toggleRemoveExistingAttachment(attachmentId: number) {
       this.postActionError = "";
+      const target = this.selectedPost?.attachments.find(
+        (attachment) => attachment.id === attachmentId
+      );
+      if (!target || target.attachmentKind !== "DOWNLOAD") return;
       const next = new Set(this.removeAttachmentIds);
       if (next.has(attachmentId)) {
         next.delete(attachmentId);
@@ -297,7 +315,7 @@ export const usePostDetailStore = defineStore("postDetail", {
           { ...this.postForm, attachments: this.postAttachmentFiles },
           auth.token
         );
-        this.postForm = { ...EMPTY_POST_FORM };
+        this.postForm = createEmptyPostForm();
         this.postAttachmentFiles = [];
         this.postAttachmentConfirmed = false;
         this.postAttachmentInputKey += 1;

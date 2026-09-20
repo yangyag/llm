@@ -1,6 +1,6 @@
 # 게시글 본문 이미지 붙여넣기·영구 저장 구현 계획서
 
-- 상태: 구현 진행 — Phase 0~3 완료, Phase 4 미착수
+- 상태: 구현 진행 — Phase 0~4 완료, Phase 5 미착수
 - 작성일: 2026-09-20
 - 대상: `front/` Nuxt 3·Vue 3 게시글 작성/수정/조회, `back/` Spring Boot 게시판·첨부 모듈, Flyway
 - 목표: 게시글 작성·수정 중 클립보드 이미지를 즉시 본문에 표시하고, 게시글 저장 후에도 텍스트·이미지 순서와 위치를 유지한다.
@@ -71,7 +71,7 @@
 - 라이선스는 MIT인 패키지만 사용하고 Tiptap Platform·Cloud·유료 extension은 사용하지 않는다.
 - 직접 의존성은 `@tiptap/core`, `@tiptap/vue-3`, `@tiptap/pm`, `@tiptap/starter-kit`으로 제한한다. custom node가 `@tiptap/core`를 직접 import하므로 transitive dependency에 의존하지 않고 명시적으로 설치한다.
 - Phase 0에서 네 패키지를 모두 `3.31.3`으로 확정했다. 2026-09-04 게시된 MIT 버전으로 작성일 기준 7일 유예 조건을 충족한다. Phase 4에서 package manager로 exact version을 설치하고 lockfile을 함께 갱신하며 `latest`, `*`, 비한정 범위를 사용하지 않는다.
-- Nuxt SSR/hydration 충돌을 피하도록 클라이언트 전용 컴포넌트와 `immediatelyRender: false`를 사용한다.
+- Nuxt SSR/hydration 충돌을 피하도록 `.client.vue` 컴포넌트를 사용한다. 설치된 `@tiptap/vue-3` 3.31.3의 `useEditor`는 `onMounted`에서만 editor를 생성하고 `EditorOptions`에 `immediatelyRender`가 없으므로, 지원하지 않는 `immediatelyRender: false`는 전달하지 않는다.
 - 초기 기능 범위는 기존 평문 작성 경험, 기본 문단·줄바꿈과 inline 이미지다. `StarterKit`의 link extension은 비활성화하고, 복잡한 표·링크 toolbar·협업 편집·외부 embed는 넣지 않는다.
 
 ### 3.2 본문 저장 형식
@@ -281,7 +281,7 @@ inline 이미지 설정 이름:
 | 1 | Flyway·엔티티·응답 metadata 확장 | 완료 | V19·JPA·응답 metadata와 PostgreSQL 제약 검증 완료 |
 | 2 | rich 문서 codec·검증·평문 추출 | 완료 | canonical JSON·평문·한도·HTTP rich 계약 검증 완료 |
 | 3 | inline 이미지 저장·조회 backend | 완료 | MockMvc로 생성·content 조회·롤백 검증 통과 |
-| 4 | Tiptap editor·reader 기반 도입 | 미착수 | 이미지 없이 plain/rich 작성·수정·조회 가능 |
+| 4 | Tiptap editor·reader 기반 도입 | 완료 | 이미지 없이 plain/rich 작성·수정·조회 가능 |
 | 5 | 이미지 붙여넣기 임시 보관·글 생성 | 미착수 | 새 글에서 붙여넣기→저장→조회 통과 |
 | 6 | 수정·삭제·실패 재시도 완성 | 미착수 | 기존/신규 이미지 혼합 수정과 정리 통과 |
 | 7 | 한도·보안·접근성 hardening | 미착수 | 경계값·악성 입력·키보드/모바일 점검 통과 |
@@ -604,7 +604,7 @@ Phase 3 완료 조건을 충족했다. 다음 작업은 Phase 4의 Tiptap exact 
 
 ### Phase 4 — Tiptap editor·reader 기반 도입
 
-**상태: 미착수**
+**상태: 완료 — 2026-09-20**
 
 #### 진입 전 한도 게이트
 
@@ -659,6 +659,31 @@ npm run build
 #### 안전 중단점
 
 editor/reader와 plain/rich 호환은 완성됐지만 붙여넣은 이미지는 아직 받지 않는다.
+
+#### Phase 4 완료 기록 — 2026-09-20
+
+- 사용량 상태는 확인 수단이 없어 `알 수 없음`으로 유지하고, utility 선행 red → exact dependency 설치 → editor/reader·API/store 연결 → test/typecheck/generate → diff 보강 → 격리 PostgreSQL browser smoke 순서로 체크포인트를 나눴다.
+- 선행 `npm test`는 기존 `postDetail` 7건이 통과하고 신규 document utility 5건이 `utils/postDocument.ts` 부재로 실패해 의도한 red를 확인했다.
+- `@tiptap/core`, `@tiptap/vue-3`, `@tiptap/pm`, `@tiptap/starter-kit`을 모두 exact `3.31.3`으로 설치했다. npm 버전 차이로 삭제된 기존 lockfile `libc` metadata 47개는 복원하고 dependency 추가 외 기존 lock 정보를 유지했다.
+- canonical document utility는 backend schema와 같은 node·mark·attribute 범위를 사용하며 plain 줄바꿈 변환, runtime `src` 제거, image key/content URL resolver, DOWNLOAD 필터와 rich Base64 payload 생성을 담당한다.
+- client-only Tiptap editor/reader와 `inlineAttachmentImage` Vue NodeView를 추가했다. canonical image node에는 URL을 넣지 않고 서버 attachment metadata의 `inlineKey → contentUrl`만 runtime에 해석한다. `StarterKit` link는 비활성화했다.
+- 설치된 `@tiptap/vue-3` 3.31.3은 `useEditor`가 `onMounted`에서 editor를 생성하고 `EditorOptions`에 `immediatelyRender`가 없어, `.client.vue` 경계만 사용하고 지원하지 않는 옵션은 전달하지 않았다.
+- 새 글과 수정 폼은 `bodyFormat=TIPTAP_JSON`과 `bodyDocumentBase64`를 전송한다. 기존 plain 글은 줄바꿈을 보존한 Tiptap 문서로 변환되어 수정 저장 시 rich로 전환되고, rich 조회는 추출 평문 복사 기능을 유지한다.
+- 일반 첨부 UI와 삭제 checkbox는 `DOWNLOAD`만 표시하며, 숨겨진 inline 이미지까지 포함한 전체 attachment 수로 5개 슬롯을 계산한다.
+- 로컬 Nuxt dev proxy가 `/api` prefix를 제거하던 동작을 재현해 target을 `http://localhost:8082/api`로 수정했고, frontend 경유 `/api/v1/health`가 정상임을 확인했다.
+
+검증 결과:
+
+- `npm test`: 기존 7건 + 신규 5건, 합계 12/12 통과.
+- `npm run typecheck`: 성공.
+- `npm run build`: 성공, client module 283개·SSR module 1개·route 5개 prerender.
+- Playwright 1.62.1 임시 설치 smoke: 로그인, 이미지 없는 rich 글 생성 201, 한글 텍스트·줄바꿈, undo/redo, 로그인·공개 상세 동일 렌더, plain fixture 수정 후 rich 전환 200, console/page error/API 4xx·5xx 0건을 확인했다. 생성한 자동 검증 글은 삭제했고 fixture만 격리 DB에 남겼다.
+- 사용자의 수동 글 등록도 성공했다. Playwright는 실제 OS 한글 IME 조합기를 재현하지 않으므로 native composition과 세부 selection은 Phase 7에서 다시 확인한다.
+- 브라우저 smoke는 disposable PostgreSQL 18 schema와 로컬 backend 8082/frontend 5174에서 수행했다. 서버는 종료하고 컨테이너는 삭제하지 않은 채 stopped 상태로 보존했다.
+- `npm ci`는 audit notice 4건(중간 1·높음 3)을 표시했으나 보안 정책이나 dependency를 임의 변경하지 않았다. 기존 Nitro `cache-driver.js` warning도 유지됐다.
+- 최종 `git diff --check`는 내용 오류 없이 통과했고 line-ending 안내만 있었다. backend 소스·테스트는 Phase 4에서 변경하거나 재실행하지 않았다.
+
+Phase 4 완료 조건을 충족했다. 다음 작업은 Phase 5의 paste handler, pending registry/object URL 생명주기와 create manifest/file 연결이다.
 
 ### Phase 5 — 이미지 붙여넣기 임시 보관·글 생성
 
@@ -979,7 +1004,7 @@ Phase 8의 문서 갱신 목록을 따른다. 구현과 무관한 문서는 수�
 | 신규 파일 저장 뒤 DB rollback | 기존 `AttachmentFileLifecycle.trackCreated` 재사용·회귀 테스트 |
 | MIME 위장·SVG/XSS | PNG/JPEG 실제 형식 검증, raw HTML/src/style/event 금지, nosniff |
 | 압축 폭탄·과도한 메모리 | 파일·dimension·pixel·문서/node/depth 한도 선검증 |
-| Tiptap SSR/hydration 오류 | client component, `immediatelyRender:false`, generate·browser smoke |
+| Tiptap SSR/hydration 오류 | `.client.vue`, 3.31.3 `useEditor`의 mount 후 생성, generate·browser smoke |
 | 한글 IME·selection 회귀 | Phase 4·7 브라우저 smoke |
 | pending 이미지 undo 또는 메모리 누수 | 세션 registry 유지, 활성 key만 업로드, 20개·100MB cap, 성공/reset/unmount 일괄 revoke |
 | 기존 plain 글 손실 | plain fallback, per-post one-way rich 전환, 회귀 fixture |
@@ -1016,27 +1041,27 @@ Docker/health/smoke 결과:
 
 기록에는 secret, JWT, 비밀번호, `.env` 값, PEM 내용, 민감한 이미지 내용, 전체 환경변수 덤프를 넣지 않는다.
 
-## 12. 최신 재개 기록 — Phase 3 완료
+## 12. 최신 재개 기록 — Phase 4 완료
 
 ```text
 기록 일시: 2026-09-20
 사용량 상태: 알 수 없음
-현재 Phase: 4
+현재 Phase: 5
 Phase 상태: 미착수
-마지막 완료 Phase: 3
-기준 브랜치/커밋: main / 2a8ca6c43a6e4a86e670c615ec09a68b1e2b2b7f
+마지막 완료 Phase: 4
+기준 브랜치/커밋: main / 8023986bd26a89f263c913645f35b780025af129
 작업 전 git status: clean
-이번 변경 파일: create/update post DTO, BoardAttachment, AttachmentStorageService, BoardService, BoardPostController, application.properties, 신규 manifest codec·inline validator, controller/validator/storage regression tests, 계획서
-완료한 계약: strict manifest/file/document key 집합, actual PNG/JPEG·10MB·dimension·pixel 검증, DOWNLOAD+INLINE_IMAGE 합계 5개, rollback-safe volume 저장, 공개 inline content headers, 기존 key 보존 update
-통과한 좁은 테스트: GeneratedAttachmentPolicyTest 3/3, InlineImageValidatorTest 4/4, BoardPostControllerTest 61/61, SecurityAndStorageRegressionTest 8/8, UploadSessionControllerTest 21/21 — 합계 97/97
-최신 전체 backend 테스트: clean test 178 discovered, 174 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors
-최신 front test/typecheck/build: Phase 3 frontend 변경 없음; Phase 1 기준 npm test 7/7, typecheck·generate 성공 유지
-PostgreSQL focused 결과: Phase 3에서 미실행; 조건부 4건은 LLM_TEST_POSTGRES_URL 미설정으로 skip. Phase 1 V19 migration/constraint/Hibernate validate 통과 결과 유지
-Docker/health/smoke 결과: Phase 3에서 Docker·애플리케이션 compose/8083 smoke 미실행
-실행 중인 프로세스: 없음; Gradle daemon 종료 확인
-알려진 실패·차단: bare Gradle은 PATH Java 21로 실패하므로 Windows 명령에 -Porg.gradle.java.installations.paths=C:\jdk\jdk-25.0.4.1+1 필요. 신규 inline 추가·삭제 update는 계획대로 Phase 6 전까지 거부하며 Phase 4 blocker는 없음
-다음 정확한 작업: Phase 4 선행 frontend utility tests 후 Tiptap 3.31.3 exact dependency 설치, client-only editor/reader와 이미지 없는 plain→rich 작성·수정·조회 구현
-주의할 사용자 기존 변경: Phase 3 시작 전 작업 트리 clean; 사용자 기존 변경 없음
+이번 변경 파일: package.json/lock, nuxt.config, API/document types, 신규 canonical document utility·Tiptap editor/reader·image NodeView, PostForm/PostEditPanel/PostBodyReader/AttachmentPanel/PostDetail/public page, post detail/document tests, 계획서
+완료한 계약: Tiptap 3.31.3 exact self-host, client-only editor/reader, canonical JSON rich multipart, plain 줄바꿈 보존 rich 전환, server contentUrl image resolver, DOWNLOAD-only panel과 전체 attachment 슬롯 계산
+통과한 좁은 테스트: frontend npm test 12/12, typecheck 성공, generate build 성공
+최신 전체 backend 테스트: Phase 4 backend 변경 없음; Phase 3 clean test 178 discovered, 174 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors 유지
+최신 front test/typecheck/build: npm test 12/12, typecheck 성공, build client 283 modules·SSR 1 module·5 routes prerender
+PostgreSQL focused 결과: disposable PostgreSQL 18 schema에 V1~V19 validate/up-to-date 확인 후 plain fixture→rich update browser smoke 통과; 조건부 PostgreSQL JUnit suite는 Phase 4에서 미실행
+Docker/health/smoke 결과: compose/8083은 미실행. 로컬 backend 8082와 수정된 Nuxt /api proxy health 통과; Playwright login/create/read/plain-to-rich/public/undo-redo smoke와 console error 0 확인
+실행 중인 프로세스: 없음; frontend/backend/Gradle 종료, disposable PostgreSQL container는 stopped 상태로 보존
+알려진 실패·차단: npm audit notice 4건(중간 1·높음 3)은 임의 수정하지 않음. Playwright는 native OS IME composition을 재현하지 못하므로 Phase 7에서 재확인. Phase 5 blocker 없음
+다음 정확한 작업: Phase 5 선행 tests 후 pending registry 20개·100MB, UUID fallback, paste handler, object URL lifecycle과 create inline manifest/files 연결
+주의할 사용자 기존 변경: Phase 4 시작 전 작업 트리 clean; 사용자 기존 변경 없음
 ```
 
 ## 13. 최종 완료 기준

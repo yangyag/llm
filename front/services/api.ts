@@ -1,6 +1,7 @@
 // API 클라이언트 — Nuxt $fetch 기반의 게시판 API 계약 구현.
 // Nuxt $fetch 사용. 에러 정규화(ApiError) + 인증 요청 401 시 auth:unauthorized 디스패치 보존.
 import { fromUint8Array } from "js-base64";
+import { buildRichPostBodyPayload } from "~/utils/postDocument";
 import type {
   AiProvider,
   ApiError,
@@ -41,10 +42,12 @@ function encodeBodyBase64(value: string): string {
   return fromUint8Array(new TextEncoder().encode(value));
 }
 
-function buildPostFormData({ title, body, attachments = [], removeAttachmentIds = [] }: PostMutationInput): FormData {
+function buildPostFormData({ title, bodyDocument, attachments = [], removeAttachmentIds = [] }: PostMutationInput): FormData {
   const formData = new FormData();
   formData.append("title", title);
-  formData.append("bodyBase64", encodeBodyBase64(body));
+  const bodyPayload = buildRichPostBodyPayload(bodyDocument);
+  formData.append("bodyFormat", bodyPayload.bodyFormat);
+  formData.append("bodyDocumentBase64", bodyPayload.bodyDocumentBase64);
 
   for (const attachment of attachments) {
     if (attachment) {

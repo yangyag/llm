@@ -97,7 +97,10 @@ async function onDelete() {
     <PostBodyReader
       v-else-if="detail.selectedPost"
       :body="detail.selectedPost.body"
+      :body-format="detail.selectedPost.bodyFormat"
+      :body-document="detail.selectedPost.bodyDocument"
       :mode="detail.selectedPost.mode"
+      :attachments="detail.selectedPost.attachments"
     />
 
     <AttachmentPanel

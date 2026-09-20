@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { isFileConversionMode } from "~/utils/post";
+import { buildInlineImageSources, toCanonicalPostDocument } from "~/utils/postDocument";
+import PostDocumentReader from "./PostDocumentReader.client.vue";
+import type { Attachment, PostBodyFormat, PostMode } from "~/types/api";
 
 const props = defineProps<{
   body: string;
-  mode: string;
+  bodyFormat: PostBodyFormat;
+  bodyDocument: unknown | null;
+  mode: PostMode | string;
+  attachments: Attachment[];
 }>();
 
 const FONT_STEPS = [15, 16, 17, 19, 21] as const;
@@ -30,6 +36,11 @@ const paragraphs = computed(() =>
     .filter((text) => text.length > 0)
 );
 const hasBody = computed(() => paragraphs.value.length > 0);
+
+const richDocument = computed(() =>
+  props.bodyFormat === "TIPTAP_JSON" ? toCanonicalPostDocument(props.bodyDocument) : null
+);
+const inlineSources = computed(() => buildInlineImageSources(props.attachments));
 
 const isLong = computed(
   () => !isFileConversionMode(props.mode) && props.body.length > LONG_BODY_CHARS
@@ -111,9 +122,16 @@ onBeforeUnmount(() => {
 
     <div class="prose-body" :class="{ faded: collapsed }">
       <p v-if="!hasBody" class="prose-empty">작성된 본문이 없습니다.</p>
-      <p v-for="(paragraph, index) in paragraphs" :key="`${index}-${paragraph.length}`">
-        {{ paragraph }}
-      </p>
+      <PostDocumentReader
+        v-else-if="richDocument"
+        :document="richDocument"
+        :inline-sources="inlineSources"
+      />
+      <template v-else>
+        <p v-for="(paragraph, index) in paragraphs" :key="`${index}-${paragraph.length}`">
+          {{ paragraph }}
+        </p>
+      </template>
     </div>
     <button v-if="isLong" type="button" class="prose-more" @click="expanded = !expanded">
       {{ expanded ? "접기 ▲" : "계속 읽기 ▼" }}

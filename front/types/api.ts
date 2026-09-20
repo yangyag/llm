@@ -9,6 +9,22 @@ export type PostMode = "NORMAL" | "FILE_CONVERSION_REQUEST";
 export type PostBodyFormat = "PLAIN_TEXT" | "TIPTAP_JSON";
 export type AttachmentKind = "DOWNLOAD" | "INLINE_IMAGE";
 
+export type PostDocumentMarkType = "bold" | "code" | "italic" | "strike" | "underline";
+export interface PostDocumentMark {
+  type: PostDocumentMarkType;
+}
+export interface PostDocumentNode {
+  type: string;
+  attrs?: Record<string, string | number | null>;
+  content?: PostDocumentNode[];
+  text?: string;
+  marks?: PostDocumentMark[];
+}
+export interface PostDocument extends PostDocumentNode {
+  type: "doc";
+  content: PostDocumentNode[];
+}
+
 /** 사용자 레벨. ADMIN은 사용자 관리 가능, USER는 게시판 쓰기만 가능. */
 export type UserRole = "ADMIN" | "USER";
 
@@ -120,7 +136,7 @@ export interface MeResponse {
 /** 게시글 생성/수정 폼 데이터 */
 export interface PostMutationInput {
   title: string;
-  body: string;
+  bodyDocument: PostDocument;
   attachments?: File[];
   removeAttachmentIds?: number[];
 }

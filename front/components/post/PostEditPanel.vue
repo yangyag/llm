@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import AttachmentDropzone from "./AttachmentDropzone.vue";
+import PostDocumentEditor from "./PostDocumentEditor.client.vue";
 import { usePostDetailStore } from "~/stores/postDetail";
 import { getApiUrl } from "~/services/api";
+import { buildInlineImageSources, filterDownloadAttachments } from "~/utils/postDocument";
 import {
   MAX_ATTACHMENTS,
   attachmentFileKey,
@@ -12,11 +15,15 @@ import {
 
 const detail = usePostDetailStore();
 
+const downloadAttachments = computed(() =>
+  filterDownloadAttachments(detail.selectedPost?.attachments ?? [])
+);
+const inlineSources = computed(() =>
+  buildInlineImageSources(detail.selectedPost?.attachments ?? [])
+);
+
 function onTitle(event: Event) {
   detail.postEditForm.title = (event.target as HTMLInputElement).value;
-}
-function onBody(event: Event) {
-  detail.postEditForm.body = (event.target as HTMLInputElement).value;
 }
 </script>
 
@@ -26,15 +33,18 @@ function onBody(event: Event) {
       <span>제목</span>
       <input :value="detail.postEditForm.title" maxlength="200" required @input="onTitle" />
     </label>
-    <label class="field">
+    <div class="field">
       <span>{{ getPostBodyLabel() }}</span>
-      <textarea :value="detail.postEditForm.body" rows="8" @input="onBody" />
-    </label>
+      <PostDocumentEditor
+        v-model="detail.postEditForm.bodyDocument"
+        :inline-sources="inlineSources"
+      />
+    </div>
     <p class="section-meta">{{ getPostBodyHelp() }}</p>
 
-    <div v-if="detail.selectedPost && detail.selectedPost.attachments.length > 0" class="attachment-panel">
-      <span class="attachment-label">현재 첨부파일 ({{ detail.selectedPost.attachments.length }})</span>
-      <div v-for="attachment in detail.selectedPost.attachments" :key="attachment.id" class="attachment-card">
+    <div v-if="downloadAttachments.length > 0" class="attachment-panel">
+      <span class="attachment-label">현재 첨부파일 ({{ downloadAttachments.length }})</span>
+      <div v-for="attachment in downloadAttachments" :key="attachment.id" class="attachment-card">
         <div>
           <strong :class="{ 'attachment-marked-remove': detail.removeAttachmentIds.has(attachment.id) }">
             {{ attachment.originalFilename }}

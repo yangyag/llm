@@ -109,7 +109,14 @@ function goToBoard() {
             <p v-if="isFileConversionMode(post.mode)" class="post-body-box">
               암호화 업로드 글입니다. 본문은 공개 상세 화면에서 표시되지 않습니다.
             </p>
-            <PostBodyReader v-else :body="post.body" :mode="post.mode" />
+            <PostBodyReader
+              v-else
+              :body="post.body"
+              :body-format="post.bodyFormat"
+              :body-document="post.bodyDocument"
+              :mode="post.mode"
+              :attachments="post.attachments"
+            />
 
             <AttachmentPanel
               v-if="post.attachments.length > 0"
