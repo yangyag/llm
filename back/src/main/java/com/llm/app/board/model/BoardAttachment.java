@@ -62,6 +62,39 @@ public class BoardAttachment {
 		long size,
 		Instant createdAt
 	) {
+		this(
+			post,
+			originalFilename,
+			storedFilename,
+			storagePath,
+			contentType,
+			size,
+			createdAt,
+			BoardAttachmentKind.DOWNLOAD,
+			null
+		);
+	}
+
+	public BoardAttachment(
+		BoardPost post,
+		String originalFilename,
+		String storedFilename,
+		String storagePath,
+		String contentType,
+		long size,
+		Instant createdAt,
+		BoardAttachmentKind attachmentKind,
+		UUID inlineKey
+	) {
+		if (attachmentKind == null) {
+			throw new IllegalArgumentException("attachment kind is required");
+		}
+		if (attachmentKind == BoardAttachmentKind.DOWNLOAD && inlineKey != null) {
+			throw new IllegalArgumentException("download attachments cannot have an inline key");
+		}
+		if (attachmentKind == BoardAttachmentKind.INLINE_IMAGE && inlineKey == null) {
+			throw new IllegalArgumentException("inline image attachments require an inline key");
+		}
 		this.post = post;
 		this.originalFilename = originalFilename;
 		this.storedFilename = storedFilename;
@@ -69,6 +102,8 @@ public class BoardAttachment {
 		this.contentType = contentType;
 		this.size = size;
 		this.createdAt = createdAt;
+		this.attachmentKind = attachmentKind;
+		this.inlineKey = inlineKey;
 	}
 
 	public Long getId() {

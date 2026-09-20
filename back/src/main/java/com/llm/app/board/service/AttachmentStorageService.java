@@ -50,13 +50,38 @@ public class AttachmentStorageService implements GeneratedAttachmentPolicy {
 	 * @throws AttachmentStorageException 파일 저장에 실패한 경우
 	 */
 	public StoredAttachment store(MultipartFile attachment) {
+		validateUploadSize(attachment);
+		String originalFilename = extractOriginalFilename(attachment);
+		return storeMultipart(
+			attachment,
+			originalFilename,
+			attachment.getContentType(),
+			extractExtension(originalFilename)
+		);
+	}
+
+	public StoredAttachment store(MultipartFile attachment, String verifiedContentType, String verifiedExtension) {
+		validateUploadSize(attachment);
+		boolean png = "image/png".equals(verifiedContentType) && ".png".equals(verifiedExtension);
+		boolean jpeg = "image/jpeg".equals(verifiedContentType) && ".jpg".equals(verifiedExtension);
+		if (!png && !jpeg) {
+			throw new IllegalArgumentException("unsupported verified inline image type");
+		}
+		return storeMultipart(attachment, extractOriginalFilename(attachment), verifiedContentType, verifiedExtension);
+	}
+
+	private void validateUploadSize(MultipartFile attachment) {
 		if (attachment.getSize() > maxUploadFileSizeBytes) {
 			throw new AttachmentTooLargeException(maxUploadFileSizeBytes);
 		}
+	}
 
-		String originalFilename = extractOriginalFilename(attachment);
-		String contentType = attachment.getContentType();
-		String extension = extractExtension(originalFilename);
+	private StoredAttachment storeMultipart(
+		MultipartFile attachment,
+		String originalFilename,
+		String contentType,
+		String extension
+	) {
 		String storedFilename = UUID.randomUUID() + extension;
 		String storagePath = storedFilename;
 		Path targetPath = resolve(storagePath);

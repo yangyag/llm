@@ -1,6 +1,6 @@
 # 게시글 본문 이미지 붙여넣기·영구 저장 구현 계획서
 
-- 상태: 구현 진행 — Phase 0~2 완료, Phase 3 미착수
+- 상태: 구현 진행 — Phase 0~3 완료, Phase 4 미착수
 - 작성일: 2026-09-20
 - 대상: `front/` Nuxt 3·Vue 3 게시글 작성/수정/조회, `back/` Spring Boot 게시판·첨부 모듈, Flyway
 - 목표: 게시글 작성·수정 중 클립보드 이미지를 즉시 본문에 표시하고, 게시글 저장 후에도 텍스트·이미지 순서와 위치를 유지한다.
@@ -280,7 +280,7 @@ inline 이미지 설정 이름:
 | 0 | 기준선·계약·한도 확정 | 완료 | 기준선·의존성·API/DB/한도 계약과 환경 제약 기록 완료 |
 | 1 | Flyway·엔티티·응답 metadata 확장 | 완료 | V19·JPA·응답 metadata와 PostgreSQL 제약 검증 완료 |
 | 2 | rich 문서 codec·검증·평문 추출 | 완료 | canonical JSON·평문·한도·HTTP rich 계약 검증 완료 |
-| 3 | inline 이미지 저장·조회 backend | 미착수 | MockMvc로 생성·content 조회·롤백 검증 통과 |
+| 3 | inline 이미지 저장·조회 backend | 완료 | MockMvc로 생성·content 조회·롤백 검증 통과 |
 | 4 | Tiptap editor·reader 기반 도입 | 미착수 | 이미지 없이 plain/rich 작성·수정·조회 가능 |
 | 5 | 이미지 붙여넣기 임시 보관·글 생성 | 미착수 | 새 글에서 붙여넣기→저장→조회 통과 |
 | 6 | 수정·삭제·실패 재시도 완성 | 미착수 | 기존/신규 이미지 혼합 수정과 정리 통과 |
@@ -524,7 +524,7 @@ Phase 2 완료 조건을 모두 충족했다. 다음 작업은 Phase 3의 inline
 
 ### Phase 3 — inline 이미지 저장·조회 backend
 
-**상태: 미착수**
+**상태: 완료 — 2026-09-20**
 
 #### 진입 전 한도 게이트
 
@@ -578,6 +578,29 @@ cd back
 #### 안전 중단점
 
 backend 계약과 테스트가 완결되고 frontend는 아직 기존 textarea를 사용한다.
+
+#### Phase 3 완료 기록 — 2026-09-20
+
+- 사용량 상태는 확인 수단이 없어 `알 수 없음`으로 유지하고, 선행 HTTP red → validator·manifest·저장 구현 → focused 검증 → diff 검토·보강 → 전체 backend 게이트 순서로 체크포인트를 나눴다.
+- 선행 `BoardPostControllerTest`는 60건 중 기존 56건이 통과하고 신규 4건이 현재 Phase 2의 image key 차단 때문에 기대 201/실제 400 또는 오류 코드 불일치로 실패해 의도한 behavioral red를 확인했다.
+- 생성·수정 DTO에 `inlineImageManifestBase64`와 반복 `inlineImages`를 추가했다. manifest는 strict Base64·UTF-8·JSON, 정확한 필드, UUID, 중복 key/index, 연속 `fileIndex`를 검증한다.
+- `InlineImageValidator`는 client MIME·확장자를 신뢰하지 않고 ImageIO reader로 실제 PNG/JPEG 형식과 dimensions를 판정한다. 기본 10MB, 너비·높이 각 8192px, 총 25,000,000px 한도를 적용한다.
+- 검증된 PNG/JPEG는 기존 attachment volume에 UUID 저장명과 실제 형식 확장자로 저장하고 DB에는 `INLINE_IMAGE`, `inline_key`, 검증된 content type을 기록한다. 일반 첨부와 inline 이미지는 합계 5개 한도를 공유한다.
+- 생성 시 canonical 문서 key, manifest key, multipart file index 집합이 정확히 일치해야 하며 모든 검증을 DB·파일 변경 전에 끝낸다. 파일 저장 뒤 transaction rollback이 발생하면 기존 `AttachmentFileLifecycle` 경로로 신규 파일을 정리한다.
+- Phase 6 전 수정 안전 계약으로 신규 inline payload와 image key 집합 변경은 거부하고, 기존 key 집합을 그대로 포함한 rich 수정만 같은 attachment ID·파일을 보존한다. `removeAttachmentIds`에 inline ID를 넣으면 거부한다.
+- 공개 content endpoint는 해당 글의 `INLINE_IMAGE`만 반환하며 검증된 `Content-Type`, inline disposition, `X-Content-Type-Options: nosniff`, 1년 immutable cache를 설정한다. 일반 download endpoint 계약은 유지했다.
+
+검증 결과:
+
+- focused 5개 클래스: `GeneratedAttachmentPolicyTest` 3건, `InlineImageValidatorTest` 4건, `BoardPostControllerTest` 61건, `SecurityAndStorageRegressionTest` 8건, `UploadSessionControllerTest` 21건으로 합계 97건 전부 통과했다.
+- backend 전체 `clean test`: 178건 발견, 174건 통과, PostgreSQL 조건부 4건 skip, 실패·오류 0이다.
+- skip 4건은 `LLM_TEST_POSTGRES_URL` 미설정에 따른 `PostgresMigrationTest` 1건과 `PostgresUploadFinalizeTest` 3건이다. Phase 3의 PostgreSQL transaction 검증 성공으로 간주하지 않는다.
+- frontend는 변경하지 않아 재실행하지 않았다. 최신 front 기준선은 Phase 1의 `npm test` 7/7, typecheck·generate 성공이다.
+- Docker compose, 8083 health, HTTP browser smoke는 Phase 3에서 실행하지 않았다.
+- 비차단 warning은 기존 레거시 AI 필드 dep-ann 3건, `@MockBean` deprecation 2건, unchecked/CDS warning이다.
+- 최종 diff 검토에서 일반 첨부의 기존 파일 크기 검증 순서를 복원하고 요청하지 않은 신규 Javadoc을 제거한 뒤 focused gate를 다시 통과했다. Gradle daemon은 종료했고 실행 중인 서버·Docker 프로세스는 만들지 않았다.
+
+Phase 3 완료 조건을 충족했다. 다음 작업은 Phase 4의 Tiptap exact dependency 설치와 이미지 없는 editor·reader·plain/rich 호환 구현이다.
 
 ### Phase 4 — Tiptap editor·reader 기반 도입
 
@@ -993,27 +1016,27 @@ Docker/health/smoke 결과:
 
 기록에는 secret, JWT, 비밀번호, `.env` 값, PEM 내용, 민감한 이미지 내용, 전체 환경변수 덤프를 넣지 않는다.
 
-## 12. 최신 재개 기록 — Phase 2 완료
+## 12. 최신 재개 기록 — Phase 3 완료
 
 ```text
 기록 일시: 2026-09-20
 사용량 상태: 알 수 없음
-현재 Phase: 3
+현재 Phase: 4
 Phase 상태: 미착수
-마지막 완료 Phase: 2
-기준 브랜치/커밋: main / ebb16da5432ee26185ffaffdf23ea8d29407f3b6
+마지막 완료 Phase: 3
+기준 브랜치/커밋: main / 2a8ca6c43a6e4a86e670c615ec09a68b1e2b2b7f
 작업 전 git status: clean
-이번 변경 파일: GlobalExceptionHandler, create/update post DTO, BoardPost, BoardService, BoardMapper, rich document codec·예외 2개, codec/controller tests, 계획서
-완료한 계약: strict Tiptap schema/canonical JSON/plain extraction/image key set, rich create/update, INVALID_RICH_DOCUMENT 400, RICH_TEXT_CLIENT_REQUIRED 409, Phase 3 전 image key 차단
-통과한 좁은 테스트: BoardRichDocumentCodecTest 12/12, BoardPostControllerTest 56/56, UploadSessionControllerTest와 SecurityAndStorageRegressionTest
-최신 전체 backend 테스트: clean test 168 discovered, 164 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors
-최신 front test/typecheck/build: Phase 2 frontend 변경 없음; Phase 1 기준 npm test 7/7, typecheck·generate 성공 유지
-PostgreSQL focused 결과: Phase 2에서 미실행; Phase 1 V19 migration/constraint/Hibernate validate 통과 결과 유지
-Docker/health/smoke 결과: Phase 2에서 Docker·애플리케이션 compose/8083 smoke 미실행
+이번 변경 파일: create/update post DTO, BoardAttachment, AttachmentStorageService, BoardService, BoardPostController, application.properties, 신규 manifest codec·inline validator, controller/validator/storage regression tests, 계획서
+완료한 계약: strict manifest/file/document key 집합, actual PNG/JPEG·10MB·dimension·pixel 검증, DOWNLOAD+INLINE_IMAGE 합계 5개, rollback-safe volume 저장, 공개 inline content headers, 기존 key 보존 update
+통과한 좁은 테스트: GeneratedAttachmentPolicyTest 3/3, InlineImageValidatorTest 4/4, BoardPostControllerTest 61/61, SecurityAndStorageRegressionTest 8/8, UploadSessionControllerTest 21/21 — 합계 97/97
+최신 전체 backend 테스트: clean test 178 discovered, 174 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors
+최신 front test/typecheck/build: Phase 3 frontend 변경 없음; Phase 1 기준 npm test 7/7, typecheck·generate 성공 유지
+PostgreSQL focused 결과: Phase 3에서 미실행; 조건부 4건은 LLM_TEST_POSTGRES_URL 미설정으로 skip. Phase 1 V19 migration/constraint/Hibernate validate 통과 결과 유지
+Docker/health/smoke 결과: Phase 3에서 Docker·애플리케이션 compose/8083 smoke 미실행
 실행 중인 프로세스: 없음; Gradle daemon 종료 확인
-알려진 실패·차단: bare Gradle은 PATH Java 21로 실패하므로 Windows 명령에 -Porg.gradle.java.installations.paths=C:\jdk\jdk-25.0.4.1+1 필요. Phase 3 blocker 없음
-다음 정확한 작업: Phase 3 선행 테스트 후 inline image validator, manifest/file/document key 집합 검증, attachment 저장과 public content endpoint 구현
-주의할 사용자 기존 변경: Phase 2 시작 전 작업 트리 clean; 사용자 기존 변경 없음
+알려진 실패·차단: bare Gradle은 PATH Java 21로 실패하므로 Windows 명령에 -Porg.gradle.java.installations.paths=C:\jdk\jdk-25.0.4.1+1 필요. 신규 inline 추가·삭제 update는 계획대로 Phase 6 전까지 거부하며 Phase 4 blocker는 없음
+다음 정확한 작업: Phase 4 선행 frontend utility tests 후 Tiptap 3.31.3 exact dependency 설치, client-only editor/reader와 이미지 없는 plain→rich 작성·수정·조회 구현
+주의할 사용자 기존 변경: Phase 3 시작 전 작업 트리 clean; 사용자 기존 변경 없음
 ```
 
 ## 13. 최종 완료 기준

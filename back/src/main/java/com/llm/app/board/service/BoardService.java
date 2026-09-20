@@ -25,6 +25,7 @@ import com.llm.app.board.exception.InvalidAttachmentRequestException;
 import com.llm.app.board.exception.InvalidRichDocumentException;
 import com.llm.app.board.exception.RichTextClientRequiredException;
 import com.llm.app.board.model.BoardAttachment;
+import com.llm.app.board.model.BoardAttachmentKind;
 import com.llm.app.board.model.BoardPost;
 import com.llm.app.board.model.BoardPostMode;
 import com.llm.app.board.model.PostBodyFormat;
@@ -34,11 +35,14 @@ import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
 import com.llm.app.board.repository.BoardPostSummaryProjection;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -62,7 +66,11 @@ public class BoardService {
 	private final AiReplyGenerator aiReplyGenerator;
 	private final AttachmentStorageService attachmentStorageService;
 	private final AttachmentFileLifecycle attachmentFileLifecycle;
+	private final InlineImageManifestCodec inlineImageManifestCodec;
+	private final InlineImageValidator inlineImageValidator;
 	private final int maxAttachmentsPerPost;
+
+	private static final Set<String> INLINE_CONTENT_TYPES = Set.of("image/png", "image/jpeg");
 
 	/**
 	 * 게시판 서비스가 사용하는 저장소와 협력 객체를 초기화한다.
@@ -89,6 +97,8 @@ public class BoardService {
 		AiReplyGenerator aiReplyGenerator,
 		AttachmentStorageService attachmentStorageService,
 		AttachmentFileLifecycle attachmentFileLifecycle,
+		InlineImageManifestCodec inlineImageManifestCodec,
+		InlineImageValidator inlineImageValidator,
 		@Value("${app.attachments.max-count:5}") int maxAttachmentsPerPost
 	) {
 		this.boardPostRepository = boardPostRepository;
@@ -101,6 +111,8 @@ public class BoardService {
 		this.aiReplyGenerator = aiReplyGenerator;
 		this.attachmentStorageService = attachmentStorageService;
 		this.attachmentFileLifecycle = attachmentFileLifecycle;
+		this.inlineImageManifestCodec = inlineImageManifestCodec;
+		this.inlineImageValidator = inlineImageValidator;
 		this.maxAttachmentsPerPost = maxAttachmentsPerPost;
 	}
 
@@ -146,6 +158,10 @@ public class BoardService {
 		BoardPostMode mode = request.getMode();
 		ResolvedPostBody body = resolvePostBody(
 			mode, request.getBodyFormat(), request.getBodyBase64(), request.getBodyDocumentBase64());
+		List<PreparedInlineImage> inline = prepareCreatedInlineImages(
+			body.imageKeys(), request.getInlineImageManifestBase64(), request.getInlineImages());
+		PreparedAttachmentChanges changes = prepareAttachmentChanges(
+			List.of(), request.getAttachments(), null, inline);
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
 			body.plainText(),
@@ -157,7 +173,7 @@ public class BoardService {
 			body.format(),
 			body.document()
 		));
-		syncAttachments(savedPost, request.getAttachments(), null, now);
+		applyAttachmentChanges(savedPost, changes, now);
 		return toDetailResponse(savedPost);
 	}
 
@@ -180,6 +196,12 @@ public class BoardService {
 		BoardPostMode mode = request.getMode();
 		ResolvedPostBody body = resolvePostBody(
 			mode, request.getBodyFormat(), request.getBodyBase64(), request.getBodyDocumentBase64());
+		List<BoardAttachment> existing = findAttachments(post.getId());
+		ensureUpdateInlineImagesUnchanged(
+			body.imageKeys(), existing,
+			request.getInlineImageManifestBase64(), request.getInlineImages());
+		PreparedAttachmentChanges changes = prepareAttachmentChanges(
+			existing, request.getAttachments(), request.getRemoveAttachmentIds(), List.of());
 		post.update(
 			request.getTitle().trim(),
 			body.plainText(),
@@ -188,7 +210,7 @@ public class BoardService {
 			mode,
 			Instant.now()
 		);
-		syncAttachments(post, request.getAttachments(), request.getRemoveAttachmentIds(), Instant.now());
+		applyAttachmentChanges(post, changes, Instant.now());
 		return toDetailResponse(post);
 	}
 
@@ -347,6 +369,23 @@ public class BoardService {
 		);
 	}
 
+	@Transactional(readOnly = true)
+	public BoardAttachmentDownload getInlineAttachmentContent(Long postId, Long attachmentId) {
+		BoardPost post = findPostWithReplies(postId);
+		BoardAttachment attachment = boardAttachmentRepository.findByIdAndPost_Id(attachmentId, post.getId())
+			.orElseThrow(() -> NotFoundException.attachment(postId));
+		if (attachment.getAttachmentKind() != BoardAttachmentKind.INLINE_IMAGE
+			|| !INLINE_CONTENT_TYPES.contains(attachment.getContentType())) {
+			throw NotFoundException.attachment(postId);
+		}
+		return new BoardAttachmentDownload(
+			attachmentStorageService.loadAsResource(attachment),
+			attachment.getOriginalFilename(),
+			attachment.getContentType(),
+			attachment.getSize()
+		);
+	}
+
 	/**
 	 * 댓글이 함께 조회된 게시글을 찾는다.
 	 *
@@ -481,7 +520,26 @@ public class BoardService {
 		return "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
 	}
 
-	private record ResolvedPostBody(String plainText, PostBodyFormat format, String document) {
+	private record ResolvedPostBody(
+		String plainText, PostBodyFormat format, String document, Set<UUID> imageKeys
+	) {
+	}
+
+	private record PreparedInlineImage(
+		UUID imageKey, MultipartFile file, InlineImageValidator.ValidatedInlineImage validated
+	) {
+	}
+
+	private record PreparedAttachmentChanges(
+		List<MultipartFile> downloads,
+		List<PreparedInlineImage> inlineImages,
+		List<BoardAttachment> removals
+	) {
+		private PreparedAttachmentChanges {
+			downloads = List.copyOf(downloads);
+			inlineImages = List.copyOf(inlineImages);
+			removals = List.copyOf(removals);
+		}
 	}
 
 	/**
@@ -505,16 +563,13 @@ public class BoardService {
 			if (bodyDocumentBase64 != null) {
 				throw new InvalidRichDocumentException("bodyDocumentBase64 requires a rich text body format");
 			}
-			return new ResolvedPostBody(boardContentCodec.decodeOptionalBody(bodyBase64), format, null);
+			return new ResolvedPostBody(boardContentCodec.decodeOptionalBody(bodyBase64), format, null, Set.of());
 		}
 		if (bodyBase64 != null) {
 			throw new InvalidRichDocumentException("bodyBase64 is not allowed for rich text posts");
 		}
 		BoardRichDocumentCodec.DecodedDocument document = richDocumentCodec.decode(bodyDocumentBase64);
-		if (!document.imageKeys().isEmpty()) {
-			throw new InvalidRichDocumentException("inline images are not supported yet");
-		}
-		return new ResolvedPostBody(document.plainText(), format, document.canonicalJson());
+		return new ResolvedPostBody(document.plainText(), format, document.canonicalJson(), document.imageKeys());
 	}
 
 	/**
@@ -531,55 +586,124 @@ public class BoardService {
 		}
 	}
 
-	/**
-	 * 게시글의 첨부파일 추가·삭제 요청을 현재 상태에 반영한다.
-	 *
-	 * @param post 첨부파일을 동기화할 게시글
-	 * @param uploads 새로 업로드할 파일 목록
-	 * @param removeAttachmentIds 삭제할 첨부파일 ID 목록
-	 * @param now 새 첨부파일 메타데이터에 사용할 시각
-	 */
-	private void syncAttachments(
-		BoardPost post,
-		List<MultipartFile> uploads,
-		Collection<Long> removeAttachmentIds,
-		Instant now
+	private List<PreparedInlineImage> prepareCreatedInlineImages(
+		Set<UUID> documentKeys,
+		String manifestBase64,
+		List<MultipartFile> files
 	) {
-		List<BoardAttachment> existing = findAttachments(post.getId());
-
-		// 1) 삭제 대상만 확정한다(아직 삭제하지 않음).
-		Set<Long> removeIds = removeAttachmentIds == null
-			? Set.of()
-			: new HashSet<>(removeAttachmentIds);
-		List<BoardAttachment> toRemove = removeIds.isEmpty()
-			? List.of()
-			: existing.stream()
-				.filter(attachment -> removeIds.contains(attachment.getId()))
-				.toList();
-		if (toRemove.size() != removeIds.size()) {
+		List<MultipartFile> uploads = files == null ? List.<MultipartFile>of() : files;
+		if (manifestBase64 == null && uploads.isEmpty() && documentKeys.isEmpty()) {
+			return List.of();
+		}
+		if (manifestBase64 == null || uploads.isEmpty() || documentKeys.isEmpty()) {
 			throw new InvalidAttachmentRequestException(
-				"removeAttachmentIds references attachments that do not belong to this post"
+				"inline image manifest, files and document keys must all be present"
 			);
 		}
-
-		// 2) 신규 업로드만 필터링한다(아직 저장하지 않음).
-		List<MultipartFile> newUploads = (uploads == null ? List.<MultipartFile>of() : uploads).stream()
-			.filter(this::hasAttachmentUpload)
-			.toList();
-
-		// 3) 어떤 디스크/DB 변경보다 먼저 최종 개수를 검증한다 → 실패해도 부수효과가 전혀 없다.
-		if (existing.size() - toRemove.size() + newUploads.size() > maxAttachmentsPerPost) {
+		List<InlineImageManifestCodec.Entry> entries = inlineImageManifestCodec.decode(manifestBase64);
+		if (entries.size() != uploads.size()) {
+			throw new InvalidAttachmentRequestException(
+				"inline image manifest and files must have the same count"
+			);
+		}
+		if (entries.size() > maxAttachmentsPerPost) {
 			throw new InvalidAttachmentRequestException(
 				"a post can have at most " + maxAttachmentsPerPost + " attachments"
 			);
 		}
+		Set<UUID> manifestKeys = entries.stream()
+			.map(InlineImageManifestCodec.Entry::imageKey)
+			.collect(Collectors.toSet());
+		if (!manifestKeys.equals(documentKeys)) {
+			throw new InvalidAttachmentRequestException(
+				"inline image manifest keys must match the document keys"
+			);
+		}
+		List<PreparedInlineImage> prepared = new ArrayList<>();
+		for (InlineImageManifestCodec.Entry entry : entries) {
+			MultipartFile file = uploads.get(entry.fileIndex());
+			if (file == null || !StringUtils.hasText(file.getOriginalFilename())) {
+				throw new InvalidAttachmentRequestException("inline image file is missing a filename");
+			}
+			prepared.add(new PreparedInlineImage(entry.imageKey(), file, inlineImageValidator.validate(file)));
+		}
+		return List.copyOf(prepared);
+	}
 
-		if (toRemove.isEmpty() && newUploads.isEmpty()) {
-			return;
+	private void ensureUpdateInlineImagesUnchanged(
+		Set<UUID> documentKeys,
+		List<BoardAttachment> existing,
+		String manifest,
+		List<MultipartFile> files
+	) {
+		if (manifest != null || (files != null && !files.isEmpty())) {
+			throw new InvalidAttachmentRequestException(
+				"adding inline images during update is not supported yet"
+			);
+		}
+		Set<UUID> existingKeys = existing.stream()
+			.filter(attachment -> attachment.getAttachmentKind() == BoardAttachmentKind.INLINE_IMAGE)
+			.map(BoardAttachment::getInlineKey)
+			.collect(Collectors.toSet());
+		if (!existingKeys.equals(documentKeys)) {
+			throw new InvalidAttachmentRequestException(
+				"inline image changes during update are not supported yet"
+			);
+		}
+	}
+
+	private PreparedAttachmentChanges prepareAttachmentChanges(
+		List<BoardAttachment> existing,
+		List<MultipartFile> uploads,
+		Collection<Long> removeAttachmentIds,
+		List<PreparedInlineImage> inlineImages
+	) {
+		// 1) 삭제 대상만 확정한다(아직 삭제하지 않음).
+		Set<Long> removeIds = removeAttachmentIds == null
+			? Set.of()
+			: new HashSet<>(removeAttachmentIds);
+		List<BoardAttachment> removals = removeIds.isEmpty()
+			? List.of()
+			: existing.stream()
+				.filter(attachment -> removeIds.contains(attachment.getId()))
+				.toList();
+		if (removals.size() != removeIds.size()) {
+			throw new InvalidAttachmentRequestException(
+				"removeAttachmentIds references attachments that do not belong to this post"
+			);
+		}
+		for (BoardAttachment removal : removals) {
+			if (removal.getAttachmentKind() != BoardAttachmentKind.DOWNLOAD) {
+				throw new InvalidAttachmentRequestException(
+					"removeAttachmentIds only supports download attachments"
+				);
+			}
 		}
 
+		// 2) 신규 업로드만 필터링한다(아직 저장하지 않음).
+		List<MultipartFile> downloads = (uploads == null ? List.<MultipartFile>of() : uploads).stream()
+			.filter(this::hasAttachmentUpload)
+			.toList();
+
+		// 3) 어떤 디스크/DB 변경보다 먼저 최종 개수를 검증한다 → 실패해도 부수효과가 전혀 없다.
+		if (existing.size() - removals.size() + downloads.size() + inlineImages.size() > maxAttachmentsPerPost) {
+			throw new InvalidAttachmentRequestException(
+				"a post can have at most " + maxAttachmentsPerPost + " attachments"
+			);
+		}
+		return new PreparedAttachmentChanges(downloads, inlineImages, removals);
+	}
+
+	/**
+	 * 게시글의 첨부파일 추가·삭제 요청을 현재 상태에 반영한다.
+	 *
+	 * @param post 첨부파일을 동기화할 게시글
+	 * @param changes 검증이 끝난 첨부파일 변경 내용
+	 * @param now 새 첨부파일 메타데이터에 사용할 시각
+	 */
+	private void applyAttachmentChanges(BoardPost post, PreparedAttachmentChanges changes, Instant now) {
 		// Every new file is registered before its DB row is saved, including commit-time failures.
-		for (MultipartFile upload : newUploads) {
+		for (MultipartFile upload : changes.downloads()) {
 			AttachmentStorageService.StoredAttachment stored = attachmentStorageService.store(upload);
 			attachmentFileLifecycle.trackCreated(stored.storagePath());
 			boardAttachmentRepository.save(new BoardAttachment(
@@ -587,9 +711,19 @@ public class BoardService {
 				stored.contentType(), stored.size(), now
 			));
 		}
+		for (PreparedInlineImage image : changes.inlineImages()) {
+			AttachmentStorageService.StoredAttachment stored = attachmentStorageService.store(
+				image.file(), image.validated().contentType(), image.validated().extension());
+			attachmentFileLifecycle.trackCreated(stored.storagePath());
+			boardAttachmentRepository.save(new BoardAttachment(
+				post, stored.originalFilename(), stored.storedFilename(), stored.storagePath(),
+				stored.contentType(), stored.size(), now,
+				BoardAttachmentKind.INLINE_IMAGE, image.imageKey()
+			));
+		}
 
 		// 기존 metadata 삭제와 파일 삭제 예약은 같은 트랜잭션에 참여한다.
-		toRemove.forEach(this::deleteAttachment);
+		changes.removals().forEach(this::deleteAttachment);
 	}
 
 	/**

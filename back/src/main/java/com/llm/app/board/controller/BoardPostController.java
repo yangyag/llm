@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -142,6 +143,21 @@ public class BoardPostController {
 					.build()
 					.toString()
 			)
+			.body(attachment.resource());
+	}
+
+	@GetMapping("/{id}/attachments/{attachmentId}/content")
+	public ResponseEntity<Resource> getInlineAttachmentContent(
+		@PathVariable Long id,
+		@PathVariable Long attachmentId
+	) {
+		var attachment = boardService.getInlineAttachmentContent(id, attachmentId);
+		return ResponseEntity.ok()
+			.contentType(MediaType.parseMediaType(attachment.contentType()))
+			.contentLength(attachment.size())
+			.header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().build().toString())
+			.header("X-Content-Type-Options", "nosniff")
+			.header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable")
 			.body(attachment.resource());
 	}
 

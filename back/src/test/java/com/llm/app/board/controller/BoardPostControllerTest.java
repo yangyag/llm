@@ -35,6 +35,8 @@ import com.llm.app.board.repository.BoardPostRepository;
 import com.llm.app.board.repository.BoardReplyRepository;
 import com.llm.app.upload.service.UploadSessionStatusSnapshot;
 import com.llm.app.upload.service.UploadSessionWireCodec;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -43,6 +45,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.UUID;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +58,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -527,7 +531,7 @@ class BoardPostControllerTest {
 	}
 
 	@Test
-	void richDocumentWithInlineImageShouldBeRejectedUntilPhase3() throws Exception {
+	void richDocumentWithImageKeyButNoManifestShouldBeRejected() throws Exception {
 		mockMvc.perform(multipartPost("/api/v1/posts")
 				.header("Authorization", "Bearer " + token)
 				.param("title", "이미지 리치 글")
@@ -535,7 +539,7 @@ class BoardPostControllerTest {
 				.param("bodyDocumentBase64", encode(
 					"{\"type\":\"doc\",\"content\":[{\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\"b1e09b73-1111-4444-8888-123456789abc\"}}]}")))
 			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.code").value("INVALID_RICH_DOCUMENT"));
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
 
 		assertThat(boardPostRepository.count()).isZero();
 	}
@@ -911,6 +915,311 @@ class BoardPostControllerTest {
 		mockMvc.perform(get(firstDownloadUrl))
 			.andExpect(status().isOk())
 			.andExpect(content().bytes("내용1".getBytes(StandardCharsets.UTF_8)));
+	}
+
+	@Test
+	void richPostWithInlineImagesShouldPersistVerifiedFilesAndServeContent() throws Exception {
+		String pngKey = "11111111-1111-4111-8111-111111111111";
+		String jpegKey = "22222222-2222-4222-8222-222222222222";
+		byte[] pngBytes = imageBytes("png", 2, 3);
+		byte[] jpegBytes = imageBytes("jpeg", 3, 2);
+		String document = """
+			{"type":"doc","content":[
+				{"type":"paragraph","content":[{"type":"text","text":"앞"}]},
+				{"type":"inlineAttachmentImage","attrs":{"imageKey":"%s","alt":"캡처"}},
+				{"type":"inlineAttachmentImage","attrs":{"imageKey":"%s","alt":""}},
+				{"type":"paragraph","content":[{"type":"text","text":"뒤"}]}
+			]}""".formatted(pngKey, jpegKey);
+		String manifest = "[{\"imageKey\":\"%s\",\"fileIndex\":1},{\"imageKey\":\"%s\",\"fileIndex\":0}]"
+			.formatted(jpegKey, pngKey);
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(new MockMultipartFile("inlineImages", "capture.html", "text/html", pngBytes))
+				.file(new MockMultipartFile("inlineImages", "photo.bin", "application/octet-stream", jpegBytes))
+				.file(new MockMultipartFile("attachments", "guide.txt", "text/plain",
+					"가이드".getBytes(StandardCharsets.UTF_8)))
+				.header("Authorization", "Bearer " + token)
+				.param("title", "인라인 이미지 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(document))
+				.param("inlineImageManifestBase64", encode(manifest)))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.bodyFormat").value("TIPTAP_JSON"))
+			.andExpect(jsonPath("$.body").value("앞\n[이미지: 캡처]\n[이미지]\n뒤"))
+			.andExpect(jsonPath("$.attachments", hasSize(3)))
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		JsonNode responseAttachments = objectMapper.readTree(createResult.getResponse().getContentAsString())
+			.path("attachments");
+		JsonNode pngResponse = findAttachment(responseAttachments, "inlineKey", pngKey);
+		JsonNode jpegResponse = findAttachment(responseAttachments, "inlineKey", jpegKey);
+		JsonNode guideResponse = findAttachment(responseAttachments, "originalFilename", "guide.txt");
+		assertThat(pngResponse.path("attachmentKind").asText()).isEqualTo("INLINE_IMAGE");
+		assertThat(pngResponse.path("contentType").asText()).isEqualTo("image/png");
+		assertThat(pngResponse.path("contentUrl").asText())
+			.isEqualTo("/api/v1/posts/" + postId + "/attachments/" + pngResponse.path("id").asLong() + "/content");
+		assertThat(jpegResponse.path("attachmentKind").asText()).isEqualTo("INLINE_IMAGE");
+		assertThat(jpegResponse.path("contentType").asText()).isEqualTo("image/jpeg");
+		assertThat(jpegResponse.path("contentUrl").asText())
+			.isEqualTo("/api/v1/posts/" + postId + "/attachments/" + jpegResponse.path("id").asLong() + "/content");
+		assertThat(guideResponse.path("attachmentKind").asText()).isEqualTo("DOWNLOAD");
+		assertThat(guideResponse.path("inlineKey").asText(null)).isNull();
+		assertThat(guideResponse.path("contentUrl").asText(null)).isNull();
+
+		BoardAttachment pngEntity = attachmentEntityByInlineKey(postId, pngKey);
+		assertThat(pngEntity.getAttachmentKind()).isEqualTo(BoardAttachmentKind.INLINE_IMAGE);
+		assertThat(pngEntity.getContentType()).isEqualTo("image/png");
+		assertThat(pngEntity.getStoragePath()).endsWith(".png");
+		BoardAttachment jpegEntity = attachmentEntityByInlineKey(postId, jpegKey);
+		assertThat(jpegEntity.getAttachmentKind()).isEqualTo(BoardAttachmentKind.INLINE_IMAGE);
+		assertThat(jpegEntity.getContentType()).isEqualTo("image/jpeg");
+		assertThat(jpegEntity.getStoragePath()).endsWith(".jpg");
+
+		mockMvc.perform(get(pngResponse.path("contentUrl").asText()))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Type", "image/png"))
+			.andExpect(header().string("Content-Disposition", containsString("inline")))
+			.andExpect(header().string("X-Content-Type-Options", "nosniff"))
+			.andExpect(header().string("Cache-Control", "public, max-age=31536000, immutable"))
+			.andExpect(content().bytes(pngBytes));
+		mockMvc.perform(get(jpegResponse.path("contentUrl").asText()))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Type", "image/jpeg"))
+			.andExpect(header().string("Content-Disposition", containsString("inline")))
+			.andExpect(header().string("X-Content-Type-Options", "nosniff"))
+			.andExpect(header().string("Cache-Control", "public, max-age=31536000, immutable"))
+			.andExpect(content().bytes(jpegBytes));
+
+		mockMvc.perform(get(pngResponse.path("downloadUrl").asText()))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Disposition", containsString("attachment")));
+		mockMvc.perform(get(jpegResponse.path("downloadUrl").asText()))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Disposition", containsString("attachment")));
+
+		mockMvc.perform(get("/api/v1/posts/{postId}/attachments/{attachmentId}/content",
+				postId, guideResponse.path("id").asLong()))
+			.andExpect(status().isNotFound());
+
+		MvcResult otherPostResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "다른 글")
+				.param("bodyBase64", encode("다른 본문")))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long otherPostId = extractId(otherPostResult.getResponse().getContentAsString());
+		mockMvc.perform(get("/api/v1/posts/{postId}/attachments/{attachmentId}/content",
+				otherPostId, pngResponse.path("id").asLong()))
+			.andExpect(status().isNotFound());
+	}
+
+	@Test
+	void inlineManifestDocumentAndFilesMustMatchExactly() throws Exception {
+		String key = "33333333-3333-4333-8333-333333333333";
+		String otherKey = "44444444-4444-4444-8444-444444444444";
+		byte[] pngBytes = imageBytes("png", 2, 2);
+		String twoKeyDocument = """
+			{"type":"doc","content":[
+				{"type":"inlineAttachmentImage","attrs":{"imageKey":"%s"}},
+				{"type":"inlineAttachmentImage","attrs":{"imageKey":"%s"}}
+			]}""".formatted(key, otherKey);
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "manifest 누락")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(key))));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.header("Authorization", "Bearer " + token)
+			.param("title", "파일 누락")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(key)))
+			.param("inlineImageManifestBase64", encode(inlineManifest(key, 0))));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "키 불일치")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(key)))
+			.param("inlineImageManifestBase64", encode(inlineManifest(otherKey, 0))));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngBytes))
+			.file(new MockMultipartFile("inlineImages", "b.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "중복 index")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(twoKeyDocument))
+			.param("inlineImageManifestBase64", encode(
+				"[{\"imageKey\":\"" + key + "\",\"fileIndex\":0},{\"imageKey\":\"" + otherKey + "\",\"fileIndex\":0}]")));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "index 범위 초과")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(key)))
+			.param("inlineImageManifestBase64", encode(inlineManifest(key, 1))));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "manifest 손상")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(key)))
+			.param("inlineImageManifestBase64", "%%%bad%%%"));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngBytes))
+			.file(new MockMultipartFile("inlineImages", "b.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "중복 key")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(twoKeyDocument))
+			.param("inlineImageManifestBase64", encode(
+				"[{\"imageKey\":\"" + key + "\",\"fileIndex\":0},{\"imageKey\":\"" + key + "\",\"fileIndex\":1}]")));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "알 수 없는 필드")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(key)))
+			.param("inlineImageManifestBase64", encode(
+				"[{\"imageKey\":\"" + key + "\",\"fileIndex\":0,\"src\":\"x\"}]")));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "plain 본문")
+			.param("bodyBase64", encode("본문"))
+			.param("inlineImageManifestBase64", encode(inlineManifest(key, 0))));
+	}
+
+	@Test
+	void spoofedOrUnsupportedInlineImageShouldBeRejectedWithoutPartialState() throws Exception {
+		String textKey = "55555555-5555-4555-8555-555555555555";
+		String gifKey = "66666666-6666-4666-8666-666666666666";
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "fake.png", "image/png",
+				"not a real png".getBytes(StandardCharsets.UTF_8)))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "위장 이미지")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(textKey)))
+			.param("inlineImageManifestBase64", encode(inlineManifest(textKey, 0))));
+
+		expectInvalidInlineRequest(multipartPost("/api/v1/posts")
+			.file(new MockMultipartFile("inlineImages", "anim.gif", "image/gif", imageBytes("gif", 2, 2)))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "GIF 이미지")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(gifKey)))
+			.param("inlineImageManifestBase64", encode(inlineManifest(gifKey, 0))));
+	}
+
+	@Test
+	void downloadAndInlineImagesShouldShareFiveAttachmentLimit() throws Exception {
+		String imageKey = "77777777-7777-4777-8777-777777777777";
+		byte[] pngBytes = imageBytes("png", 2, 2);
+
+		MockMultipartHttpServletRequestBuilder allowed = multipartPost("/api/v1/posts");
+		allowed.file(new MockMultipartFile("inlineImages", "inline.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "혼합 첨부")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(imageKey)))
+			.param("inlineImageManifestBase64", encode(inlineManifest(imageKey, 0)));
+		for (int i = 1; i <= 4; i++) {
+			allowed.file(new MockMultipartFile("attachments", "file" + i + ".txt", "text/plain",
+				("내용" + i).getBytes(StandardCharsets.UTF_8)));
+		}
+		mockMvc.perform(allowed)
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.attachments", hasSize(5)));
+
+		MockMultipartHttpServletRequestBuilder overLimit = multipartPost("/api/v1/posts");
+		overLimit.file(new MockMultipartFile("inlineImages", "inline2.png", "image/png", pngBytes))
+			.header("Authorization", "Bearer " + token)
+			.param("title", "한도 초과")
+			.param("bodyFormat", "TIPTAP_JSON")
+			.param("bodyDocumentBase64", encode(inlineDocument(imageKey)))
+			.param("inlineImageManifestBase64", encode(inlineManifest(imageKey, 0)));
+		for (int i = 1; i <= 5; i++) {
+			overLimit.file(new MockMultipartFile("attachments", "over" + i + ".txt", "text/plain",
+				("초과" + i).getBytes(StandardCharsets.UTF_8)));
+		}
+		mockMvc.perform(overLimit)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+
+		assertThat(boardPostRepository.count()).isEqualTo(1);
+		assertThat(boardAttachmentRepository.count()).isEqualTo(5);
+		assertThat(countRegularFiles(Path.of(attachmentRootPath))).isEqualTo(5);
+	}
+
+	@Test
+	void updatingInlineImagePostWithSameKeyShouldPreserveFileAndRejectDownloadRemoval() throws Exception {
+		String imageKey = "88888888-8888-4888-8888-888888888888";
+		byte[] pngBytes = imageBytes("png", 2, 2);
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(new MockMultipartFile("inlineImages", "inline.png", "image/png", pngBytes))
+				.header("Authorization", "Bearer " + token)
+				.param("title", "수정 대상")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(imageKey)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(imageKey, 0))))
+			.andExpect(status().isCreated())
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString());
+		JsonNode inlineAttachment = findAttachment(created.path("attachments"), "inlineKey", imageKey);
+		long inlineId = inlineAttachment.path("id").asLong();
+		String contentUrl = inlineAttachment.path("contentUrl").asText();
+		String updatedDocument = """
+			{"type":"doc","content":[
+				{"type":"inlineAttachmentImage","attrs":{"imageKey":"%s","alt":"캡처"}},
+				{"type":"paragraph","content":[{"type":"text","text":"수정"}]}
+			]}""".formatted(imageKey);
+
+		MvcResult updateResult = mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "수정된 제목")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(updatedDocument)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.body").value("[이미지: 캡처]\n수정"))
+			.andReturn();
+
+		JsonNode updated = objectMapper.readTree(updateResult.getResponse().getContentAsString());
+		JsonNode kept = findAttachment(updated.path("attachments"), "inlineKey", imageKey);
+		assertThat(kept.path("id").asLong()).isEqualTo(inlineId);
+		assertThat(kept.path("contentUrl").asText()).isEqualTo(contentUrl);
+		mockMvc.perform(get(contentUrl))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes(pngBytes));
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "다시 수정")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(updatedDocument))
+				.param("removeAttachmentIds", String.valueOf(inlineId)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+
+		BoardAttachment entity = attachmentEntityByInlineKey(postId, imageKey);
+		assertThat(Files.exists(Path.of(attachmentRootPath).resolve(entity.getStoragePath()))).isTrue();
+		mockMvc.perform(get(contentUrl))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes(pngBytes));
 	}
 
 	@Test
@@ -1674,6 +1983,60 @@ class BoardPostControllerTest {
 
 	private String encode(byte[] bytes) {
 		return Base64.getEncoder().encodeToString(bytes);
+	}
+
+	private byte[] imageBytes(String format, int width, int height) {
+		try {
+			BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+			ByteArrayOutputStream output = new ByteArrayOutputStream();
+			if (!ImageIO.write(image, format, output)) throw new IllegalStateException("missing image writer");
+			return output.toByteArray();
+		} catch (IOException exception) {
+			throw new IllegalStateException("failed to build image fixture", exception);
+		}
+	}
+
+	private String inlineDocument(String imageKey) {
+		return "{\"type\":\"doc\",\"content\":[{\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\""
+			+ imageKey + "\"}}]}";
+	}
+
+	private String inlineManifest(String imageKey, int fileIndex) {
+		return "[{\"imageKey\":\"" + imageKey + "\",\"fileIndex\":" + fileIndex + "}]";
+	}
+
+	private void expectInvalidInlineRequest(MockHttpServletRequestBuilder request) throws Exception {
+		mockMvc.perform(request)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+		assertThat(boardPostRepository.count()).isZero();
+		assertThat(boardAttachmentRepository.count()).isZero();
+		assertThat(countRegularFiles(Path.of(attachmentRootPath))).isZero();
+	}
+
+	private JsonNode findAttachment(JsonNode attachments, String field, String value) {
+		for (JsonNode attachment : attachments) {
+			if (value.equals(attachment.path(field).asText(null))) {
+				return attachment;
+			}
+		}
+		throw new IllegalStateException("attachment not found for " + field + "=" + value);
+	}
+
+	private BoardAttachment attachmentEntityByInlineKey(long postId, String inlineKey) {
+		return boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId).stream()
+			.filter(entity -> UUID.fromString(inlineKey).equals(entity.getInlineKey()))
+			.findFirst()
+			.orElseThrow(() -> new IllegalStateException("no attachment entity for inlineKey " + inlineKey));
+	}
+
+	private long countRegularFiles(Path root) throws IOException {
+		if (!Files.exists(root)) {
+			return 0;
+		}
+		try (var paths = Files.walk(root)) {
+			return paths.filter(Files::isRegularFile).count();
+		}
 	}
 
 	private long extractId(String responseBody) {

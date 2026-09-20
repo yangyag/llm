@@ -18,6 +18,10 @@ public class UpdateBoardPostRequest {
 
 	private String bodyDocumentBase64;
 
+	private String inlineImageManifestBase64;
+
+	private List<MultipartFile> inlineImages;
+
 	private BoardPostMode mode = BoardPostMode.NORMAL;
 
 	private List<MultipartFile> attachments;
@@ -56,6 +60,22 @@ public class UpdateBoardPostRequest {
 
 	public void setBodyDocumentBase64(String bodyDocumentBase64) {
 		this.bodyDocumentBase64 = bodyDocumentBase64;
+	}
+
+	public String getInlineImageManifestBase64() {
+		return inlineImageManifestBase64;
+	}
+
+	public void setInlineImageManifestBase64(String value) {
+		this.inlineImageManifestBase64 = value;
+	}
+
+	public List<MultipartFile> getInlineImages() {
+		return inlineImages;
+	}
+
+	public void setInlineImages(List<MultipartFile> value) {
+		this.inlineImages = value;
 	}
 
 	public BoardPostMode getMode() {

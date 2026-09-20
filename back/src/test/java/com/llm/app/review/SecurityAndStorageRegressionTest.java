@@ -266,6 +266,42 @@ class SecurityAndStorageRegressionTest {
         assertThat(Files.exists(DATA_ROOT.resolve("attachments").resolve(savedPath.get()))).isFalse();
     }
 
+    @Test
+    void newInlineFileIsRemovedWhenTransactionRollsBackAfterSavingItsRow() {
+        String imageKey = "88888888-8888-4888-8888-888888888888";
+        var request = new com.llm.app.board.dto.CreateBoardPostRequest();
+        request.setTitle("rollback inline file");
+        request.setBodyFormat(com.llm.app.board.model.PostBodyFormat.TIPTAP_JSON);
+        request.setBodyDocumentBase64(encode(("{\"type\":\"doc\",\"content\":[{\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\"" + imageKey + "\"}}]}").getBytes(StandardCharsets.UTF_8)));
+        request.setInlineImageManifestBase64(encode(("[{\"imageKey\":\"" + imageKey + "\",\"fileIndex\":0}]").getBytes(StandardCharsets.UTF_8)));
+        request.setInlineImages(java.util.List.of(new MockMultipartFile("inlineImages", "inline.png", "image/png", imageBytes("png", 2, 2))));
+        var savedPath = new java.util.concurrent.atomic.AtomicReference<String>();
+        var transaction = new TransactionTemplate(transactionManager);
+        Long userId = users.findByUsername("reviewadmin").orElseThrow().getId();
+        assertThatThrownBy(() -> transaction.executeWithoutResult(tx -> {
+            var post = boardService.createPost(userId, request);
+            var inline = attachments.findByPost_IdOrderByCreatedAtAscIdAsc(post.id()).stream()
+                .filter(attachment -> attachment.getInlineKey() != null).findFirst().orElseThrow();
+            savedPath.set(inline.getStoragePath());
+            throw new IllegalStateException("failure after DB row save");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(posts.count()).isZero();
+        assertThat(attachments.count()).isZero();
+        assertThat(savedPath.get()).isNotNull();
+        assertThat(Files.exists(DATA_ROOT.resolve("attachments").resolve(savedPath.get()))).isFalse();
+    }
+
+    private static byte[] imageBytes(String format, int width, int height) {
+        try {
+            java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+            if (!javax.imageio.ImageIO.write(image, format, output)) throw new IllegalStateException("missing image writer");
+            return output.toByteArray();
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException("failed to build image fixture", exception);
+        }
+    }
+
     private UUID createAndUpload(String token, String archiveName) throws Exception {
         String base64 = encode(ZIP_BYTES);
         String sha = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(ZIP_BYTES));
