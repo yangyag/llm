@@ -97,9 +97,10 @@ function canonicalMarks(node: Record<string, unknown>): PostDocumentMark[] | nul
     if (!isRecord(mark) || typeof mark.type !== "string" || !ALLOWED_MARKS.has(mark.type)) {
       return null;
     }
-    if (!types.add(mark.type)) {
+    if (types.has(mark.type)) {
       return null;
     }
+    types.add(mark.type);
   }
   return [...types].sort().map((type) => ({ type: type as PostDocumentMark["type"] }));
 }
@@ -114,9 +115,10 @@ function canonicalImage(node: Record<string, unknown>, seenImageKeys: Set<string
     return null;
   }
   const canonicalKey = imageKey.toLowerCase();
-  if (!seenImageKeys.add(canonicalKey)) {
+  if (seenImageKeys.has(canonicalKey)) {
     return null;
   }
+  seenImageKeys.add(canonicalKey);
   let alt = "";
   const altValue = attrs.alt;
   if (altValue !== undefined && altValue !== null) {
@@ -318,6 +320,26 @@ export function resolvePostDocument(
     }
   }
   return plainTextToPostDocument(plainBody);
+}
+
+export function collectInlineImageKeys(document: unknown): string[] {
+  const canonical = toCanonicalPostDocument(document);
+  if (canonical === null) {
+    return [];
+  }
+  const keys: string[] = [];
+  const walk = (nodes: PostDocumentNode[]): void => {
+    for (const node of nodes) {
+      if (node.type === "inlineAttachmentImage" && typeof node.attrs?.imageKey === "string") {
+        keys.push(node.attrs.imageKey);
+      }
+      if (node.content) {
+        walk(node.content);
+      }
+    }
+  };
+  walk(canonical.content);
+  return keys;
 }
 
 export function buildInlineImageSources(attachments: readonly Attachment[]): Record<string, string> {

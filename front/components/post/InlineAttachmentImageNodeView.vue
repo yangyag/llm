@@ -29,6 +29,7 @@ watch(source, () => {
     as="figure"
     class="inline-attachment-image"
     :class="{ selected: selected }"
+    data-type="inline-attachment-image"
     :data-image-key="imageKey"
   >
     <img

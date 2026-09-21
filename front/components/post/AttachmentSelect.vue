@@ -1,9 +1,17 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import AttachmentDropzone from "./AttachmentDropzone.vue";
 import { usePostDetailStore } from "~/stores/postDetail";
 import { MAX_ATTACHMENTS, attachmentFileKey, formatFileSize } from "~/utils/post";
 
+const props = withDefaults(defineProps<{
+  inlineImageCount?: number;
+}>(), {
+  inlineImageCount: 0
+});
+
 const detail = usePostDetailStore();
+const combinedCount = computed(() => detail.postAttachmentFiles.length + props.inlineImageCount);
 </script>
 
 <template>
@@ -14,7 +22,7 @@ const detail = usePostDetailStore();
   />
   <p class="section-meta">
     첨부파일은 최대 {{ MAX_ATTACHMENTS }}개, 파일당 100MB까지 업로드할 수 있습니다.
-    (선택: {{ detail.postAttachmentFiles.length }}/{{ MAX_ATTACHMENTS }})
+    (선택: 첨부 {{ detail.postAttachmentFiles.length }}개 + 본문 이미지 {{ props.inlineImageCount }}개 = {{ combinedCount }}/{{ MAX_ATTACHMENTS }})
   </p>
   <ul v-if="detail.postAttachmentFiles.length > 0" class="attachment-select-list">
     <li

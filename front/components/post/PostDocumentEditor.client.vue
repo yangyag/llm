@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { watch } from "vue";
 import { EditorContent, useEditor } from "@tiptap/vue-3";
+import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { getApiUrl } from "~/services/api";
-import { emptyPostDocument, toCanonicalPostDocument } from "~/utils/postDocument";
+import { collectInlineImageKeys, emptyPostDocument, toCanonicalPostDocument } from "~/utils/postDocument";
+import {
+  INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE,
+  UNSUPPORTED_INLINE_IMAGE_MESSAGE,
+  readClipboardImageFiles
+} from "~/composables/useInlineImageDraft";
+import type { InlineImageDraftRegistrationResult } from "~/composables/useInlineImageDraft";
 import { InlineAttachmentImage } from "./inlineAttachmentImage";
 import type { PostDocument } from "~/types/api";
 
@@ -11,18 +18,25 @@ const props = withDefaults(defineProps<{
   modelValue: PostDocument;
   inlineSources?: Record<string, string>;
   ariaLabel?: string;
+  registerPastedImages?: (files: readonly File[]) => InlineImageDraftRegistrationResult;
+  maxActiveInlineImages?: number;
 }>(), {
   inlineSources: () => ({}),
-  ariaLabel: "게시글 본문"
+  ariaLabel: "게시글 본문",
+  maxActiveInlineImages: 5
 });
 
 const emit = defineEmits<{
   "update:modelValue": [value: PostDocument];
+  "inline-image-error": [message: string];
 }>();
 
 function resolveSource(imageKey: string): string | null {
   const raw = props.inlineSources[imageKey];
-  return raw ? getApiUrl(raw) : null;
+  if (!raw) {
+    return null;
+  }
+  return raw.startsWith("blob:") ? raw : getApiUrl(raw);
 }
 
 const editor = useEditor({
@@ -38,6 +52,59 @@ const editor = useEditor({
       role: "textbox",
       "aria-label": props.ariaLabel,
       "aria-multiline": "true"
+    },
+    handlePaste: (view, event) => {
+      const register = props.registerPastedImages;
+      const clipboard = readClipboardImageFiles(event.clipboardData);
+      if (!clipboard.hasImage || !register) {
+        return false;
+      }
+      event.preventDefault();
+      if (clipboard.unsupportedTypes.length > 0) {
+        emit("inline-image-error", UNSUPPORTED_INLINE_IMAGE_MESSAGE);
+        return true;
+      }
+      const activeCount = collectInlineImageKeys(view.state.doc.toJSON()).length;
+      if (activeCount + clipboard.files.length > props.maxActiveInlineImages) {
+        emit("inline-image-error", INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE);
+        return true;
+      }
+      const result = register(clipboard.files);
+      if (result.error) {
+        emit("inline-image-error", result.error);
+        return true;
+      }
+      if (result.entries.length === 0) {
+        return true;
+      }
+      const lastKey = result.entries[result.entries.length - 1].imageKey;
+      editor.value?.chain().focus().insertContent(
+        result.entries.map((entry) => ({
+          type: "inlineAttachmentImage",
+          attrs: { imageKey: entry.imageKey, alt: "붙여넣은 이미지" }
+        }))
+      ).command(({ tr, state }) => {
+        let nodeEnd = -1;
+        tr.doc.descendants((node, pos) => {
+          if (node.type.name === "inlineAttachmentImage" && node.attrs.imageKey === lastKey) {
+            nodeEnd = pos + node.nodeSize;
+            return false;
+          }
+          return true;
+        });
+        if (nodeEnd < 0) {
+          return true;
+        }
+        const next = tr.doc.resolve(nodeEnd).nodeAfter;
+        if (next?.isTextblock) {
+          tr.setSelection(TextSelection.create(tr.doc, nodeEnd + 1));
+        } else {
+          tr.insert(nodeEnd, state.schema.nodes.paragraph.create());
+          tr.setSelection(TextSelection.create(tr.doc, nodeEnd + 1));
+        }
+        return true;
+      }).run();
+      return true;
     }
   },
   onUpdate: ({ editor: instance }) => {

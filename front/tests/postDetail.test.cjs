@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const pinia = require('pinia');
 
-function loadModule(relativePath, modules) {
+function loadModule(relativePath, modules, globals = {}) {
   const source = fs.readFileSync(path.join(__dirname, '..', relativePath), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022
@@ -14,7 +14,7 @@ function loadModule(relativePath, modules) {
   const sandbox = { exports: {}, require: name => {
     assert.ok(name in modules, `Unexpected dependency: ${name}`);
     return modules[name];
-  }, window: { clearTimeout, setTimeout }, console };
+  }, window: { clearTimeout, setTimeout }, console, ...globals };
   vm.runInNewContext(code, sandbox, { filename: relativePath });
   return sandbox.exports;
 }
@@ -25,10 +25,13 @@ const post = id => ({ id, title: `Post ${id}`, body: `Body ${id}`, mode: 'NORMAL
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
+const fakeFile = index => ({ name: `file-${index}.bin`, size: index * 10, lastModified: index });
+
 function setup(overrides = {}) {
   pinia.setActivePinia(pinia.createPinia());
   const pending = new Map();
   const mutations = [];
+  const env = { confirm: () => true };
   const api = {
     getPost: id => new Promise((resolve, reject) => pending.set(id, { resolve, reject })),
     deletePost: async id => mutations.push(['delete', id]),
@@ -50,12 +53,18 @@ function setup(overrides = {}) {
             ? { type: 'paragraph', content: [{ type: 'text', text: line }] }
             : { type: 'paragraph' })
         }
-      )
+      ),
+      collectInlineImageKeys: () => []
+    },
+    '~/composables/useInlineImageDraft': {
+      INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE: 'combined-count-message'
     },
     './auth': { useAuthStore: () => ({ token: 'synthetic-test-token', userId: 1 }) },
-    './posts': { usePostsStore: () => ({ currentPage: 1, loadPosts: async () => {} }) }
-  });
-  return { store: exports.usePostDetailStore(), pending, mutations };
+    './posts': { usePostsStore: () => ({
+      currentPage: 1, searchQuery: '', navigateToList: () => {}, loadPosts: async () => {}
+    }) }
+  }, { window: { clearTimeout, setTimeout, confirm: () => env.confirm() } });
+  return { store: exports.usePostDetailStore(), pending, mutations, env };
 }
 
 test('a late response cannot replace the currently selected post or deletion target', async () => {
@@ -147,4 +156,64 @@ test('ownership controls use account IDs and keep unresolved owners admin-only',
   assert.equal(canManagePost(null, 2, 'USER'), false);
   assert.equal(canManagePost(null, 2, 'ADMIN'), true);
   assert.equal(canManagePost(1, null, 'ADMIN'), false);
+});
+
+test('create post blocks combined attachment and inline image overflow before the API call', async () => {
+  const calls = [];
+  const { store } = setup({ createPost: async input => { calls.push(input); return post(42); } });
+  store.openWrite();
+  store.postAttachmentConfirmed = true;
+  store.postAttachmentFiles = [fakeFile(1), fakeFile(2), fakeFile(3), fakeFile(4)];
+  const result = await store.handleCreatePost([
+    { imageKey: 'key-1', file: fakeFile(5) },
+    { imageKey: 'key-2', file: fakeFile(6) }
+  ]);
+  assert.equal(result, false);
+  assert.deepEqual(calls, []);
+  assert.equal(store.error, 'combined-count-message');
+  assert.equal(store.postAttachmentFiles.length, 4);
+});
+
+test('create post forwards inline images and returns true after the success flow', async () => {
+  const calls = [];
+  const { store } = setup({ createPost: async input => { calls.push(input); return post(42); } });
+  store.openWrite();
+  store.postAttachmentConfirmed = true;
+  store.postForm.title = 'inline title';
+  const inlineImages = [
+    { imageKey: 'key-1', file: fakeFile(5) },
+    { imageKey: 'key-2', file: fakeFile(6) }
+  ];
+  const result = await store.handleCreatePost(inlineImages);
+  assert.equal(result, true);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].inlineImages, inlineImages);
+  assert.equal(calls[0].attachments.length, 0);
+  assert.equal(store.postForm.title, '');
+  assert.equal(store.message, '게시글을 등록했습니다.');
+});
+
+test('create post API failure returns false and keeps the draft untouched', async () => {
+  const { store } = setup({ createPost: async () => {
+    throw { code: 'SERVER_ERROR', status: 500, message: 'boom' };
+  } });
+  store.openWrite();
+  store.postAttachmentConfirmed = true;
+  store.postForm.title = 'draft title';
+  store.postAttachmentFiles = [fakeFile(1)];
+  const result = await store.handleCreatePost([{ imageKey: 'key-1', file: fakeFile(5) }]);
+  assert.equal(result, false);
+  assert.equal(store.error, 'boom');
+  assert.equal(store.postForm.title, 'draft title');
+  assert.equal(store.postAttachmentFiles.length, 1);
+});
+
+test('create post returns false when the upload confirmation is declined', async () => {
+  const calls = [];
+  const { store, env } = setup({ createPost: async input => { calls.push(input); return post(42); } });
+  store.openWrite();
+  env.confirm = () => false;
+  const result = await store.handleCreatePost([{ imageKey: 'key-1', file: fakeFile(5) }]);
+  assert.equal(result, false);
+  assert.deepEqual(calls, []);
 });

@@ -10,15 +10,16 @@ import {
   updatePost,
   updateReply
 } from "~/services/api";
-import type { AiProvider, ApiError, PostDetail, PostDocument } from "~/types/api";
+import type { AiProvider, ApiError, PostDetail, PostDocument, PostInlineImageUpload } from "~/types/api";
 import { clipboardUserMessage, writeClipboardText } from "~/utils/clipboard";
+import { INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE } from "~/composables/useInlineImageDraft";
 import {
   ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE,
   MAX_ATTACHMENTS,
   attachmentFileKey,
   mergeAttachmentFiles
 } from "~/utils/post";
-import { emptyPostDocument, resolvePostDocument } from "~/utils/postDocument";
+import { collectInlineImageKeys, emptyPostDocument, resolvePostDocument } from "~/utils/postDocument";
 import { useAuthStore } from "./auth";
 import { usePostsStore } from "./posts";
 
@@ -231,19 +232,26 @@ export const usePostDetailStore = defineStore("postDetail", {
     confirmAttachmentUploadEnvironment(): boolean {
       return window.confirm(ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE);
     },
+    ensureCreateAttachmentUploadConfirmed(): boolean {
+      if (this.postAttachmentConfirmed) return true;
+      if (!this.confirmAttachmentUploadEnvironment()) return false;
+      this.postAttachmentConfirmed = true;
+      return true;
+    },
     selectCreateAttachmentFiles(selectedFiles: File[]) {
       if (selectedFiles.length === 0) {
         return;
       }
-      if (!this.confirmAttachmentUploadEnvironment()) {
+      if (!this.ensureCreateAttachmentUploadConfirmed()) {
         return;
       }
       this.error = "";
-      const { files, truncated } = mergeAttachmentFiles(this.postAttachmentFiles, selectedFiles);
+      const activeInlineCount = collectInlineImageKeys(this.postForm.bodyDocument).length;
+      const availableSlots = Math.max(MAX_ATTACHMENTS - activeInlineCount, 0);
+      const { files, truncated } = mergeAttachmentFiles(this.postAttachmentFiles, selectedFiles, availableSlots);
       this.postAttachmentFiles = files;
-      this.postAttachmentConfirmed = true;
       if (truncated) {
-        this.error = `첨부파일은 최대 ${MAX_ATTACHMENTS}개까지만 첨부할 수 있습니다.`;
+        this.error = INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE;
       }
     },
     removeCreateAttachment(targetKey: string) {
@@ -298,13 +306,18 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.replyActionError = "";
       this.replyEditState = { replyId: null, body: "" };
     },
-    async handleCreatePost() {
+    async handleCreatePost(inlineImages: PostInlineImageUpload[] = []): Promise<boolean> {
       const auth = useAuthStore();
       const posts = usePostsStore();
-      if (!auth.token) return;
+      if (!auth.token) return false;
 
-      if (this.postAttachmentFiles.length > 0 && !this.postAttachmentConfirmed && !this.confirmAttachmentUploadEnvironment()) {
-        return;
+      if (this.postAttachmentFiles.length + inlineImages.length > MAX_ATTACHMENTS) {
+        this.error = INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE;
+        return false;
+      }
+
+      if (this.postAttachmentFiles.length + inlineImages.length > 0 && !this.ensureCreateAttachmentUploadConfirmed()) {
+        return false;
       }
 
       this.submitting = true;
@@ -312,7 +325,7 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.message = "";
       try {
         const created = await createPost(
-          { ...this.postForm, attachments: this.postAttachmentFiles },
+          { ...this.postForm, attachments: this.postAttachmentFiles, inlineImages },
           auth.token
         );
         this.postForm = createEmptyPostForm();
@@ -323,6 +336,7 @@ export const usePostDetailStore = defineStore("postDetail", {
         await posts.loadPosts(1);
         this.openDetail(created.id);
         this.message = "게시글을 등록했습니다.";
+        return true;
       } catch (submitError) {
         const err = submitError as ApiError;
         if (err.code === "INVALID_ATTACHMENT_REQUEST") {
@@ -330,6 +344,7 @@ export const usePostDetailStore = defineStore("postDetail", {
         } else {
           this.error = err.message;
         }
+        return false;
       } finally {
         this.submitting = false;
       }

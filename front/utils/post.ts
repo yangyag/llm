@@ -42,7 +42,7 @@ export function getPostBodyLabel(): string {
 }
 
 export function getPostBodyHelp(): string {
-  return `본문은 비워둘 수 있습니다. 첨부파일은 최대 ${MAX_ATTACHMENTS}개, 파일당 100MB까지 업로드할 수 있습니다.`;
+  return `본문은 비워둘 수 있습니다. 본문 이미지는 PNG/JPEG 파일당 최대 10MB까지 붙여넣을 수 있으며, 첨부파일과 본문 이미지는 합쳐서 최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있습니다.`;
 }
 
 export function formatFileSize(size: number): string {

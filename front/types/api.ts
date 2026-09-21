@@ -133,10 +133,16 @@ export interface MeResponse {
   role: UserRole;
 }
 
+export interface PostInlineImageUpload {
+  imageKey: string;
+  file: File;
+}
+
 /** 게시글 생성/수정 폼 데이터 */
 export interface PostMutationInput {
   title: string;
   bodyDocument: PostDocument;
   attachments?: File[];
   removeAttachmentIds?: number[];
+  inlineImages?: PostInlineImageUpload[];
 }

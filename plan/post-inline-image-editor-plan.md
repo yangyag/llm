@@ -1,6 +1,6 @@
 # 게시글 본문 이미지 붙여넣기·영구 저장 구현 계획서
 
-- 상태: 구현 진행 — Phase 0~4 완료, Phase 5 미착수
+- 상태: 구현 진행 — Phase 0~5 완료, Phase 6 미착수
 - 작성일: 2026-09-20
 - 대상: `front/` Nuxt 3·Vue 3 게시글 작성/수정/조회, `back/` Spring Boot 게시판·첨부 모듈, Flyway
 - 목표: 게시글 작성·수정 중 클립보드 이미지를 즉시 본문에 표시하고, 게시글 저장 후에도 텍스트·이미지 순서와 위치를 유지한다.
@@ -272,6 +272,9 @@ inline 이미지 설정 이름:
 10. Phase의 체크포인트 또는 종료 직후 이 문서의 상태표와 재개 기록을 갱신한다. 문서 갱신을 다음 세션으로 미루지 않는다.
 11. 커밋은 사용자가 요청한 경우에만 Phase 경계에서 수행한다. 커밋 메시지는 한글이며, 사용자 기존 변경을 섞지 않는다.
 12. secret, JWT, 비밀번호, `.env` 값, 전체 운영 로그를 한도·재개 기록에 넣지 않는다.
+13. 어느 Phase든 UI·브라우저 동작이나 end-to-end 흐름 확인이 필요하면 Phase 4에서 사용한 Playwright 1.62.1 실행 환경을 재사용한다. 자동화 가능한 시나리오는 Playwright assertion으로 검증하며 수동 눈대중 확인만으로 완료 처리하지 않는다.
+14. Playwright 검증은 DOM 상태와 API 응답을 assertion하고 `console.error`, page error, request failure, 예상하지 않은 API 4xx·5xx를 수집한다. 오류 응답 자체가 계약인 음수 시나리오는 기대 status와 무변경 상태를 명시적으로 assertion하고 실패 건수에서 제외한다.
+15. browser smoke를 위해 Playwright를 `package.json`이나 lockfile에 새 dependency로 추가하지 않는다. native OS 한글 IME 조합, OS clipboard 권한 UI, 실제 모바일 기기처럼 자동화할 수 없는 항목만 수동 확인하고, 자동화 한계와 실제 결과를 해당 Phase 기록에 구분해 남긴다. 기존 Playwright 실행 환경을 사용할 수 없으면 성공을 추정하지 말고 차단으로 기록한다.
 
 ## 6. Phase 현황
 
@@ -282,7 +285,7 @@ inline 이미지 설정 이름:
 | 2 | rich 문서 codec·검증·평문 추출 | 완료 | canonical JSON·평문·한도·HTTP rich 계약 검증 완료 |
 | 3 | inline 이미지 저장·조회 backend | 완료 | MockMvc로 생성·content 조회·롤백 검증 통과 |
 | 4 | Tiptap editor·reader 기반 도입 | 완료 | 이미지 없이 plain/rich 작성·수정·조회 가능 |
-| 5 | 이미지 붙여넣기 임시 보관·글 생성 | 미착수 | 새 글에서 붙여넣기→저장→조회 통과 |
+| 5 | 이미지 붙여넣기 임시 보관·글 생성 | 완료 | 새 글에서 붙여넣기→저장→조회 통과 |
 | 6 | 수정·삭제·실패 재시도 완성 | 미착수 | 기존/신규 이미지 혼합 수정과 정리 통과 |
 | 7 | 한도·보안·접근성 hardening | 미착수 | 경계값·악성 입력·키보드/모바일 점검 통과 |
 | 8 | 전체 회귀·PostgreSQL·통합 smoke·문서화 | 미착수 | 최종 게이트와 배포 순서 기록 완료 |
@@ -687,7 +690,7 @@ Phase 4 완료 조건을 충족했다. 다음 작업은 Phase 5의 paste handler
 
 ### Phase 5 — 이미지 붙여넣기 임시 보관·글 생성
 
-**상태: 미착수**
+**상태: 완료 — 2026-09-21**
 
 #### 진입 전 한도 게이트
 
@@ -728,7 +731,7 @@ npm run typecheck
 npm run build
 ```
 
-브라우저 create smoke:
+브라우저 create smoke는 제5절의 공통 Playwright 원칙에 따라 자동화한다. 이미지 clipboard event를 실제 editor에 전달하고 각 단계의 DOM과 API 응답을 assertion하며, 실행 중 수집한 브라우저·네트워크 오류가 없는지 확인한다.
 
 1. 텍스트 작성
 2. PNG 붙여넣기
@@ -749,6 +752,31 @@ npm run build
 #### 안전 중단점
 
 새 글 생성에서 paste→임시 표시→영구 저장이 완결되고 수정 경로는 아직 기존 이미지를 보존만 한다.
+
+#### Phase 5 완료 기록 — 2026-09-21
+
+- 사용량 상태는 확인 수단이 없어 `알 수 없음`으로 유지하고, 선행 red → pending registry·paste·create 구현 → frontend gate → Playwright create/retry/read smoke → delete/undo/unmount smoke 순서로 체크포인트를 나눴다.
+- 선행 `npm test`는 26건 중 기존 12건이 통과하고 신규 14건이 실패했다. inline draft 테스트 10건은 신규 composable 부재로, create store 테스트 4건은 `handleCreatePost` 성공 여부 계약 부재로 실패해 의도한 red를 확인했다.
+- `useInlineImageDraft`가 UUID v4 생성, PNG/JPEG·10MB 검증, pending 20개·100MB 한도, 파일명 정규화, registry·blob URL 생명주기와 활성 문서 key 기준 upload 집합을 관리한다. `crypto.randomUUID()`가 없으면 `crypto.getRandomValues()`만 사용하며 `Math.random()` fallback은 없다.
+- Tiptap `handlePaste`는 create editor에서 실제 image clipboard item만 가로채고, canonical node에는 `imageKey`와 alt만 저장한다. edit editor에는 등록 callback을 연결하지 않아 Phase 5에서는 기존 inline 이미지를 보존만 한다.
+- 첫 이미지 paste와 일반 첨부가 create 확인 상태를 공유해 환경 확인을 한 번만 표시한다. 취소 시 파일·node·object URL을 만들지 않으며, 일반 첨부와 활성 inline 이미지는 submit 전 합계 5개를 적용한다.
+- create multipart는 canonical document와 활성 pending 파일만 `inlineImageManifestBase64`·반복 `inlineImages`로 전송한다. 삭제된 pending entry는 undo를 위해 registry에 남지만 payload에서는 제외되고, 실패 시 editor·registry를 유지하며 성공·정상 이탈·unmount 시 URL을 정확히 한 번 해제한다.
+- 구현 중 frontend canonical serializer의 중복 mark/image key 검사에서 `Set.add()` 반환값을 잘못 조건으로 사용하던 기존 결함을 발견해 `has()` 후 `add()`로 수정하고 중복 image key 회귀 테스트를 추가했다.
+- 최초 Playwright smoke에서 paste 직후 atom image가 `NodeSelection`으로 남아 다음 입력이 이미지를 교체하는 결함을 재현했다. 마지막 삽입 이미지 뒤 textblock으로 `TextSelection`을 이동하도록 수정하고, live NodeView figure에 canonical `data-type`을 부여했다.
+
+검증 결과:
+
+- 최종 `npm test`: 26/26 통과, 실패·skip 0. 구성은 document 5건, post detail/store 11건, inline draft 10건이다.
+- `npm run typecheck`: 성공.
+- `npm run build`: 성공, client module 284개·SSR module 1개·route 5개 prerender.
+- Playwright 1.62.1 create smoke 40/40 assertion 통과: 실제 `ClipboardEvent`·PNG `File`, 등록 전 create 요청 0건, blob 즉시 표시, 텍스트→이미지→텍스트 순서, 의도한 첫 POST 500 뒤 편집 상태·URL 유지와 재시도 201, 로그인 상세·새로고침·공개 상세의 영구 content URL, 다운로드 panel 비노출을 확인했다.
+- create smoke의 object URL은 생성 1회·성공/unmount 해제 1회였고 중복 revoke가 없었다. 의도한 500과 그에 따른 browser resource console 1건만 기대 오류로 분류했으며 console/page/request failure와 예상하지 않은 API 4xx·5xx는 0건이다.
+- 보충 Playwright smoke 14/14 assertion 통과: 실제 NodeSelection에서 Delete 후 node가 사라져도 URL을 유지하고, ProseMirror history group 경계를 지난 `Control+z`에서 동일 `imageKey`·동일 blob URL로 복원되며, 저장 없이 목록으로 정상 이탈할 때 정확히 한 번 revoke됨을 확인했다. create 요청은 전 과정 0건이었다.
+- 브라우저 smoke는 disposable PostgreSQL 18 `phase4_smoke` schema와 로컬 backend 8082/frontend 5174에서 수행했다. front proxy `/api/v1/health`는 `UP`이었고, backend/frontend 종료 후 disposable container를 stopped 상태로 되돌렸다. 공유 PostgreSQL과 운영 환경은 사용하지 않았다.
+- backend 소스·테스트는 Phase 5에서 변경하거나 재실행하지 않았다. 최신 backend 전체 결과는 Phase 3의 178건 발견·174건 통과·PostgreSQL 조건부 4건 skip·실패/오류 0을 유지한다.
+- 비차단 항목은 기존 npm audit notice 4건(중간 1·높음 3), line-ending 안내, native OS IME·실제 모바일 검증의 Phase 7 이월이다. smoke로 생성된 글은 disposable DB에만 남겼다.
+
+Phase 5 완료 조건을 충족했다. 다음 작업은 Phase 6의 기존·신규 inline 이미지 혼합 수정, 문서에서 제거된 이미지의 metadata/파일 정리, 실패 재시도와 edit Playwright smoke다.
 
 ### Phase 6 — 수정·삭제·실패 재시도 완성
 
@@ -794,6 +822,8 @@ npm run typecheck
 npm run build
 ```
 
+브라우저 edit smoke는 제5절의 공통 Playwright 원칙에 따라 기존 이미지 유지, 신규 이미지 추가, 기존 이미지 삭제, 저장 실패 후 재시도, 취소 후 재진입을 자동화한다. 저장 전후 문서 순서와 image `src` 전환, attachment metadata, object URL 정리, console/page/network 오류를 assertion한다.
+
 #### 완료 조건
 
 - 생성·수정·삭제 모든 경로에서 문서 참조와 실제 attachment 집합이 일치한다.
@@ -828,6 +858,8 @@ npm run build
 - 화면 reader의 alt와 이미지 로딩 실패 대체 UI
 - 모바일에서는 붙여넣기 지원 여부와 무관하게 기존 파일 선택·일반 글 작성이 깨지지 않는지 확인
 - 공개 API이므로 붙여넣기 확인 문구에 이미지가 게시글과 함께 공개됨을 명시
+
+위 항목 중 paste, undo/redo, 이미지 선택·삭제, focus 이동, 공개·로그인 렌더링과 오류 대체 UI처럼 브라우저에서 자동화 가능한 동작은 제5절의 공통 Playwright 원칙으로 검증한다. native OS 한글 IME 조합과 실제 모바일 기기 확인만 수동 항목으로 분리해 결과를 기록한다.
 
 #### 검증
 
@@ -894,6 +926,8 @@ cd ..
 docker compose up -d --wait
 curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 ```
+
+최종 사용자 흐름 smoke는 제5절의 공통 Playwright 원칙으로 자동화한다. content endpoint header·bytes, DB metadata, 삭제 대기열과 실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit 또는 직접 HTTP·PostgreSQL 검증으로 보완하고, Playwright 결과와 구분해 기록한다.
 
 필수 HTTP smoke:
 
@@ -1041,35 +1075,35 @@ Docker/health/smoke 결과:
 
 기록에는 secret, JWT, 비밀번호, `.env` 값, PEM 내용, 민감한 이미지 내용, 전체 환경변수 덤프를 넣지 않는다.
 
-## 12. 최신 재개 기록 — Phase 4 완료
+## 12. 최신 재개 기록 — Phase 5 완료
 
 ```text
-기록 일시: 2026-09-20
+기록 일시: 2026-09-21
 사용량 상태: 알 수 없음
-현재 Phase: 5
+현재 Phase: 6
 Phase 상태: 미착수
-마지막 완료 Phase: 4
-기준 브랜치/커밋: main / 8023986bd26a89f263c913645f35b780025af129
-작업 전 git status: clean
-이번 변경 파일: package.json/lock, nuxt.config, API/document types, 신규 canonical document utility·Tiptap editor/reader·image NodeView, PostForm/PostEditPanel/PostBodyReader/AttachmentPanel/PostDetail/public page, post detail/document tests, 계획서
-완료한 계약: Tiptap 3.31.3 exact self-host, client-only editor/reader, canonical JSON rich multipart, plain 줄바꿈 보존 rich 전환, server contentUrl image resolver, DOWNLOAD-only panel과 전체 attachment 슬롯 계산
-통과한 좁은 테스트: frontend npm test 12/12, typecheck 성공, generate build 성공
-최신 전체 backend 테스트: Phase 4 backend 변경 없음; Phase 3 clean test 178 discovered, 174 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors 유지
-최신 front test/typecheck/build: npm test 12/12, typecheck 성공, build client 283 modules·SSR 1 module·5 routes prerender
-PostgreSQL focused 결과: disposable PostgreSQL 18 schema에 V1~V19 validate/up-to-date 확인 후 plain fixture→rich update browser smoke 통과; 조건부 PostgreSQL JUnit suite는 Phase 4에서 미실행
-Docker/health/smoke 결과: compose/8083은 미실행. 로컬 backend 8082와 수정된 Nuxt /api proxy health 통과; Playwright login/create/read/plain-to-rich/public/undo-redo smoke와 console error 0 확인
-실행 중인 프로세스: 없음; frontend/backend/Gradle 종료, disposable PostgreSQL container는 stopped 상태로 보존
-알려진 실패·차단: npm audit notice 4건(중간 1·높음 3)은 임의 수정하지 않음. Playwright는 native OS IME composition을 재현하지 못하므로 Phase 7에서 재확인. Phase 5 blocker 없음
-다음 정확한 작업: Phase 5 선행 tests 후 pending registry 20개·100MB, UUID fallback, paste handler, object URL lifecycle과 create inline manifest/files 연결
-주의할 사용자 기존 변경: Phase 4 시작 전 작업 트리 clean; 사용자 기존 변경 없음
+마지막 완료 Phase: 5
+기준 브랜치/커밋: main / 5eb015ef2b7e1a30461d720a7d67f73070b79ddc
+작업 전 git status: M plan/post-inline-image-editor-plan.md (공통 Playwright 검증 원칙 추가), 구현 소스 변경 없음
+이번 변경 파일: front/types/api.ts, front/utils/postDocument.ts, front/composables/useInlineImageDraft.ts, front/components/post/PostDocumentEditor.client.vue, front/components/post/InlineAttachmentImageNodeView.vue, front/components/post/PostForm.vue, front/components/post/AttachmentSelect.vue, front/utils/post.ts, front/stores/postDetail.ts, front/services/api.ts, front/tests/inlineImageDraft.test.cjs, front/tests/postDetail.test.cjs, 계획서
+완료한 계약: create 전용 PNG/JPEG clipboard paste, UUID·pending 20개/100MB registry, blob URL undo/cleanup, 일반 첨부+활성 이미지 합계 5개, canonical manifest/files multipart, 실패 재시도, 영구 content URL 전환
+통과한 좁은 테스트: 선행 red 26건 중 12 pass/14 fail 확인; 최종 frontend npm test 26/26, typecheck 성공, generate build 성공
+최신 전체 backend 테스트: Phase 5 backend 변경 없음; Phase 3 clean test 178 discovered, 174 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors 유지
+최신 front test/typecheck/build: npm test 26/26, typecheck 성공, build client 284 modules·SSR 1 module·5 routes prerender
+PostgreSQL focused 결과: 조건부 PostgreSQL JUnit suite는 Phase 5에서 미실행. disposable PostgreSQL 18 phase4_smoke schema를 실제 create/read browser smoke에 재사용
+Docker/health/smoke 결과: compose/8083은 미실행. 로컬 backend 8082와 frontend 5174 proxy health UP; Playwright create/retry/login+public read 40/40, delete/undo/unmount 14/14 assertion 통과; 예상 외 browser/network/API 오류 0
+실행 중인 프로세스: 없음; frontend/backend 종료, disposable PostgreSQL container는 stopped 상태로 보존
+알려진 실패·차단: Phase 6 blocker 없음. 기존 npm audit notice 4건은 임의 수정하지 않음. native OS IME·실제 모바일 검증은 Phase 7 이월. smoke 글은 disposable DB에만 잔존
+다음 정확한 작업: Phase 6 선행 backend update/lifecycle 테스트 후 기존 inline key 유지·삭제와 신규 pending manifest 병합, edit registry/URL cleanup 구현, 공통 원칙에 따른 Playwright edit smoke
+주의할 사용자 기존 변경: Phase 5 시작 전 계획서의 공통 Playwright 검증 원칙 변경만 존재했고 그대로 보존·완료 기록에 반영. 그 외 사용자 기존 변경 없음
 ```
 
 ## 13. 최종 완료 기준
 
-- [ ] 붙여넣은 PNG/JPEG가 등록 전 editor 안에 즉시 표시된다.
-- [ ] 등록 전 이미지가 서버나 DB에 고아 데이터로 생성되지 않는다.
-- [ ] pending 이미지는 undo 복원이 가능하고 20개·100MB 임시 한도와 URL 해제가 검증된다.
-- [ ] 저장 후 로그인·공개 상세에서 텍스트·이미지 순서가 유지된다.
+- [x] 붙여넣은 PNG/JPEG가 등록 전 editor 안에 즉시 표시된다.
+- [x] 등록 전 이미지가 서버나 DB에 고아 데이터로 생성되지 않는다.
+- [x] pending 이미지는 undo 복원이 가능하고 20개·100MB 임시 한도와 URL 해제가 검증된다.
+- [x] 저장 후 로그인·공개 상세에서 텍스트·이미지 순서가 유지된다.
 - [ ] 수정에서 기존 이미지 유지·삭제와 신규 이미지 추가가 동작한다.
 - [ ] 구형 plain 수정 요청이 rich 글을 변경하지 못하고 409로 거부된다.
 - [ ] 일반 첨부와 inline 이미지가 기존 총 5개 제한을 일관되게 적용한다.
