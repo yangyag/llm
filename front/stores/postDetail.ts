@@ -238,6 +238,12 @@ export const usePostDetailStore = defineStore("postDetail", {
       this.postAttachmentConfirmed = true;
       return true;
     },
+    ensureEditAttachmentUploadConfirmed(): boolean {
+      if (this.postEditAttachmentConfirmed) return true;
+      if (!this.confirmAttachmentUploadEnvironment()) return false;
+      this.postEditAttachmentConfirmed = true;
+      return true;
+    },
     selectCreateAttachmentFiles(selectedFiles: File[]) {
       if (selectedFiles.length === 0) {
         return;
@@ -264,18 +270,18 @@ export const usePostDetailStore = defineStore("postDetail", {
       if (selectedFiles.length === 0) {
         return;
       }
-      if (!this.confirmAttachmentUploadEnvironment()) {
+      if (!this.ensureEditAttachmentUploadConfirmed()) {
         return;
       }
-      const keptExistingCount = (this.selectedPost?.attachments ?? []).filter(
-        (attachment) => !this.removeAttachmentIds.has(attachment.id)
+      const keptDownloadCount = (this.selectedPost?.attachments ?? []).filter(
+        (attachment) => attachment.attachmentKind === "DOWNLOAD" && !this.removeAttachmentIds.has(attachment.id)
       ).length;
-      const availableSlots = Math.max(MAX_ATTACHMENTS - keptExistingCount, 0);
+      const activeInlineCount = collectInlineImageKeys(this.postEditForm.bodyDocument).length;
+      const availableSlots = Math.max(MAX_ATTACHMENTS - keptDownloadCount - activeInlineCount, 0);
       const { files, truncated } = mergeAttachmentFiles(this.postEditAttachmentFiles, selectedFiles, availableSlots);
       this.postEditAttachmentFiles = files;
-      this.postEditAttachmentConfirmed = true;
       if (truncated) {
-        this.postActionError = `첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지만 등록할 수 있습니다.`;
+        this.postActionError = INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE;
       }
     },
     removeEditAttachment(targetKey: string) {
@@ -349,24 +355,26 @@ export const usePostDetailStore = defineStore("postDetail", {
         this.submitting = false;
       }
     },
-    async handleUpdatePost() {
+    async handleUpdatePost(inlineImages: PostInlineImageUpload[] = []): Promise<boolean> {
       const auth = useAuthStore();
       const posts = usePostsStore();
       const postId = this.selectedPost?.id;
       const version = this.detailRequestVersion;
-      if (!postId || !auth.token || !this.canActOnSelectedPost()) return;
+      if (!postId || !auth.token || !this.canActOnSelectedPost()) return false;
 
-      if (this.postEditAttachmentFiles.length > 0 && !this.postEditAttachmentConfirmed && !this.confirmAttachmentUploadEnvironment()) {
-        return;
+      if (this.postEditAttachmentFiles.length + inlineImages.length > 0
+        && !this.ensureEditAttachmentUploadConfirmed()) {
+        return false;
       }
 
       // 삭제 표시 해제 등으로 (유지 기존 + 신규) 합계가 한도를 넘을 수 있으므로 제출 직전 재검증.
-      const keptExistingCount = (this.selectedPost?.attachments ?? []).filter(
-        (attachment) => !this.removeAttachmentIds.has(attachment.id)
+      const keptDownloadCount = (this.selectedPost?.attachments ?? []).filter(
+        (attachment) => attachment.attachmentKind === "DOWNLOAD" && !this.removeAttachmentIds.has(attachment.id)
       ).length;
-      if (keptExistingCount + this.postEditAttachmentFiles.length > MAX_ATTACHMENTS) {
-        this.postActionError = `첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지만 등록할 수 있습니다.`;
-        return;
+      const activeInlineCount = collectInlineImageKeys(this.postEditForm.bodyDocument).length;
+      if (keptDownloadCount + activeInlineCount + this.postEditAttachmentFiles.length > MAX_ATTACHMENTS) {
+        this.postActionError = INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE;
+        return false;
       }
 
       this.submitting = true;
@@ -379,11 +387,12 @@ export const usePostDetailStore = defineStore("postDetail", {
           {
             ...this.postEditForm,
             attachments: this.postEditAttachmentFiles,
-            removeAttachmentIds: [...this.removeAttachmentIds]
+            removeAttachmentIds: [...this.removeAttachmentIds],
+            inlineImages
           },
           auth.token
         );
-        if (!this.isCurrentDetailRequest(postId, version)) return;
+        if (!this.isCurrentDetailRequest(postId, version)) return false;
         this.selectedPost = updated;
         this.postActionMode = "none";
         this.postActionError = "";
@@ -393,8 +402,9 @@ export const usePostDetailStore = defineStore("postDetail", {
         this.removeAttachmentIds = new Set();
         await posts.loadPosts(posts.currentPage);
         this.message = "게시글을 수정했습니다.";
+        return true;
       } catch (submitError) {
-        if (!this.isCurrentDetailRequest(postId, version)) return;
+        if (!this.isCurrentDetailRequest(postId, version)) return false;
         const err = submitError as ApiError;
         if (err.code === "FILE_CONVERSION_LOCKED") {
           this.error = "암호화 업로드 완료된 글은 수정할 수 없습니다.";
@@ -405,6 +415,7 @@ export const usePostDetailStore = defineStore("postDetail", {
         } else {
           this.error = err.message;
         }
+        return false;
       } finally {
         this.submitting = false;
       }

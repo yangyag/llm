@@ -42,9 +42,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1223,6 +1226,238 @@ class BoardPostControllerTest {
 	}
 
 	@Test
+	void inlineImageUpdateShouldKeepRetainedKeysAndReplaceRemovedOnes() throws Exception {
+		String keyA = "33333333-3333-4333-8333-333333333333";
+		String keyB = "44444444-4444-4444-8444-444444444444";
+		String keyC = "55555555-5555-4555-8555-555555555555";
+		byte[] pngA = imageBytes("png", 2, 2);
+		byte[] pngB = imageBytes("png", 3, 3);
+		byte[] pngC = imageBytes("png", 4, 4);
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngA))
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "수정 라이프사이클")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(keyA)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(keyA, 0))))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.attachments", hasSize(1)))
+			.andReturn();
+
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		JsonNode created = objectMapper.readTree(createResult.getResponse().getContentAsString());
+		JsonNode attachmentA = findAttachment(created.path("attachments"), "inlineKey", keyA);
+		long idA = attachmentA.path("id").asLong();
+		String contentUrlA = attachmentA.path("contentUrl").asText();
+		String storagePathA = attachmentEntityByInlineKey(postId, keyA).getStoragePath();
+
+		MvcResult firstUpdate = mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.file(new MockMultipartFile("inlineImages", "b.png", "image/png", pngB))
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "수정 라이프사이클 1")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(keyA, keyB)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(keyB, 0))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.attachments", hasSize(2)))
+			.andReturn();
+
+		JsonNode firstUpdated = objectMapper.readTree(firstUpdate.getResponse().getContentAsString());
+		JsonNode keptA = findAttachment(firstUpdated.path("attachments"), "inlineKey", keyA);
+		JsonNode addedB = findAttachment(firstUpdated.path("attachments"), "inlineKey", keyB);
+		assertThat(keptA.path("id").asLong()).isEqualTo(idA);
+		assertThat(keptA.path("contentUrl").asText()).isEqualTo(contentUrlA);
+		assertThat(attachmentEntityByInlineKey(postId, keyA).getStoragePath()).isEqualTo(storagePathA);
+		mockMvc.perform(get(contentUrlA))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes(pngA));
+		long idB = addedB.path("id").asLong();
+		mockMvc.perform(get(addedB.path("contentUrl").asText()))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes(pngB));
+
+		MvcResult secondUpdate = mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.file(new MockMultipartFile("inlineImages", "c.png", "image/png", pngC))
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "수정 라이프사이클 2")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(keyB, keyC)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(keyC, 0))))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.attachments", hasSize(2)))
+			.andReturn();
+
+		JsonNode secondUpdated = objectMapper.readTree(secondUpdate.getResponse().getContentAsString());
+		for (JsonNode attachment : secondUpdated.path("attachments")) {
+			assertThat(attachment.path("inlineKey").asText(null)).isNotEqualTo(keyA);
+		}
+		JsonNode keptB = findAttachment(secondUpdated.path("attachments"), "inlineKey", keyB);
+		JsonNode addedC = findAttachment(secondUpdated.path("attachments"), "inlineKey", keyC);
+		assertThat(keptB.path("id").asLong()).isEqualTo(idB);
+		assertThat(keptB.path("contentUrl").asText())
+			.isEqualTo("/api/v1/posts/" + postId + "/attachments/" + idB + "/content");
+		mockMvc.perform(get(addedC.path("contentUrl").asText()))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes(pngC));
+
+		mockMvc.perform(get(contentUrlA))
+			.andExpect(status().isNotFound());
+		assertThat(boardAttachmentRepository.findById(idA)).isEmpty();
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId).stream()
+				.filter(attachment -> attachment.getAttachmentKind() == BoardAttachmentKind.INLINE_IMAGE)
+				.map(BoardAttachment::getInlineKey)
+				.collect(Collectors.toSet()))
+			.containsExactlyInAnyOrder(UUID.fromString(keyB), UUID.fromString(keyC));
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).hasSize(2);
+	}
+
+	@Test
+	void inlineImageUpdateShouldRejectKeysOwnedByOtherPosts() throws Exception {
+		String keyA = "33333333-3333-4333-8333-333333333333";
+		String keyX = "66666666-6666-4666-8666-666666666666";
+		byte[] png = imageBytes("png", 2, 2);
+
+		MvcResult first = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(new MockMultipartFile("inlineImages", "a.png", "image/png", png))
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "첫 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(keyA)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(keyA, 0))))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long firstPostId = extractId(first.getResponse().getContentAsString());
+		String contentUrlA = findAttachment(
+			objectMapper.readTree(first.getResponse().getContentAsString()).path("attachments"),
+			"inlineKey", keyA).path("contentUrl").asText();
+
+		MvcResult second = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(new MockMultipartFile("inlineImages", "x.png", "image/png", png))
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "둘째 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(keyX)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(keyX, 0))))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long secondPostId = extractId(second.getResponse().getContentAsString());
+		String contentUrlX = findAttachment(
+			objectMapper.readTree(second.getResponse().getContentAsString()).path("attachments"),
+			"inlineKey", keyX).path("contentUrl").asText();
+		long fileCountBefore = countRegularFiles(Path.of(attachmentRootPath));
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", firstPostId)
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "가로채기")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(keyA, keyX))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ATTACHMENT_REQUEST"));
+
+		mockMvc.perform(get("/api/v1/posts/{id}", firstPostId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.title").value("첫 글"))
+			.andExpect(jsonPath("$.body").value("[이미지]"))
+			.andExpect(jsonPath("$.attachments", hasSize(1)))
+			.andExpect(jsonPath("$.attachments[0].inlineKey").value(keyA));
+		mockMvc.perform(get(contentUrlA))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes(png));
+		mockMvc.perform(get(contentUrlX))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes(png));
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(firstPostId)).hasSize(1);
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(secondPostId)).hasSize(1);
+		assertThat(countRegularFiles(Path.of(attachmentRootPath))).isEqualTo(fileCountBefore);
+	}
+
+	@Test
+	void inlineImageUpdateByNonAuthorShouldBeForbiddenAndLeavePostUntouched() throws Exception {
+		String keyA = "33333333-3333-4333-8333-333333333333";
+		String keyB = "44444444-4444-4444-8444-444444444444";
+		byte[] pngA = imageBytes("png", 2, 2);
+		byte[] pngB = imageBytes("png", 3, 3);
+
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngA))
+				.header("Authorization", "Bearer " + memberToken)
+				.param("title", "작성자 글")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(keyA)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(keyA, 0))))
+			.andExpect(status().isCreated())
+			.andReturn();
+		long postId = extractId(createResult.getResponse().getContentAsString());
+		String contentUrlA = findAttachment(
+			objectMapper.readTree(createResult.getResponse().getContentAsString()).path("attachments"),
+			"inlineKey", keyA).path("contentUrl").asText();
+
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.file(new MockMultipartFile("inlineImages", "b.png", "image/png", pngB))
+				.header("Authorization", "Bearer " + otherMemberToken)
+				.param("title", "가로채기")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(keyB)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(keyB, 0))))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+		mockMvc.perform(get("/api/v1/posts/{id}", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.title").value("작성자 글"))
+			.andExpect(jsonPath("$.attachments", hasSize(1)))
+			.andExpect(jsonPath("$.attachments[0].inlineKey").value(keyA));
+		mockMvc.perform(get(contentUrlA))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes(pngA));
+		assertThat(boardAttachmentRepository.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).hasSize(1);
+		assertThat(countRegularFiles(Path.of(attachmentRootPath))).isEqualTo(1);
+	}
+
+	@Test
+	void inlineImageUpdateShouldBeRejectedForFileConversionRequestPost() throws Exception {
+		String encoded = encode(ZIP_BYTES);
+		UUID sessionId = createUploadSession("locked.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(uploadSessionChunkRequest(1, encoded.substring(0, CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(uploadSessionChunkRequest(2, encoded.substring(CHUNK_SIZE_BASE64_CHARS))))
+			.andExpect(status().isOk());
+		MvcResult finalizeResult = mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.mode").value("FILE_CONVERSION_REQUEST"))
+			.andReturn();
+		JsonNode finalized = objectMapper.readTree(finalizeResult.getResponse().getContentAsString());
+		long postId = finalized.path("id").asLong();
+		long fileCountBefore = countRegularFiles(Path.of(attachmentRootPath));
+
+		String imageKey = "77777777-7777-4777-8777-777777777777";
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.file(new MockMultipartFile("inlineImages", "locked.png", "image/png", imageBytes("png", 2, 2)))
+				.header("Authorization", "Bearer " + token)
+				.param("title", "변환 글 수정")
+				.param("bodyFormat", "TIPTAP_JSON")
+				.param("bodyDocumentBase64", encode(inlineDocument(imageKey)))
+				.param("inlineImageManifestBase64", encode(inlineManifest(imageKey, 0))))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("FILE_CONVERSION_LOCKED"));
+
+		List<BoardAttachment> current = boardAttachmentRepository
+			.findByPost_IdOrderByCreatedAtAscIdAsc(postId);
+		assertThat(current).hasSize(1);
+		assertThat(current.get(0).getAttachmentKind()).isEqualTo(BoardAttachmentKind.DOWNLOAD);
+		assertThat(current.get(0).getOriginalFilename()).isEqualTo("locked.zip");
+		assertThat(countRegularFiles(Path.of(attachmentRootPath))).isEqualTo(fileCountBefore);
+	}
+
+	@Test
 	void postsShouldBePaginatedByTenItems() throws Exception {
 		Instant baseTime = Instant.parse("2026-03-11T00:00:00Z");
 		BoardPost latestPost = null;
@@ -1996,9 +2231,12 @@ class BoardPostControllerTest {
 		}
 	}
 
-	private String inlineDocument(String imageKey) {
-		return "{\"type\":\"doc\",\"content\":[{\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\""
-			+ imageKey + "\"}}]}";
+	private String inlineDocument(String... imageKeys) {
+		List<String> nodes = new ArrayList<>();
+		for (String imageKey : imageKeys) {
+			nodes.add("{\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\"" + imageKey + "\"}}");
+		}
+		return "{\"type\":\"doc\",\"content\":[" + String.join(",", nodes) + "]}";
 	}
 
 	private String inlineManifest(String imageKey, int fileIndex) {

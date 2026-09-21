@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount } from "vue";
 import AttachmentDropzone from "./AttachmentDropzone.vue";
 import PostDocumentEditor from "./PostDocumentEditor.client.vue";
 import { usePostDetailStore } from "~/stores/postDetail";
 import { getApiUrl } from "~/services/api";
-import { buildInlineImageSources, filterDownloadAttachments } from "~/utils/postDocument";
+import {
+  buildInlineImageSources,
+  collectInlineImageKeys,
+  filterDownloadAttachments
+} from "~/utils/postDocument";
+import { useInlineImageDraft } from "~/composables/useInlineImageDraft";
+import type { InlineImageDraftRegistrationResult } from "~/composables/useInlineImageDraft";
 import {
   MAX_ATTACHMENTS,
   attachmentFileKey,
@@ -18,17 +24,81 @@ const detail = usePostDetailStore();
 const downloadAttachments = computed(() =>
   filterDownloadAttachments(detail.selectedPost?.attachments ?? [])
 );
-const inlineSources = computed(() =>
+const existingInlineKeys = computed(() =>
+  (detail.selectedPost?.attachments ?? [])
+    .filter((attachment) =>
+      attachment.attachmentKind === "INLINE_IMAGE" && typeof attachment.inlineKey === "string")
+    .map((attachment) => attachment.inlineKey as string)
+);
+const existingSources = computed(() =>
   buildInlineImageSources(detail.selectedPost?.attachments ?? [])
+);
+const inlineDraft = useInlineImageDraft({
+  confirmUpload: () => detail.ensureEditAttachmentUploadConfirmed(),
+  reservedImageKeys: () => existingInlineKeys.value
+});
+const inlineSources = computed(() => ({
+  ...existingSources.value,
+  ...inlineDraft.inlineSources.value
+}));
+const keptDownloadCount = computed(() =>
+  downloadAttachments.value.filter(
+    (attachment) => !detail.removeAttachmentIds.has(attachment.id)
+  ).length
+);
+const activeInlineImageCount = computed(() =>
+  collectInlineImageKeys(detail.postEditForm.bodyDocument).length
+);
+const inlineImagePasteCapacity = computed(() =>
+  Math.max(MAX_ATTACHMENTS - keptDownloadCount.value - detail.postEditAttachmentFiles.length, 0)
+);
+const combinedAttachmentCount = computed(() =>
+  keptDownloadCount.value + detail.postEditAttachmentFiles.length + activeInlineImageCount.value
 );
 
 function onTitle(event: Event) {
   detail.postEditForm.title = (event.target as HTMLInputElement).value;
 }
+
+function onInlineImageError(message: string) {
+  detail.postActionError = message;
+}
+
+function registerPastedImages(files: readonly File[]): InlineImageDraftRegistrationResult {
+  const result = inlineDraft.register(files);
+  if (!result.error && result.entries.length > 0) {
+    detail.postActionError = "";
+  }
+  return result;
+}
+
+async function onSubmit() {
+  const prepared = inlineDraft.buildUploads(
+    detail.postEditForm.bodyDocument,
+    existingInlineKeys.value
+  );
+  if (prepared.error) {
+    detail.postActionError = prepared.error;
+    return;
+  }
+  const saved = await detail.handleUpdatePost(prepared.inlineImages);
+  if (saved) {
+    inlineDraft.clear();
+  }
+}
+
+function onCancel() {
+  inlineDraft.clear();
+  detail.closePostActionPanel();
+}
+
+onBeforeUnmount(() => {
+  inlineDraft.clear();
+});
 </script>
 
 <template>
-  <form class="form-grid compact-form action-panel" @submit.prevent="detail.handleUpdatePost()">
+  <form class="form-grid compact-form action-panel" @submit.prevent="onSubmit">
     <label class="field">
       <span>제목</span>
       <input :value="detail.postEditForm.title" maxlength="200" required @input="onTitle" />
@@ -38,6 +108,9 @@ function onTitle(event: Event) {
       <PostDocumentEditor
         v-model="detail.postEditForm.bodyDocument"
         :inline-sources="inlineSources"
+        :register-pasted-images="registerPastedImages"
+        :max-active-inline-images="inlineImagePasteCapacity"
+        @inline-image-error="onInlineImageError"
       />
     </div>
     <p class="section-meta">{{ getPostBodyHelp() }}</p>
@@ -77,8 +150,9 @@ function onTitle(event: Event) {
       @files-selected="detail.selectEditAttachmentFiles($event)"
     />
     <p class="section-meta">
-      최대 {{ MAX_ATTACHMENTS }}개까지 등록할 수 있습니다. (현재
-      {{ (detail.selectedPost?.attachments ?? []).filter((a) => !detail.removeAttachmentIds.has(a.id)).length + detail.postEditAttachmentFiles.length }}/{{ MAX_ATTACHMENTS }})
+      최대 {{ MAX_ATTACHMENTS }}개까지 등록할 수 있습니다.
+      (현재: 첨부 {{ keptDownloadCount + detail.postEditAttachmentFiles.length }}개 +
+      본문 이미지 {{ activeInlineImageCount }}개 = {{ combinedAttachmentCount }}/{{ MAX_ATTACHMENTS }})
     </p>
     <ul v-if="detail.postEditAttachmentFiles.length > 0" class="attachment-select-list">
       <li
@@ -101,7 +175,7 @@ function onTitle(event: Event) {
     <p v-if="detail.postActionError" class="panel-error">{{ detail.postActionError }}</p>
     <div class="action-form-actions">
       <button type="submit" class="ghost-button" :disabled="detail.submitting">게시글 수정</button>
-      <button type="button" class="ghost-button" @click="detail.closePostActionPanel()">취소</button>
+      <button type="button" class="ghost-button" @click="onCancel">취소</button>
     </div>
   </form>
 </template>

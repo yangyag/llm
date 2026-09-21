@@ -161,7 +161,7 @@ public class BoardService {
 		List<PreparedInlineImage> inline = prepareCreatedInlineImages(
 			body.imageKeys(), request.getInlineImageManifestBase64(), request.getInlineImages());
 		PreparedAttachmentChanges changes = prepareAttachmentChanges(
-			List.of(), request.getAttachments(), null, inline);
+			List.of(), request.getAttachments(), null, inline, List.of());
 		BoardPost savedPost = boardPostRepository.save(new BoardPost(
 			request.getTitle().trim(),
 			body.plainText(),
@@ -197,20 +197,22 @@ public class BoardService {
 		ResolvedPostBody body = resolvePostBody(
 			mode, request.getBodyFormat(), request.getBodyBase64(), request.getBodyDocumentBase64());
 		List<BoardAttachment> existing = findAttachments(post.getId());
-		ensureUpdateInlineImagesUnchanged(
+		PreparedInlineImageChanges inlineChanges = prepareUpdatedInlineImages(
 			body.imageKeys(), existing,
 			request.getInlineImageManifestBase64(), request.getInlineImages());
 		PreparedAttachmentChanges changes = prepareAttachmentChanges(
-			existing, request.getAttachments(), request.getRemoveAttachmentIds(), List.of());
+			existing, request.getAttachments(), request.getRemoveAttachmentIds(),
+			inlineChanges.additions(), inlineChanges.removals());
+		Instant now = Instant.now();
 		post.update(
 			request.getTitle().trim(),
 			body.plainText(),
 			body.format(),
 			body.document(),
 			mode,
-			Instant.now()
+			now
 		);
-		applyAttachmentChanges(post, changes, Instant.now());
+		applyAttachmentChanges(post, changes, now);
 		return toDetailResponse(post);
 	}
 
@@ -542,6 +544,16 @@ public class BoardService {
 		}
 	}
 
+	private record PreparedInlineImageChanges(
+		List<PreparedInlineImage> additions,
+		List<BoardAttachment> removals
+	) {
+		private PreparedInlineImageChanges {
+			additions = List.copyOf(additions);
+			removals = List.copyOf(removals);
+		}
+	}
+
 	/**
 	 * 게시글 본문이 수동 작성 가능한 모드인지 확인한 뒤 형식에 맞게 디코딩한다.
 	 *
@@ -586,16 +598,15 @@ public class BoardService {
 		}
 	}
 
-	private List<PreparedInlineImage> prepareCreatedInlineImages(
-		Set<UUID> documentKeys,
+	private List<PreparedInlineImage> prepareUploadedInlineImages(
 		String manifestBase64,
 		List<MultipartFile> files
 	) {
 		List<MultipartFile> uploads = files == null ? List.<MultipartFile>of() : files;
-		if (manifestBase64 == null && uploads.isEmpty() && documentKeys.isEmpty()) {
+		if (manifestBase64 == null && uploads.isEmpty()) {
 			return List.of();
 		}
-		if (manifestBase64 == null || uploads.isEmpty() || documentKeys.isEmpty()) {
+		if (manifestBase64 == null || uploads.isEmpty()) {
 			throw new InvalidAttachmentRequestException(
 				"inline image manifest, files and document keys must all be present"
 			);
@@ -611,14 +622,6 @@ public class BoardService {
 				"a post can have at most " + maxAttachmentsPerPost + " attachments"
 			);
 		}
-		Set<UUID> manifestKeys = entries.stream()
-			.map(InlineImageManifestCodec.Entry::imageKey)
-			.collect(Collectors.toSet());
-		if (!manifestKeys.equals(documentKeys)) {
-			throw new InvalidAttachmentRequestException(
-				"inline image manifest keys must match the document keys"
-			);
-		}
 		List<PreparedInlineImage> prepared = new ArrayList<>();
 		for (InlineImageManifestCodec.Entry entry : entries) {
 			MultipartFile file = uploads.get(entry.fileIndex());
@@ -630,53 +633,109 @@ public class BoardService {
 		return List.copyOf(prepared);
 	}
 
-	private void ensureUpdateInlineImagesUnchanged(
+	private List<PreparedInlineImage> prepareCreatedInlineImages(
 		Set<UUID> documentKeys,
-		List<BoardAttachment> existing,
-		String manifest,
+		String manifestBase64,
 		List<MultipartFile> files
 	) {
-		if (manifest != null || (files != null && !files.isEmpty())) {
+		List<PreparedInlineImage> prepared = prepareUploadedInlineImages(manifestBase64, files);
+		if (prepared.isEmpty() && documentKeys.isEmpty()) {
+			return prepared;
+		}
+		if (prepared.isEmpty() || documentKeys.isEmpty()) {
 			throw new InvalidAttachmentRequestException(
-				"adding inline images during update is not supported yet"
+				"inline image manifest, files and document keys must all be present"
 			);
 		}
+		Set<UUID> manifestKeys = prepared.stream()
+			.map(PreparedInlineImage::imageKey)
+			.collect(Collectors.toSet());
+		if (!manifestKeys.equals(documentKeys)) {
+			throw new InvalidAttachmentRequestException(
+				"inline image manifest keys must match the document keys"
+			);
+		}
+		return prepared;
+	}
+
+	private PreparedInlineImageChanges prepareUpdatedInlineImages(
+		Set<UUID> documentKeys,
+		List<BoardAttachment> existing,
+		String manifestBase64,
+		List<MultipartFile> files
+	) {
+		List<PreparedInlineImage> additions = prepareUploadedInlineImages(manifestBase64, files);
 		Set<UUID> existingKeys = existing.stream()
 			.filter(attachment -> attachment.getAttachmentKind() == BoardAttachmentKind.INLINE_IMAGE)
 			.map(BoardAttachment::getInlineKey)
 			.collect(Collectors.toSet());
-		if (!existingKeys.equals(documentKeys)) {
+		Set<UUID> newKeys = additions.stream()
+			.map(PreparedInlineImage::imageKey)
+			.collect(Collectors.toSet());
+		for (UUID newKey : newKeys) {
+			if (existingKeys.contains(newKey)) {
+				throw new InvalidAttachmentRequestException(
+					"inline image uploads must not reuse existing image keys"
+				);
+			}
+		}
+		Set<UUID> unreferencedUploads = new HashSet<>(newKeys);
+		unreferencedUploads.removeAll(documentKeys);
+		if (!unreferencedUploads.isEmpty()) {
 			throw new InvalidAttachmentRequestException(
-				"inline image changes during update are not supported yet"
+				"inline image manifest keys must match the document keys"
 			);
 		}
+		Set<UUID> unresolvedKeys = new HashSet<>(documentKeys);
+		unresolvedKeys.removeAll(existingKeys);
+		unresolvedKeys.removeAll(newKeys);
+		if (!unresolvedKeys.isEmpty()) {
+			throw new InvalidAttachmentRequestException(
+				"document references inline images that are not attached to this post"
+			);
+		}
+		List<BoardAttachment> removals = existing.stream()
+			.filter(attachment -> attachment.getAttachmentKind() == BoardAttachmentKind.INLINE_IMAGE)
+			.filter(attachment -> !documentKeys.contains(attachment.getInlineKey()))
+			.toList();
+		return new PreparedInlineImageChanges(additions, removals);
 	}
 
 	private PreparedAttachmentChanges prepareAttachmentChanges(
 		List<BoardAttachment> existing,
 		List<MultipartFile> uploads,
 		Collection<Long> removeAttachmentIds,
-		List<PreparedInlineImage> inlineImages
+		List<PreparedInlineImage> inlineImages,
+		List<BoardAttachment> inlineRemovals
 	) {
 		// 1) 삭제 대상만 확정한다(아직 삭제하지 않음).
 		Set<Long> removeIds = removeAttachmentIds == null
 			? Set.of()
 			: new HashSet<>(removeAttachmentIds);
-		List<BoardAttachment> removals = removeIds.isEmpty()
+		List<BoardAttachment> explicitRemovals = removeIds.isEmpty()
 			? List.of()
 			: existing.stream()
 				.filter(attachment -> removeIds.contains(attachment.getId()))
 				.toList();
-		if (removals.size() != removeIds.size()) {
+		if (explicitRemovals.size() != removeIds.size()) {
 			throw new InvalidAttachmentRequestException(
 				"removeAttachmentIds references attachments that do not belong to this post"
 			);
 		}
-		for (BoardAttachment removal : removals) {
+		for (BoardAttachment removal : explicitRemovals) {
 			if (removal.getAttachmentKind() != BoardAttachmentKind.DOWNLOAD) {
 				throw new InvalidAttachmentRequestException(
 					"removeAttachmentIds only supports download attachments"
 				);
+			}
+		}
+		List<BoardAttachment> removals = new ArrayList<>(explicitRemovals);
+		Set<Long> removalIds = removals.stream()
+			.map(BoardAttachment::getId)
+			.collect(Collectors.toSet());
+		for (BoardAttachment removal : inlineRemovals) {
+			if (removalIds.add(removal.getId())) {
+				removals.add(removal);
 			}
 		}
 

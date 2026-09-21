@@ -291,6 +291,110 @@ class SecurityAndStorageRegressionTest {
         assertThat(Files.exists(DATA_ROOT.resolve("attachments").resolve(savedPath.get()))).isFalse();
     }
 
+    @Test
+    void inlineUpdateRollbackRemovesNewFileAndPreservesExistingFile() throws Exception {
+        String keyA = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+        String keyB = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
+        byte[] pngA = imageBytes("png", 2, 2);
+        byte[] pngB = imageBytes("png", 3, 3);
+        MvcResult created = mvc.perform(multipart("/api/v1/posts")
+                .file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngA))
+                .header("Authorization", bearer(adminToken))
+                .param("title", "inline update rollback")
+                .param("bodyFormat", "TIPTAP_JSON")
+                .param("bodyDocumentBase64", encode(inlineDocument(keyA).getBytes(StandardCharsets.UTF_8)))
+                .param("inlineImageManifestBase64", encode(inlineManifest(keyA).getBytes(StandardCharsets.UTF_8))))
+            .andExpect(status().isCreated()).andReturn();
+        long postId = mapper.readTree(created.getResponse().getContentAsString()).path("id").asLong();
+        var attachmentA = attachments.findByPost_IdOrderByCreatedAtAscIdAsc(postId).getFirst();
+        String pathA = attachmentA.getStoragePath();
+        Path fileA = DATA_ROOT.resolve("attachments").resolve(pathA);
+        assertThat(Files.exists(fileA)).isTrue();
+
+        var request = new com.llm.app.board.dto.UpdateBoardPostRequest();
+        request.setTitle("inline update rollback 2");
+        request.setBodyFormat(com.llm.app.board.model.PostBodyFormat.TIPTAP_JSON);
+        request.setBodyDocumentBase64(encode(inlineDocument(keyB).getBytes(StandardCharsets.UTF_8)));
+        request.setInlineImageManifestBase64(encode(inlineManifest(keyB).getBytes(StandardCharsets.UTF_8)));
+        request.setInlineImages(java.util.List.of(
+            new MockMultipartFile("inlineImages", "b.png", "image/png", pngB)));
+        var newPath = new java.util.concurrent.atomic.AtomicReference<String>();
+        var transaction = new TransactionTemplate(transactionManager);
+        Long userId = users.findByUsername("reviewadmin").orElseThrow().getId();
+        assertThatThrownBy(() -> transaction.executeWithoutResult(status -> {
+            boardService.updatePost(userId, postId, request);
+            newPath.set(attachments.findByPost_IdOrderByCreatedAtAscIdAsc(postId).stream()
+                .filter(attachment -> keyB.equals(String.valueOf(attachment.getInlineKey())))
+                .findFirst().orElseThrow().getStoragePath());
+            throw new IllegalStateException("injected failure after inline update");
+        })).isInstanceOf(IllegalStateException.class);
+
+        var post = posts.findById(postId).orElseThrow();
+        assertThat(post.getBodyDocument()).contains(keyA).doesNotContain(keyB);
+        var current = attachments.findByPost_IdOrderByCreatedAtAscIdAsc(postId);
+        assertThat(current).hasSize(1);
+        assertThat(current.getFirst().getId()).isEqualTo(attachmentA.getId());
+        assertThat(String.valueOf(current.getFirst().getInlineKey())).isEqualTo(keyA);
+        assertThat(Files.exists(fileA)).isTrue();
+        assertThat(deletions.existsById(pathA)).isFalse();
+        assertThat(newPath.get()).isNotNull();
+        assertThat(Files.exists(DATA_ROOT.resolve("attachments").resolve(newPath.get()))).isFalse();
+        mvc.perform(get("/api/v1/posts/{postId}/attachments/{attachmentId}/content", postId, attachmentA.getId()))
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(pngA));
+    }
+
+    @Test
+    void committedInlineRemovalIsRetriedAfterFilesystemFailure() throws Exception {
+        String keyA = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+        byte[] pngA = imageBytes("png", 2, 2);
+        MvcResult created = mvc.perform(multipart("/api/v1/posts")
+                .file(new MockMultipartFile("inlineImages", "a.png", "image/png", pngA))
+                .header("Authorization", bearer(adminToken))
+                .param("title", "inline removal retry")
+                .param("bodyFormat", "TIPTAP_JSON")
+                .param("bodyDocumentBase64", encode(inlineDocument(keyA).getBytes(StandardCharsets.UTF_8)))
+                .param("inlineImageManifestBase64", encode(inlineManifest(keyA).getBytes(StandardCharsets.UTF_8))))
+            .andExpect(status().isCreated()).andReturn();
+        long postId = mapper.readTree(created.getResponse().getContentAsString()).path("id").asLong();
+        var attachmentA = attachments.findByPost_IdOrderByCreatedAtAscIdAsc(postId).getFirst();
+        String pathA = attachmentA.getStoragePath();
+        Path fileA = DATA_ROOT.resolve("attachments").resolve(pathA);
+        org.mockito.Mockito.doThrow(new com.llm.app.board.exception.AttachmentStorageException(
+                "simulated I/O failure", new java.io.IOException("test fixture")))
+            .when(storage).deleteIfExists(pathA);
+
+        var update = multipart("/api/v1/posts/{id}", postId);
+        update.with(request -> {
+            request.setMethod("PUT");
+            return request;
+        });
+        mvc.perform(update
+                .header("Authorization", bearer(adminToken))
+                .param("title", "emptied")
+                .param("bodyFormat", "TIPTAP_JSON")
+                .param("bodyDocumentBase64", encode("{\"type\":\"doc\"}".getBytes(StandardCharsets.UTF_8))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.attachments").isEmpty());
+
+        assertThat(attachments.findByPost_IdOrderByCreatedAtAscIdAsc(postId)).isEmpty();
+        assertThat(deletions.existsById(pathA)).isTrue();
+        assertThat(Files.exists(fileA)).isTrue();
+        org.mockito.Mockito.reset(storage);
+        deletionWorker.retryPending();
+        assertThat(deletions.existsById(pathA)).isFalse();
+        assertThat(Files.exists(fileA)).isFalse();
+    }
+
+    private static String inlineDocument(String imageKey) {
+        return "{\"type\":\"doc\",\"content\":[{\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\""
+            + imageKey + "\"}}]}";
+    }
+
+    private static String inlineManifest(String imageKey) {
+        return "[{\"imageKey\":\"" + imageKey + "\",\"fileIndex\":0}]";
+    }
+
     private static byte[] imageBytes(String format, int width, int height) {
         try {
             java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB);

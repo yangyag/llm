@@ -1,6 +1,6 @@
 # 게시글 본문 이미지 붙여넣기·영구 저장 구현 계획서
 
-- 상태: 구현 진행 — Phase 0~5 완료, Phase 6 미착수
+- 상태: 구현 진행 — Phase 0~6 완료, Phase 7 미착수
 - 작성일: 2026-09-20
 - 대상: `front/` Nuxt 3·Vue 3 게시글 작성/수정/조회, `back/` Spring Boot 게시판·첨부 모듈, Flyway
 - 목표: 게시글 작성·수정 중 클립보드 이미지를 즉시 본문에 표시하고, 게시글 저장 후에도 텍스트·이미지 순서와 위치를 유지한다.
@@ -286,7 +286,7 @@ inline 이미지 설정 이름:
 | 3 | inline 이미지 저장·조회 backend | 완료 | MockMvc로 생성·content 조회·롤백 검증 통과 |
 | 4 | Tiptap editor·reader 기반 도입 | 완료 | 이미지 없이 plain/rich 작성·수정·조회 가능 |
 | 5 | 이미지 붙여넣기 임시 보관·글 생성 | 완료 | 새 글에서 붙여넣기→저장→조회 통과 |
-| 6 | 수정·삭제·실패 재시도 완성 | 미착수 | 기존/신규 이미지 혼합 수정과 정리 통과 |
+| 6 | 수정·삭제·실패 재시도 완성 | 완료 | 기존/신규 이미지 혼합 수정과 정리 통과 |
 | 7 | 한도·보안·접근성 hardening | 미착수 | 경계값·악성 입력·키보드/모바일 점검 통과 |
 | 8 | 전체 회귀·PostgreSQL·통합 smoke·문서화 | 미착수 | 최종 게이트와 배포 순서 기록 완료 |
 
@@ -780,7 +780,7 @@ Phase 5 완료 조건을 충족했다. 다음 작업은 Phase 6의 기존·신�
 
 ### Phase 6 — 수정·삭제·실패 재시도 완성
 
-**상태: 미착수**
+**상태: 완료 — 2026-09-21**
 
 #### 진입 전 한도 게이트
 
@@ -834,6 +834,31 @@ npm run build
 #### 안전 중단점
 
 기능 구현은 완성됐고 다음 Phase는 한도·보안·접근성 경계 강화만 수행한다.
+
+#### Phase 6 완료 기록 — 2026-09-21
+
+- 사용량 상태는 확인 수단이 없어 `알 수 없음`으로 유지하고, backend/frontend 선행 red → update 집합·파일 lifecycle 구현 → focused gate → 전체 backend/frontend gate → Playwright edit smoke 순서로 체크포인트를 나눴다.
+- backend 선행 focused suite는 75건 중 3건이 실패했다. 기존+신규 inline update가 400으로 차단됐고, update rollback·커밋 후 삭제 재시도 테스트도 같은 미지원 gate에서 실패해 의도한 red를 확인했다. 다른 글 key 거부, 비작성자 403, FILE_CONVERSION_REQUEST 잠금 테스트는 기존 guard 순서로 처음부터 통과했다.
+- frontend 선행 `npm test`는 33건 중 7건이 실패했다. existing key를 pending 파일로 오인하는 build, reserved key 충돌 방지 부재, edit confirmation·합계 계산·성공 여부 계약 부재를 각각 재현했다.
+- backend update는 rich 문서 image key 집합을 source of truth로 사용한다. 이 글의 existing key와 신규 manifest key로만 문서 참조를 해석하고, 신규 key 재사용·미참조 upload·다른 글/unknown key를 거부하며 문서에서 빠진 기존 inline row를 자동 삭제 대상으로 계산한다.
+- 일반 첨부의 명시적 삭제와 inline 이미지 자동 삭제를 합친 뒤 `기존 - 삭제 + 신규 download + 신규 inline <= 5`를 파일·DB 변경 전에 검증한다. 신규 파일은 기존 rollback cleanup에 등록하고 기존 파일 삭제는 metadata와 영속 deletion queue를 같은 트랜잭션에 반영한다.
+- frontend edit panel은 기존 `inlineKey -> contentUrl`과 신규 pending blob source를 같은 NodeView resolver에 합친다. 기존 key를 UUID 예약 집합으로 사용하며, 활성 문서의 existing key는 유지하고 pending key만 update manifest/files로 전송한다.
+- edit session별 업로드 환경 확인은 paste와 일반 첨부가 공유한다. 실패 시 title·문서·신규 파일·삭제 선택·blob URL을 유지하고, 성공·취소·unmount에서는 pending URL을 정확히 한 번 해제한다. 취소 후 재진입하면 서버 응답 기준 기존 상태만 복원된다.
+
+검증 결과:
+
+- backend focused `BoardPostControllerTest` 65건 + `SecurityAndStorageRegressionTest` 10건, 합계 75/75 통과.
+- backend 전체 `clean test`: 184건 발견, 180건 통과, 실패·오류 0, 4건 skip. skip은 `LLM_TEST_POSTGRES_URL` 미설정에 따른 기존 조건부 `PostgresMigrationTest` 1건과 `PostgresUploadFinalizeTest` 3건이며 PostgreSQL focused 성공으로 간주하지 않는다.
+- frontend `npm test`: 33/33 통과, 실패·skip 0.
+- frontend `npm run typecheck`: 성공.
+- frontend `npm run build`: 성공, client module 284개·SSR module 1개·route 5개 prerender.
+- Playwright 1.62.1 edit smoke 87/87 assertion 통과: UI 생성 POST 201, 기존 이미지 A의 영구 URL 복원, 신규 B paste 후 취소·정확히 한 번 revoke, 재진입 시 B 비잔존, 신규 C paste, 기존 A NodeSelection 삭제, 의도한 첫 PUT 500 뒤 title·문서·blob 유지, 재시도 PUT 200을 확인했다.
+- 성공 응답의 bodyDocument key와 attachment metadata는 C 하나로 일치했고, A content는 404, C content는 200 `image/png`였다. 로그인 상세·새로고침·공개 상세에서 영구 C와 텍스트 순서를 확인했으며 다운로드 panel은 표시되지 않았다.
+- Phase 6 edit session의 blob B·C는 각각 생성 1회·해제 1회였고 중복 revoke가 없었다. confirm은 session별 1회, 합계 2회였으며 예상한 PUT 500과 명시적 A content 404 외 console/page/request failure·예상하지 않은 API 4xx·5xx는 0건이다.
+- 브라우저 smoke는 disposable PostgreSQL 18 `phase4_smoke` schema와 로컬 backend 8082/frontend 5174에서 수행했다. front proxy health는 `UP`이었고 backend/frontend 종료 후 disposable container를 stopped 상태로 되돌렸다. 공유 PostgreSQL과 운영 환경은 사용하지 않았다.
+- 비차단 항목은 기존 backend deprecation/unchecked/JVM warning, npm audit notice 4건(중간 1·높음 3), Nitro external warning, line-ending 안내와 native OS IME·실제 모바일 검증의 Phase 7 이월이다. smoke 글은 disposable DB에만 남겼다.
+
+Phase 6 완료 조건을 충족했다. 다음 작업은 Phase 7의 총 첨부·파일·문서 경계, 악성 입력, content header, 키보드·접근성·한글 IME·모바일 hardening이다.
 
 ### Phase 7 — 한도·보안·접근성 hardening
 
@@ -1075,27 +1100,27 @@ Docker/health/smoke 결과:
 
 기록에는 secret, JWT, 비밀번호, `.env` 값, PEM 내용, 민감한 이미지 내용, 전체 환경변수 덤프를 넣지 않는다.
 
-## 12. 최신 재개 기록 — Phase 5 완료
+## 12. 최신 재개 기록 — Phase 6 완료
 
 ```text
 기록 일시: 2026-09-21
 사용량 상태: 알 수 없음
-현재 Phase: 6
+현재 Phase: 7
 Phase 상태: 미착수
-마지막 완료 Phase: 5
-기준 브랜치/커밋: main / 5eb015ef2b7e1a30461d720a7d67f73070b79ddc
-작업 전 git status: M plan/post-inline-image-editor-plan.md (공통 Playwright 검증 원칙 추가), 구현 소스 변경 없음
-이번 변경 파일: front/types/api.ts, front/utils/postDocument.ts, front/composables/useInlineImageDraft.ts, front/components/post/PostDocumentEditor.client.vue, front/components/post/InlineAttachmentImageNodeView.vue, front/components/post/PostForm.vue, front/components/post/AttachmentSelect.vue, front/utils/post.ts, front/stores/postDetail.ts, front/services/api.ts, front/tests/inlineImageDraft.test.cjs, front/tests/postDetail.test.cjs, 계획서
-완료한 계약: create 전용 PNG/JPEG clipboard paste, UUID·pending 20개/100MB registry, blob URL undo/cleanup, 일반 첨부+활성 이미지 합계 5개, canonical manifest/files multipart, 실패 재시도, 영구 content URL 전환
-통과한 좁은 테스트: 선행 red 26건 중 12 pass/14 fail 확인; 최종 frontend npm test 26/26, typecheck 성공, generate build 성공
-최신 전체 backend 테스트: Phase 5 backend 변경 없음; Phase 3 clean test 178 discovered, 174 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors 유지
-최신 front test/typecheck/build: npm test 26/26, typecheck 성공, build client 284 modules·SSR 1 module·5 routes prerender
-PostgreSQL focused 결과: 조건부 PostgreSQL JUnit suite는 Phase 5에서 미실행. disposable PostgreSQL 18 phase4_smoke schema를 실제 create/read browser smoke에 재사용
-Docker/health/smoke 결과: compose/8083은 미실행. 로컬 backend 8082와 frontend 5174 proxy health UP; Playwright create/retry/login+public read 40/40, delete/undo/unmount 14/14 assertion 통과; 예상 외 browser/network/API 오류 0
-실행 중인 프로세스: 없음; frontend/backend 종료, disposable PostgreSQL container는 stopped 상태로 보존
-알려진 실패·차단: Phase 6 blocker 없음. 기존 npm audit notice 4건은 임의 수정하지 않음. native OS IME·실제 모바일 검증은 Phase 7 이월. smoke 글은 disposable DB에만 잔존
-다음 정확한 작업: Phase 6 선행 backend update/lifecycle 테스트 후 기존 inline key 유지·삭제와 신규 pending manifest 병합, edit registry/URL cleanup 구현, 공통 원칙에 따른 Playwright edit smoke
-주의할 사용자 기존 변경: Phase 5 시작 전 계획서의 공통 Playwright 검증 원칙 변경만 존재했고 그대로 보존·완료 기록에 반영. 그 외 사용자 기존 변경 없음
+마지막 완료 Phase: 6
+기준 브랜치/커밋: main / 52a61ad44c76f0c3895c48e6830e7d78bd8822de
+작업 전 git status: clean
+이번 변경 파일: back/src/main/java/com/llm/app/board/service/BoardService.java, back/src/test/java/com/llm/app/board/controller/BoardPostControllerTest.java, back/src/test/java/com/llm/app/review/SecurityAndStorageRegressionTest.java, front/components/post/PostEditPanel.vue, front/composables/useInlineImageDraft.ts, front/stores/postDetail.ts, front/tests/inlineImageDraft.test.cjs, front/tests/postDetail.test.cjs, 계획서
+완료한 계약: 문서 key 기반 existing 유지·자동 삭제·신규 manifest 병합, download+inline 원자적 최종 개수 검증, update rollback/new-file cleanup, 커밋 후 삭제 재시도, edit pending registry·실패 재시도·취소/재진입 cleanup
+통과한 좁은 테스트: 선행 backend 75건 중 3 fail 및 frontend 33건 중 7 fail 확인; 최종 backend focused 75/75, frontend 33/33, typecheck·generate build 성공
+최신 전체 backend 테스트: clean test 184 discovered, 180 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors
+최신 front test/typecheck/build: npm test 33/33, typecheck 성공, build client 284 modules·SSR 1 module·5 routes prerender
+PostgreSQL focused 결과: 조건부 PostgreSQL JUnit suite는 Phase 6에서 미실행. disposable PostgreSQL 18 phase4_smoke schema를 실제 create/edit/read browser smoke에 재사용
+Docker/health/smoke 결과: compose/8083은 미실행. 로컬 backend 8082와 frontend 5174 proxy health UP; Playwright edit/cancel/re-entry/delete/retry/login+public read 87/87 assertion 통과; 예상 외 browser/network/API 오류 0
+실행 중인 프로세스: 없음; frontend/backend/Gradle 종료, disposable PostgreSQL container는 stopped 상태로 보존
+알려진 실패·차단: Phase 7 blocker 없음. PostgreSQL 조건부 4건은 환경 미제공으로 skip. 기존 npm audit notice 4건은 임의 수정하지 않음. native OS IME·실제 모바일 검증은 Phase 7에서 수행. smoke 글은 disposable DB에만 잔존
+다음 정확한 작업: Phase 7에서 0/1/5/6 총 개수, 10MB·8192px·25MP, 가짜/손상/SVG/HTML, 문서 크기·node·depth, stale/duplicate key 경계를 테스트하고 Playwright keyboard/focus/error UI 및 수동 native IME·모바일 항목을 구분 검증
+주의할 사용자 기존 변경: Phase 6 시작 전 작업 트리 clean; 사용자 기존 변경 없음
 ```
 
 ## 13. 최종 완료 기준
@@ -1104,15 +1129,15 @@ Docker/health/smoke 결과: compose/8083은 미실행. 로컬 backend 8082와 fr
 - [x] 등록 전 이미지가 서버나 DB에 고아 데이터로 생성되지 않는다.
 - [x] pending 이미지는 undo 복원이 가능하고 20개·100MB 임시 한도와 URL 해제가 검증된다.
 - [x] 저장 후 로그인·공개 상세에서 텍스트·이미지 순서가 유지된다.
-- [ ] 수정에서 기존 이미지 유지·삭제와 신규 이미지 추가가 동작한다.
+- [x] 수정에서 기존 이미지 유지·삭제와 신규 이미지 추가가 동작한다.
 - [ ] 구형 plain 수정 요청이 rich 글을 변경하지 못하고 409로 거부된다.
-- [ ] 일반 첨부와 inline 이미지가 기존 총 5개 제한을 일관되게 적용한다.
+- [x] 일반 첨부와 inline 이미지가 기존 총 5개 제한을 일관되게 적용한다.
 - [ ] 이미지 bytes는 기존 attachment volume에 있고 DB에는 metadata와 canonical 문서만 저장된다.
 - [ ] canonical 문서에 `blob:`, data URL, 외부 URL, raw HTML이 저장되지 않는다.
 - [ ] `posts.body` 평문으로 검색·복사·기존 front fallback이 유지된다.
 - [ ] PNG/JPEG 형식, 10MB, dimensions, pixel 한도를 server가 검증한다.
 - [ ] inline content endpoint가 verified content type, inline disposition, nosniff를 반환한다.
-- [ ] 신규 파일 rollback 정리와 커밋 후 삭제 재시도가 검증된다.
+- [x] 신규 파일 rollback 정리와 커밋 후 삭제 재시도가 검증된다.
 - [ ] plain 기존 게시글과 FILE_CONVERSION_REQUEST ZIP 회귀가 없다.
 - [ ] backend 전체 테스트와 PostgreSQL focused migration/transaction 검증이 통과한다.
 - [ ] frontend test, typecheck, generate build가 통과한다.

@@ -210,6 +210,42 @@ test('buildUploads follows document order, keeps deleted pending entries, and re
   assert.equal(missing.inlineImages.length, 0);
 });
 
+test('buildUploads retains existing keys without uploads and still rejects unknown keys', () => {
+  const mod = draftModule();
+  const { draft } = makeDraft(mod, { crypto: sequentialCrypto([K_A, K_B]) });
+  draft.register([fakeFile('a.png', 1, 'image/png'), fakeFile('b.png', 1, 'image/png')]);
+
+  const mixed = { type: 'doc', content: [imageNode(K_C), imageNode(K_B)] };
+  const built = draft.buildUploads(mixed, [K_C]);
+  assert.equal(built.error, null);
+  assert.deepEqual(clone(built.inlineImages).map(upload => upload.imageKey), [K_B]);
+  assert.equal(draft.entries.value.length, 2);
+
+  const retainedOnly = draft.buildUploads({ type: 'doc', content: [imageNode(K_C)] }, [K_C]);
+  assert.equal(retainedOnly.error, null);
+  assert.equal(retainedOnly.inlineImages.length, 0);
+
+  const deletedPending = draft.buildUploads({ type: 'doc', content: [imageNode(K_C), imageNode(K_A)] }, [K_C]);
+  assert.equal(deletedPending.error, null);
+  assert.deepEqual(clone(deletedPending.inlineImages).map(upload => upload.imageKey), [K_A]);
+  assert.equal(draft.entries.value.length, 2);
+
+  const unknown = draft.buildUploads({ type: 'doc', content: [imageNode(K_D)] }, [K_C]);
+  assert.equal(unknown.error, '본문 이미지 임시 파일을 찾을 수 없습니다. 이미지를 다시 붙여넣어 주세요.');
+  assert.equal(unknown.inlineImages.length, 0);
+});
+
+test('reserved existing keys are excluded from generated pending keys', () => {
+  const mod = draftModule();
+  const { draft } = makeDraft(mod, {
+    crypto: sequentialCrypto([K_A, K_B]),
+    reservedImageKeys: () => [K_A]
+  });
+  const result = draft.register([fakeFile('a.png', 1, 'image/png')]);
+  assert.equal(result.error, null);
+  assert.equal(result.entries[0].imageKey, K_B);
+});
+
 test('clear revokes every URL exactly once and stays idempotent', () => {
   const mod = draftModule();
   const { draft, urls, revoked } = makeDraft(mod);

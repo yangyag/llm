@@ -26,12 +26,50 @@ const post = id => ({ id, title: `Post ${id}`, body: `Body ${id}`, mode: 'NORMAL
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 const fakeFile = index => ({ name: `file-${index}.bin`, size: index * 10, lastModified: index });
+const attachmentKey = file => `${file.name}::${file.size}::${file.lastModified}`;
+
+const K_A = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
+const K_B = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
+
+const imageNode = imageKey => ({ type: 'inlineAttachmentImage', attrs: { imageKey } });
+const doc = (...imageKeys) => ({ type: 'doc', content: [
+  { type: 'paragraph', content: [{ type: 'text', text: '본문' }] },
+  ...imageKeys.map(imageNode)
+] });
+const inlineAttachment = (id, imageKey) => ({
+  id, originalFilename: `inline-${id}.png`, size: 10, contentType: 'image/png',
+  attachmentKind: 'INLINE_IMAGE', inlineKey: imageKey,
+  downloadUrl: `/api/v1/posts/1/attachments/${id}`,
+  contentUrl: `/api/v1/posts/1/attachments/${id}/content`
+});
+const downloadAttachment = id => ({
+  id, originalFilename: `download-${id}.bin`, size: 10, contentType: 'application/octet-stream',
+  attachmentKind: 'DOWNLOAD', inlineKey: null,
+  downloadUrl: `/api/v1/posts/1/attachments/${id}`, contentUrl: null
+});
+const richPost = (id, attachments, bodyDocument) => ({
+  ...post(id), bodyFormat: 'TIPTAP_JSON', bodyDocument, attachments
+});
+
+function collectKeys(document) {
+  const keys = [];
+  const walk = nodes => {
+    for (const node of nodes || []) {
+      if (node && node.type === 'inlineAttachmentImage' && typeof node.attrs?.imageKey === 'string') {
+        keys.push(node.attrs.imageKey);
+      }
+      if (node && node.content) walk(node.content);
+    }
+  };
+  walk(document && document.content);
+  return keys;
+}
 
 function setup(overrides = {}) {
   pinia.setActivePinia(pinia.createPinia());
   const pending = new Map();
   const mutations = [];
-  const env = { confirm: () => true };
+  const env = { answer: true, calls: 0, confirm: () => { env.calls += 1; return env.answer; } };
   const api = {
     getPost: id => new Promise((resolve, reject) => pending.set(id, { resolve, reject })),
     deletePost: async id => mutations.push(['delete', id]),
@@ -43,7 +81,23 @@ function setup(overrides = {}) {
     'pinia': pinia,
     '~/services/api': api,
     '~/utils/clipboard': {},
-    '~/utils/post': { MAX_ATTACHMENTS: 5 },
+    '~/utils/post': {
+      MAX_ATTACHMENTS: 5,
+      ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE: 'confirm-message',
+      attachmentFileKey: attachmentKey,
+      mergeAttachmentFiles: (existing, incoming, max) => {
+        const merged = [...existing];
+        const seen = new Set(existing.map(attachmentKey));
+        for (const file of incoming) {
+          const key = attachmentKey(file);
+          if (!seen.has(key)) {
+            seen.add(key);
+            merged.push(file);
+          }
+        }
+        return { files: merged.slice(0, max), truncated: merged.length > max };
+      }
+    },
     '~/utils/postDocument': {
       emptyPostDocument: () => ({ type: 'doc', content: [{ type: 'paragraph' }] }),
       resolvePostDocument: (bodyFormat, bodyDocument, plainBody) => (
@@ -54,7 +108,7 @@ function setup(overrides = {}) {
             : { type: 'paragraph' })
         }
       ),
-      collectInlineImageKeys: () => []
+      collectInlineImageKeys: collectKeys
     },
     '~/composables/useInlineImageDraft': {
       INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE: 'combined-count-message'
@@ -216,4 +270,135 @@ test('create post returns false when the upload confirmation is declined', async
   const result = await store.handleCreatePost([{ imageKey: 'key-1', file: fakeFile(5) }]);
   assert.equal(result, false);
   assert.deepEqual(calls, []);
+});
+
+test('update post forwards only pending inline uploads and closes edit state on success', async () => {
+  const calls = [];
+  const updated = richPost(1, [inlineAttachment(9, K_A), inlineAttachment(10, K_B)], doc(K_A, K_B));
+  updated.title = 'updated title';
+  const { store, pending, env } = setup({
+    updatePost: async (id, input) => { calls.push({ id, input }); return updated; }
+  });
+  store.openDetail(1);
+  pending.get(1).resolve(richPost(1,
+    [downloadAttachment(3), downloadAttachment(4), inlineAttachment(9, K_A)], doc(K_A)));
+  await tick();
+  store.openPostEditPanel();
+  store.postEditForm.bodyDocument = doc(K_A, K_B);
+  store.postEditAttachmentFiles = [fakeFile(7)];
+  store.removeAttachmentIds = new Set([3]);
+
+  const pendingUpload = { imageKey: K_B, file: fakeFile(8) };
+  const result = await store.handleUpdatePost([pendingUpload]);
+  assert.equal(result, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].id, 1);
+  assert.deepEqual(calls[0].input.inlineImages, [pendingUpload]);
+  assert.equal(calls[0].input.attachments.length, 1);
+  assert.deepEqual([...calls[0].input.removeAttachmentIds], [3]);
+  assert.equal(store.selectedPost.title, 'updated title');
+  assert.equal(store.postActionMode, 'none');
+  assert.equal(store.postEditAttachmentFiles.length, 0);
+  assert.equal(store.postEditAttachmentConfirmed, false);
+  assert.equal(store.removeAttachmentIds.size, 0);
+  assert.equal(store.message, '게시글을 수정했습니다.');
+  assert.equal(env.calls, 1);
+});
+
+test('update post API failure returns false and preserves the edit draft', async () => {
+  const { store, pending } = setup({ updatePost: async () => {
+    throw { code: 'SERVER_ERROR', status: 500, message: 'boom' };
+  } });
+  store.openDetail(1);
+  const original = richPost(1, [inlineAttachment(9, K_A)], doc(K_A));
+  pending.get(1).resolve(original);
+  await tick();
+  store.openPostEditPanel();
+  const editDocument = doc(K_A, K_B);
+  store.postEditForm.bodyDocument = editDocument;
+  store.postEditAttachmentFiles = [fakeFile(7)];
+  store.removeAttachmentIds = new Set([3]);
+
+  const result = await store.handleUpdatePost([{ imageKey: K_B, file: fakeFile(8) }]);
+  assert.equal(result, false);
+  assert.equal(store.error, 'boom');
+  assert.equal(store.postActionMode, 'edit');
+  assert.deepEqual(store.postEditForm.bodyDocument, editDocument);
+  assert.equal(store.postEditAttachmentFiles.length, 1);
+  assert.deepEqual([...store.removeAttachmentIds], [3]);
+  assert.deepEqual(store.selectedPost, original);
+});
+
+test('update post counts kept downloads plus active images and frees removed slots', async () => {
+  const calls = [];
+  const { store, pending } = setup({
+    updatePost: async (id, input) => { calls.push(input); return richPost(1, [], doc()); }
+  });
+  store.openDetail(1);
+  pending.get(1).resolve(richPost(1, [
+    downloadAttachment(1), downloadAttachment(2), downloadAttachment(3),
+    inlineAttachment(9, K_A), inlineAttachment(10, K_B)
+  ], doc(K_A, K_B)));
+  await tick();
+  store.openPostEditPanel();
+  store.postEditForm.bodyDocument = doc(K_A);
+  store.postEditAttachmentFiles = [fakeFile(1)];
+  let result = await store.handleUpdatePost();
+  assert.equal(result, true);
+  assert.equal(calls.length, 1);
+
+  const second = setup({
+    updatePost: async (id, input) => { calls.push(input); return richPost(2, [], doc()); }
+  });
+  second.store.openDetail(2);
+  second.pending.get(2).resolve(richPost(2, [
+    downloadAttachment(1), downloadAttachment(2), downloadAttachment(3), downloadAttachment(4),
+    inlineAttachment(9, K_A)
+  ], doc(K_A)));
+  await tick();
+  second.store.openPostEditPanel();
+  second.store.postEditForm.bodyDocument = doc(K_A);
+  second.store.postEditAttachmentFiles = [fakeFile(1)];
+  result = await second.store.handleUpdatePost();
+  assert.equal(result, false);
+  assert.equal(second.store.postActionError, 'combined-count-message');
+  assert.equal(calls.length, 1);
+
+  second.store.removeAttachmentIds = new Set([4]);
+  result = await second.store.handleUpdatePost();
+  assert.equal(result, true);
+  assert.equal(calls.length, 2);
+});
+
+test('edit upload confirmation prompts once across paste and file selection', async () => {
+  const { store, pending, env } = setup();
+  store.openDetail(1);
+  pending.get(1).resolve(richPost(1, [inlineAttachment(9, K_A)], doc(K_A)));
+  await tick();
+  store.openPostEditPanel();
+  assert.equal(env.calls, 0);
+  assert.equal(store.ensureEditAttachmentUploadConfirmed(), true);
+  assert.equal(store.postEditAttachmentConfirmed, true);
+  assert.equal(env.calls, 1);
+  assert.equal(store.ensureEditAttachmentUploadConfirmed(), true);
+  assert.equal(env.calls, 1);
+  store.selectEditAttachmentFiles([fakeFile(1)]);
+  assert.equal(env.calls, 1);
+  assert.equal(store.postEditAttachmentFiles.length, 1);
+});
+
+test('declined edit confirmation returns false and keeps the session unconfirmed', async () => {
+  const { store, pending, env } = setup();
+  store.openDetail(1);
+  pending.get(1).resolve(richPost(1, [], doc()));
+  await tick();
+  store.openPostEditPanel();
+  env.answer = false;
+  assert.equal(store.ensureEditAttachmentUploadConfirmed(), false);
+  assert.equal(store.postEditAttachmentConfirmed, false);
+  assert.equal(env.calls, 1);
+  store.selectEditAttachmentFiles([fakeFile(1)]);
+  assert.equal(store.postEditAttachmentFiles.length, 0);
+  assert.equal(store.postEditAttachmentConfirmed, false);
+  assert.equal(env.calls, 2);
 });

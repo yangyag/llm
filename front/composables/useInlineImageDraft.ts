@@ -42,6 +42,7 @@ export interface InlineImageUploadBuildResult {
 
 export interface InlineImageDraftOptions {
   confirmUpload: () => boolean;
+  reservedImageKeys?: () => readonly string[];
   crypto?: InlineImageCrypto;
   now?: () => number;
   createObjectURL?: (file: File) => string;
@@ -106,7 +107,7 @@ export function useInlineImageDraft(options: InlineImageDraftOptions): {
   inlineSources: ComputedRef<Record<string, string>>;
   totalBytes: ComputedRef<number>;
   register(files: readonly File[]): InlineImageDraftRegistrationResult;
-  buildUploads(document: unknown): InlineImageUploadBuildResult;
+  buildUploads(document: unknown, existingImageKeys?: readonly string[]): InlineImageUploadBuildResult;
   clear(): void;
 } {
   const confirmUpload = options.confirmUpload;
@@ -136,12 +137,15 @@ export function useInlineImageDraft(options: InlineImageDraftOptions): {
   }
 
   function nextImageKeys(count: number): string[] {
-    const taken = new Set(entries.value.map((entry) => entry.imageKey));
+    const taken = new Set(entries.value.map((entry) => entry.imageKey.toLowerCase()));
+    for (const reserved of options.reservedImageKeys?.() ?? []) {
+      taken.add(String(reserved).toLowerCase());
+    }
     const keys: string[] = [];
     while (keys.length < count) {
       const candidate = createUuidV4(cryptoSource);
-      if (!taken.has(candidate)) {
-        taken.add(candidate);
+      if (!taken.has(candidate.toLowerCase())) {
+        taken.add(candidate.toLowerCase());
         keys.push(candidate);
       }
     }
@@ -190,16 +194,24 @@ export function useInlineImageDraft(options: InlineImageDraftOptions): {
     return { entries: created, error: null };
   }
 
-  function buildUploads(document: unknown): InlineImageUploadBuildResult {
+  function buildUploads(
+    document: unknown,
+    existingImageKeys: readonly string[] = []
+  ): InlineImageUploadBuildResult {
     const keys = collectInlineImageKeys(document);
     const byKey = new Map(entries.value.map((entry) => [entry.imageKey, entry]));
+    const existing = new Set(existingImageKeys);
     const inlineImages: PostInlineImageUpload[] = [];
     for (const imageKey of keys) {
       const entry = byKey.get(imageKey);
-      if (!entry) {
-        return { inlineImages: [], error: MISSING_INLINE_IMAGE_FILE_MESSAGE };
+      if (entry) {
+        inlineImages.push({ imageKey: entry.imageKey, file: entry.file });
+        continue;
       }
-      inlineImages.push({ imageKey: entry.imageKey, file: entry.file });
+      if (existing.has(imageKey)) {
+        continue;
+      }
+      return { inlineImages: [], error: MISSING_INLINE_IMAGE_FILE_MESSAGE };
     }
     return { inlineImages, error: null };
   }
