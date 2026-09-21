@@ -342,6 +342,8 @@ export function collectInlineImageKeys(document: unknown): string[] {
   return keys;
 }
 
+const INLINE_CONTENT_URL_PATTERN = /^\/api\/v1\/posts\/[1-9]\d*\/attachments\/[1-9]\d*\/content$/;
+
 export function buildInlineImageSources(attachments: readonly Attachment[]): Record<string, string> {
   const sources: Record<string, string> = {};
   for (const attachment of attachments) {
@@ -350,7 +352,7 @@ export function buildInlineImageSources(attachments: readonly Attachment[]): Rec
       typeof attachment.inlineKey === "string" &&
       attachment.inlineKey.length > 0 &&
       typeof attachment.contentUrl === "string" &&
-      attachment.contentUrl.length > 0
+      INLINE_CONTENT_URL_PATTERN.test(attachment.contentUrl)
     ) {
       sources[attachment.inlineKey] = attachment.contentUrl;
     }

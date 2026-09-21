@@ -137,6 +137,28 @@ test('inline source resolver and download filter separate attachment roles', () 
   assert.deepEqual(attachments, original);
 });
 
+test('inline source resolver only trusts the server content endpoint shape', () => {
+  const { buildInlineImageSources } = utils();
+  const key = suffix => `33333333-3333-4333-8333-3333333333${suffix}`;
+  const validKey = key('00');
+  const attachments = [
+    attachment(10, 'INLINE_IMAGE', key('01'), 'https://evil.example/x.png'),
+    attachment(11, 'INLINE_IMAGE', key('02'), 'data:image/png;base64,AAAA'),
+    attachment(12, 'INLINE_IMAGE', key('03'), 'blob:https://app.local/abc'),
+    attachment(13, 'INLINE_IMAGE', key('04'), 'javascript:alert(1)'),
+    attachment(14, 'INLINE_IMAGE', key('05'), '/api/v1/posts/0/attachments/6/content'),
+    attachment(15, 'INLINE_IMAGE', key('06'), '/api/v1/posts/3/attachments/0/content'),
+    attachment(16, 'INLINE_IMAGE', key('07'), '/api/v1/posts/3/attachments/6/content/extra'),
+    attachment(17, 'INLINE_IMAGE', key('08'), 'api/v1/posts/3/attachments/6/content'),
+    attachment(18, 'INLINE_IMAGE', key('09'), '//api/v1/posts/3/attachments/6/content'),
+    attachment(19, 'INLINE_IMAGE', key('10'), ' /api/v1/posts/3/attachments/6/content'),
+    attachment(20, 'INLINE_IMAGE', validKey, '/api/v1/posts/3/attachments/6/content')
+  ];
+  assert.deepEqual(clone(buildInlineImageSources(attachments)), {
+    [validKey]: '/api/v1/posts/3/attachments/6/content'
+  });
+});
+
 test('rich body payload encodes canonical UTF-8 JSON without plain body fields', () => {
   const { buildRichPostBodyPayload } = utils();
   const payload = buildRichPostBodyPayload(runtimeDoc);

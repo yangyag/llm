@@ -66,6 +66,7 @@ public class InlineImageValidator {
 				|| (long) width * height > MAX_PIXELS) {
 				throw new InvalidAttachmentRequestException("inline image dimensions exceed the allowed limits");
 			}
+			reader.read(0);
 			return new ValidatedInlineImage(contentType, extension, width, height);
 		} catch (InvalidAttachmentRequestException | AttachmentTooLargeException exception) {
 			throw exception;

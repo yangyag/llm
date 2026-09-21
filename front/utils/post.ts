@@ -2,7 +2,7 @@
 import type { PostMode, UserRole } from "~/types/api";
 
 export const MAX_ATTACHMENTS = 5;
-export const ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE = "첨부파일을 올려도 되는 환경입니까?";
+export const ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE = "첨부파일과 본문 이미지는 게시글과 함께 공개됩니다. 업로드해도 되는 환경입니까?";
 
 export function attachmentFileKey(file: File): string {
   return `${file.name}::${file.size}::${file.lastModified}`;

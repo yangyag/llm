@@ -159,6 +159,28 @@ class BoardRichDocumentCodecTest {
 	}
 
 	@Test
+	void shouldRejectInlineImageInjectionFieldsAndKeepAltAsPlainText() {
+		String key = "b1e09b73-1111-4444-8888-123456789abc";
+		String image = "\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\"" + key + "\"";
+		String docStart = "{\"type\":\"doc\",\"content\":[{";
+		assertInvalid(docStart + image + ",\"src\":\"data:image/png;base64,AAAA\"}}]}");
+		assertInvalid(docStart + image + ",\"src\":\"javascript:alert(1)\"}}]}");
+		assertInvalid(docStart + image + ",\"style\":\"position:fixed;inset:0\"}}]}");
+		assertInvalid(docStart + image + ",\"onerror\":\"alert(1)\"}}]}");
+		assertInvalid(docStart + "\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\"" + key + "\"},\"html\":\"<img src=x onerror=alert(1)>\"}]}");
+		assertInvalid(docStart + "\"type\":\"inlineAttachmentImage\",\"attrs\":{\"imageKey\":\"" + key + "\"},\"onclick\":\"alert(1)\"}]}");
+		assertInvalid(docStart + image + ",\"alt\":\"bad\\u0000alt\"}}]}");
+		assertInvalid(docStart + image + ",\"alt\":\"bad\\uD800\"}}]}");
+
+		String markupAlt = "<img src=x onerror=alert(1)>";
+		BoardRichDocumentCodec.DecodedDocument decoded = codec.decode(encode(
+			docStart + image + ",\"alt\":\"" + markupAlt + "\"}}]}"));
+		assertThat(decoded.imageKeys()).containsExactly(UUID.fromString(key));
+		assertThat(decoded.plainText()).isEqualTo("[이미지: " + markupAlt + "]");
+		assertThat(decoded.canonicalJson()).contains("\"alt\":\"" + markupAlt + "\"");
+	}
+
+	@Test
 	void shouldEnforceDecodedDocumentByteLimit() {
 		byte[] document = "{\"type\":\"doc\",\"content\":[]}".getBytes(StandardCharsets.UTF_8);
 

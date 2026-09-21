@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
@@ -69,6 +70,75 @@ class InlineImageValidatorTest {
 		assertThatThrownBy(() -> validator.validate(new MockMultipartFile(
 				"inlineImages", "huge.png", "image/png", pngWithDimensions(imageBytes("png", 2, 2), 5001, 5000))))
 			.isInstanceOf(InvalidAttachmentRequestException.class);
+	}
+
+	@Test
+	void shouldAcceptFilesUpToConfiguredTenMebibyteLimit() {
+		int maxBytes = (int) DataSize.ofMegabytes(10).toBytes();
+		byte[] pngBytes = imageBytes("png", 2, 2);
+		for (int size : new int[] { maxBytes - 1, maxBytes }) {
+			byte[] padded = Arrays.copyOf(pngBytes, size);
+			InlineImageValidator.ValidatedInlineImage result = validator.validate(
+				new MockMultipartFile("inlineImages", "padded.png", "image/png", padded));
+			assertThat(result.contentType()).isEqualTo("image/png");
+			assertThat(result.width()).isEqualTo(2);
+			assertThat(result.height()).isEqualTo(2);
+		}
+		assertThatThrownBy(() -> validator.validate(new MockMultipartFile(
+				"inlineImages", "over.png", "image/png", Arrays.copyOf(pngBytes, maxBytes + 1))))
+			.isInstanceOf(AttachmentTooLargeException.class);
+	}
+
+	@Test
+	void shouldAcceptDimensionBoundariesAndRejectOverflow() {
+		assertAccepted("8191x1.png", imageBytes("png", 8191, 1), 8191, 1);
+		assertAccepted("8192x1.png", imageBytes("png", 8192, 1), 8192, 1);
+		assertAccepted("1x8192.png", imageBytes("png", 1, 8192), 1, 8192);
+		assertRejected(pngWithDimensions(imageBytes("png", 2, 2), 8193, 1));
+		assertRejected(pngWithDimensions(imageBytes("png", 2, 2), 1, 8193));
+	}
+
+	@Test
+	void shouldAcceptPixelCountBoundariesAndRejectOverflow() {
+		assertAccepted("4999x5000.png", binaryImageBytes(4999, 5000), 4999, 5000);
+		assertAccepted("5000x5000.png", binaryImageBytes(5000, 5000), 5000, 5000);
+		assertRejected(pngWithDimensions(imageBytes("png", 2, 2), 5001, 5000));
+	}
+
+	@Test
+	void shouldRejectMarkupPayloadsAndTruncatedPng() {
+		assertRejected("<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"
+			.getBytes(StandardCharsets.UTF_8));
+		assertRejected("<html><body><img src=x onerror=alert(1)></body></html>"
+			.getBytes(StandardCharsets.UTF_8));
+		byte[] pngBytes = imageBytes("png", 2, 2);
+		assertThat(pngBytes.length).isGreaterThan(33);
+		assertRejected(Arrays.copyOf(pngBytes, 33));
+	}
+
+	private void assertAccepted(String name, byte[] bytes, int width, int height) {
+		InlineImageValidator.ValidatedInlineImage result = validator.validate(
+			new MockMultipartFile("inlineImages", name, "image/png", bytes));
+		assertThat(result.contentType()).isEqualTo("image/png");
+		assertThat(result.width()).isEqualTo(width);
+		assertThat(result.height()).isEqualTo(height);
+	}
+
+	private void assertRejected(byte[] bytes) {
+		assertThatThrownBy(() -> validator.validate(new MockMultipartFile(
+				"inlineImages", "rejected.png", "image/png", bytes)))
+			.isInstanceOf(InvalidAttachmentRequestException.class);
+	}
+
+	private byte[] binaryImageBytes(int width, int height) {
+		try {
+			BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_BINARY);
+			ByteArrayOutputStream output = new ByteArrayOutputStream();
+			if (!ImageIO.write(image, "png", output)) throw new IllegalStateException("missing image writer");
+			return output.toByteArray();
+		} catch (IOException exception) {
+			throw new IllegalStateException("failed to build image fixture", exception);
+		}
 	}
 
 	private byte[] imageBytes(String format, int width, int height) {
