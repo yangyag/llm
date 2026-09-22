@@ -119,13 +119,7 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 
 ## 롤백 기준
 
-이전 tar를 다시 `docker load`하면 됩니다. 릴리스 기록에 남길 것:
-
-- 배포 시각
-- Git commit SHA
-- 백엔드/프론트 이미지 id와 tar 보관 여부
-- 운영 `.env` 변경 여부
-- 배포 전후 health 결과
+이전 tar를 다시 `docker load`하면 됩니다.
 
 이미지 확인:
 
@@ -135,21 +129,3 @@ docker image inspect llm-front:1.0 --format '{{.Id}} {{.Created}}'
 ```
 
 롤백이 필요한 경우 이전 digest를 알고 있어야 안정적으로 되돌릴 수 있습니다.
-
-## 릴리스 기록 템플릿
-
-```markdown
-## YYYY-MM-DD HH:mm KST
-
-- Commit:
-- Backend image:
-- Frontend image:
-- Env changes:
-- DB migration:
-- Verification:
-  - back tests:
-  - front build:
-  - compose health:
-  - EC2 health:
-- Notes:
-```

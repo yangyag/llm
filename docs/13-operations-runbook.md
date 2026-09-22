@@ -53,15 +53,6 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 
 `auto_default`가 없으면 빈 네트워크를 생성하지 말고 compose 프로젝트 `auto` 스택을 확인합니다.
 
-배포 기록에 남길 것:
-
-- 배포 시각
-- Git commit SHA
-- 이미지 digest
-- `.env` 변경 여부
-- DB migration 변경 여부
-- health 결과
-
 ## 백엔드만 재기동
 
 이미 load된 `llm-back:1.0`을 다시 띄울 때:

@@ -37,7 +37,7 @@ ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 
 ## 현재 EC2 운영 파일
 
-2026-05-31 KST 읽기 전용 점검 결과:
+EC2에서 확인된 파일:
 
 | 파일 | 상태 |
 | --- | --- |
@@ -48,17 +48,13 @@ ssh -i aws/test-keypair.pem ubuntu@43.202.113.123
 
 ## 현재 LLM 관련 컨테이너 상태
 
-2026-08-08 KST 배포 후 확인:
+기대 상태:
 
 ```text
 llm-front         llm-front:1.0              healthy  0.0.0.0:8083->80/tcp  mem_limit 64m
 llm-back          llm-back:1.0               healthy  8080/tcp
 yangyag-postgres  postgres:18                healthy  127.0.0.1:5432->5432/tcp
 ```
-
-2026-09-22 KST rich 본문·inline 이미지 배포 후 확인도 위와 같은 3개 컨테이너가 healthy였고, 운영 `llm.flyway_schema_history`는 V1~V19가 모두 success입니다.
-
-이전 확인(2026-05-31 KST)도 동일한 3개 컨테이너였습니다.
 
 백엔드는 호스트 8080에 직접 공개되지 않습니다. 헬스체크는 front proxy를 경유합니다.
 
@@ -70,7 +66,7 @@ curl -fsS http://127.0.0.1:8083/api/v1/health
 
 ## 운영 `.env` 핵심 확인값
 
-2026-08-27 KST 기준으로 secret이 아닌 값만 확인했습니다.
+secret이 아닌 값만 기재합니다.
 
 ```env
 APP_CORS_ALLOWED_ORIGINS=http://43.202.113.123:8083,https://yangyag.duckdns.org
@@ -181,14 +177,6 @@ V19 rich 본문·inline 이미지가 들어간 배포는 backend를 먼저, fron
 - 구형 front로 롤백하면 rich 글은 추출 평문으로 표시되고 inline 이미지는 일반 다운로드 카드로 보일 수 있습니다.
 - rich 글 생성 후 이전 backend로 롤백하면 구형 backend가 `body`만 수정하고 알지 못하는 `body_format`·`body_document`는 그대로 남아 새 backend 복구 후 편집 내용이 어긋날 수 있습니다. 이전 backend 사용 중에는 게시글 쓰기를 중지하고 새 backend 복구를 우선합니다.
 
-### 배포 실행 기록 (2026-09-22 KST)
-
-1. 배포 전 운영 Flyway history(V1~V18, description·success)와 로컬 migration 파일이 일치함을 확인했습니다. 새 backend 기동 시 V19 `add rich post and inline attachment metadata`만 추가 적용됐습니다.
-2. backend를 먼저 배포했습니다. `llm-back`은 healthy, `curl -fsS http://127.0.0.1:8083/api/v1/health`는 `{"status":"UP"}`였고, 구형 front 이미지 상태에서 목록·상세 API 응답을 확인했습니다.
-3. front를 배포했습니다. `llm-front`는 healthy이고 배포된 `_nuxt` 자산 목록이 로컬 build 산출물과 동일함을 확인했습니다.
-4. 읽기 전용 smoke: 기존 `FILE_CONVERSION_REQUEST` 글 상세가 `bodyFormat=PLAIN_TEXT`·`bodyDocument=null`, 첨부가 `DOWNLOAD`(`inlineKey`·`contentUrl` null)로 응답했고, zip 다운로드가 `200`·`application/zip`·`Content-Disposition: attachment`(15,317,873 bytes)로 유지됐습니다. `DOWNLOAD` 첨부의 content endpoint는 `404`입니다. 작성·수정 smoke는 운영 계정으로 사용자가 브라우저에서 직접 확인합니다.
-5. 롤백 기준: 배포 전 이미지 `llm-back 9b638c09…`·`llm-front 31d86731…`을 EC2에서 각각 `llm-back:rollback-20260908`·`llm-front:rollback-20260905` 태그로 보존했습니다. 롤백 시 해당 태그를 `llm-back:1.0`/`llm-front:1.0`으로 다시 태그하고 compose를 재기동합니다.
-
 ## Flyway 마이그레이션 주의 (V13 이력 충돌)
 
 2026-08-08 배포에서 EC2 운영 DB에 **이전 버전의 `V13__create_ai_reply_jobs.sql`**(ai_reply_jobs/ai_reply_outbox 테이블 생성, 로컬 저장소에는 없는 파일)이 이미 적용되어 있어 새 이미지의 `V13__add_role_to_admins.sql`과 체크섬 충돌로 `llm-back`이 시작하지 못하는 문제가 있었습니다. 해당 기능은 현재 코드에 없으므로 `llm.flyway_schema_history`에서 version=13 행만 제거하고 새 이미지의 V13~V15(`add role to admins` → `add author to posts` → `backfill post author as admin`)를 적용해 해결했습니다. 이후 배포(V14~V16: 게시글/댓글 작성자 컬럼과 백필)도 history-파일 일치를 확인한 뒤 적용해야 합니다.
@@ -225,8 +213,8 @@ ubuntu_llm-back-attachments -> /var/lib/llm/attachments
 ubuntu_llm-back-upload-sessions -> /var/lib/llm/upload-sessions
 ```
 
-첨부파일은 EC2 컨테이너 env에 `APP_ATTACHMENTS_ROOT_PATH=/var/lib/llm/attachments`가 있어 위 volume을 사용합니다. 2026-05-31 KST 확인 시 EC2 `.env`와 `llm-back` 컨테이너 env에는 `APP_UPLOAD_SESSIONS_ROOT_PATH`가 없었습니다. 이 값이 없으면 백엔드는 `${java.io.tmpdir}/llm-upload-sessions` fallback을 사용하므로, upload-session volume mount가 있어도 실제 임시 청크 저장 경로가 아닐 수 있습니다.
+첨부파일은 EC2 컨테이너 env에 `APP_ATTACHMENTS_ROOT_PATH=/var/lib/llm/attachments`가 있어 위 volume을 사용합니다. `APP_UPLOAD_SESSIONS_ROOT_PATH`가 없으면 백엔드는 `${java.io.tmpdir}/llm-upload-sessions` fallback을 사용하므로, upload-session volume mount가 있어도 실제 임시 청크 저장 경로가 아닐 수 있습니다.
 
-> **2026-08-08 기준 적용 완료:** 운영 `.env`에 `APP_UPLOAD_SESSIONS_ROOT_PATH=/var/lib/llm/upload-sessions`가 추가되어 있고 `llm-back` 재기동도 완료된 상태입니다. 적용 여부는 `docker exec llm-back printenv APP_UPLOAD_SESSIONS_ROOT_PATH`로 확인합니다.
+> 운영 `.env`에는 `APP_UPLOAD_SESSIONS_ROOT_PATH=/var/lib/llm/upload-sessions`가 설정되어 있어야 합니다. 적용 여부는 `docker exec llm-back printenv APP_UPLOAD_SESSIONS_ROOT_PATH`로 확인합니다.
 
 운영 데이터가 들어 있는 volume은 임의 삭제하지 않습니다. 업로드 세션 장애 조사 시에는 먼저 컨테이너 env와 실제 저장 경로를 확인합니다.
