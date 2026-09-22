@@ -156,7 +156,7 @@ curl -fsS https://yangyag.duckdns.org/api/v1/health
 
 ## rich 본문·inline 이미지 배포 순서 (2026-09-22)
 
-V19 rich 본문·inline 이미지가 들어간 배포는 backend를 먼저, front를 나중에 올립니다. 계획서 Phase 8(2026-09-22)의 '배포 순서'·'롤백 원칙' 기록을 기준으로 하며, 동작 근거는 docs/04의 '호환성과 배포 순서' 절을 참조합니다.
+V19 rich 본문·inline 이미지가 들어간 배포는 backend를 먼저, front를 나중에 올립니다. 동작 근거는 docs/04의 '호환성과 배포 순서' 절을 참조합니다.
 
 1. 운영 Flyway history와 로컬 migration 파일 V1~V19를 대조합니다(아래 "Flyway 마이그레이션 주의"의 확인 쿼리 사용). 불일치가 있으면 배포하지 않습니다.
 2. backend 이미지를 배포하고 V19 migration 적용과 기동을 확인합니다.

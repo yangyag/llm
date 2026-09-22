@@ -83,7 +83,7 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 | `inlineImageDraft.test.cjs` | 12 | clipboard PNG/JPEG 추출·텍스트 paste 유지·미지원 형식 표시, UUID v4 fallback, 파일명·10MB 경계, pending registry 20개·100MB, 문서 순서 업로드·기존/예약 key·manifest index, object URL 해제 멱등 |
 | `post.test.cjs` | 2 | 일반 첨부 0/1/5 병합 경계와 6번째 절단, 업로드 공개 안내 문구 |
 
-정적 합계는 36건입니다. 2026-09-22 Phase 8 최종 실행에서 `npm test` 36/36 통과(inlineImageDraft 12·postDetail 16·postDocument 6·post 2), `npm run typecheck`·`npm run build` 성공(client module 284개·SSR 1개·route 5개 prerender)을 확인했습니다.
+정적 합계는 36건입니다. 2026-09-22 최종 실행에서 `npm test` 36/36 통과(inlineImageDraft 12·postDetail 16·postDocument 6·post 2), `npm run typecheck`·`npm run build` 성공(client module 284개·SSR 1개·route 5개 prerender)을 확인했습니다.
 
 ## 추가 회귀 검증
 
@@ -163,9 +163,9 @@ paste/create/edit/delete 최종 smoke 절차:
 8. `FILE_CONVERSION_REQUEST` ZIP 조회·다운로드 회귀 확인
 9. 삭제 후 metadata와 삭제 대기열·실파일 상태 확인
 
-등록 전 create 요청 0건, 붙여넣기 직후 `blob:` 표시, 저장 실패 시 편집 상태·blob 유지 후 재시도, 저장 성공·정상 이탈·unmount 시 object URL 정확히 1회 해제가 함께 assertion 대상입니다. content endpoint headers·bytes와 DB metadata, 삭제 대기열·실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit이나 직접 HTTP·PostgreSQL 검증으로 보완하고 Playwright 결과와 구분해 기록합니다. Phase 8 완료 조건은 8083 경유 health와 이 paste/create/edit/delete smoke 통과입니다.
+등록 전 create 요청 0건, 붙여넣기 직후 `blob:` 표시, 저장 실패 시 편집 상태·blob 유지 후 재시도, 저장 성공·정상 이탈·unmount 시 object URL 정확히 1회 해제가 함께 assertion 대상입니다. content endpoint headers·bytes와 DB metadata, 삭제 대기열·실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit이나 직접 HTTP·PostgreSQL 검증으로 보완하고 Playwright 결과와 구분해 기록합니다. 이 기능의 완료 조건은 8083 경유 health와 이 paste/create/edit/delete smoke 통과입니다.
 
-2026-09-22 Phase 8 최종 통합 결과: 현재 소스로 재빌드한 이미지로 compose 스택을 기동해 8083 경유 HTTP smoke 38/38 통과, Playwright 최종 browser smoke 112/112 assertion 통과(disposable PostgreSQL·로컬 8082/5174, console error·page error·예상 외 4xx·5xx 0건)를 확인했습니다.
+2026-09-22 최종 통합 결과: 현재 소스로 재빌드한 이미지로 compose 스택을 기동해 8083 경유 HTTP smoke 38/38 통과, Playwright 최종 browser smoke 112/112 assertion 통과(disposable PostgreSQL·로컬 8082/5174, console error·page error·예상 외 4xx·5xx 0건)를 확인했습니다.
 
 ## 실패 분석 기준
 
