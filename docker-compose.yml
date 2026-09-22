@@ -5,6 +5,9 @@ services:
     container_name: llm-back
     env_file:
       - ${LLM_ENV_FILE:-./.env}
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50.0"
+    mem_limit: 1g
     networks:
       - default
       - auto_default
