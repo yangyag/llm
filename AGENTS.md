@@ -11,7 +11,7 @@
 
 ## 자주 쓰는 명령 (게이트)
 - 백엔드 테스트: `cd back && ./gradlew clean test` — controller/service/domain 변경 시 필수
-- 프론트 검사/빌드: `cd front && npm run typecheck && npm run build` (`nuxi typecheck`, `nuxi generate`) — UI/API client 변경 시 필수
+- 프론트 테스트/검사/빌드: `cd front && npm test && npm run typecheck && npm run build` (`node --test tests/*.test.cjs`, `nuxi typecheck`, `nuxi generate`) — UI/API client 변경 시 필수
 - 통합 기동 + health: `docker compose up -d --wait` 후 `curl -fsS http://127.0.0.1:8083/api/v1/health` (정상: `{"status":"UP"}`)
 - 로컬 외부 네트워크 선결(EC2는 존재 확인만 수행): `docker network inspect auto_default >/dev/null 2>&1 || docker network create auto_default`
 - 백엔드 단독: `cd back && APP_DB_HOST=localhost SERVER_PORT=8082 ./gradlew bootRun`
@@ -28,6 +28,9 @@
 - 운영 DB는 공용 컨테이너 `yangyag-postgres`(외부 네트워크 `auto_default`, compose 프로젝트 `auto`)의 전용 database `llm`(schema `llm`). `APP_DB_HOST=yangyag-postgres`. 컨테이너 안 `127.0.0.1`은 호스트 루프백이 아님(docs/04). 정상 컨테이너: `llm-front`, `llm-back`, `yangyag-postgres` healthy.
 
 - 첨부파일 삭제는 DB 커밋 후 수행. metadata 삭제와 `attachment_file_deletions` 등록을 같은 트랜잭션에서 처리(V18), 실패 시 1분마다 재시도. 새 파일은 롤백 시 정리. 계정 전환·검증 절차는 docs/18.
+- rich 본문은 `posts.body`(서버가 `body_document`에서 추출한 평문) + `posts.body_format`(`PLAIN_TEXT`/`TIPTAP_JSON`) + `posts.body_document`(canonical Tiptap JSON, plain은 null)로 저장한다(V19). 이미지 노드는 평문에서 `[이미지: alt]`/`[이미지]`로 추출한다. 기존 plain 글은 수정 화면에서 저장할 때 그 글만 rich로 전환하며 일괄 변환은 없다. (docs/06, docs/07)
+- 본문 이미지 첨부는 `post_attachments.attachment_kind`(`DOWNLOAD`/`INLINE_IMAGE`)와 `inline_key`로 구분한다(V19). `DOWNLOAD`는 `inline_key=null`, `INLINE_IMAGE`는 not null이고 `(post_id, inline_key)` partial unique. ZIP(`FILE_CONVERSION_REQUEST`)은 항상 `DOWNLOAD`. (docs/06)
+- inline 이미지는 공개 `GET /api/v1/posts/{postId}/attachments/{attachmentId}/content`로 제공한다. 해당 글의 `INLINE_IMAGE`만 반환하며 검증된 content type + `Content-Disposition: inline` + `X-Content-Type-Options: nosniff` + `Cache-Control: public, max-age=31536000, immutable`을 설정한다(attachment ID 불변). 일반 `DOWNLOAD`·글-첨부 불일치 요청은 404. download endpoint(`Content-Disposition: attachment`) 계약은 그대로. (docs/07, docs/14)
 
 ## 설정과 비밀값 규칙
 - 전체 환경 변수와 fallback 동작은 **docs/05-configuration.md** + `.env.example` 참조. 실제 실행 기준은 항상 대상 환경의 `.env`.
@@ -40,12 +43,14 @@
 - compose는 외부 네트워크 `auto_default`(compose 프로젝트 `auto` 소유, `yangyag-postgres` 거주) 필수. 없으면 `up -d --wait`가 health 단계에서 실패 → 네트워크 + 접근 가능한 PostgreSQL/권한 선결.
 - `APP_ATTACHMENTS_ROOT_PATH` / `APP_UPLOAD_SESSIONS_ROOT_PATH`가 volume mount 경로와 불일치하면 조용히 JVM temp(`${java.io.tmpdir}/llm-*`)로 fallback → volume 무시, ZIP finalize 실패.
 - 로컬 백엔드 기본 포트는 8080 → Nitro dev proxy(8082)와 맞추려면 `SERVER_PORT=8082`로 실행 (또는 `front/nuxt.config.ts` 수정).
-- Flyway 적용된 `V1~V12` SQL 수정 금지, 새 `V13+`로만 추가. JPA(`ddl-auto=validate`)와 Flyway는 동일 `APP_DB_SCHEMA`. 테스트는 H2(create-drop, Flyway off)라 DDL 경로가 운영과 다름.
+- Flyway 적용된 `V1~V19` SQL 수정 금지, 새 `V20+`로만 추가(최신은 rich 본문·inline 첨부 metadata를 추가한 `V19`). JPA(`ddl-auto=validate`)와 Flyway는 동일 `APP_DB_SCHEMA`. 테스트는 H2(create-drop, Flyway off)라 DDL 경로가 운영과 다름.
 - **EC2 DB의 flyway history와 로컬 migration 파일이 어긋나면 체크섬 충돌로 `llm-back` 시작 실패** (2026-08-08: EC2에 구버전 `V13 create ai reply jobs`가 있어 로컬 `V13 add role to admins`와 충돌 → history에서 version=13 행 제거 후 V13~V15 적용). 배포 전 `select version, description from llm.flyway_schema_history`로 로컬 파일과 대조. (docs/12, docs/15)
 - 게시글 수정/삭제는 작성자 본인 또는 ADMIN만 가능(레거시 null 작성자 글은 ADMIN만). 프론트는 목록/상세에서 권한 없는 글의 수정·삭제·체크박스를 숨김. (docs/07, docs/14)
 - `FILE_CONVERSION_REQUEST` 게시글은 수동 생성 불가(업로드 세션 finalize로만), 첨부 있으면 수정 불가, AI 답변 불가. AI 답변(`is_ai=true`)은 수정·삭제 불가.
 - 업로드 세션 secret은 백엔드(`APP_UPLOAD_SESSIONS_SECRET`)와 스크립트가 **동일**해야 함 (alias A1~A11 + AES-GCM wire format, docs/08).
-- 게시글/댓글 본문은 `bodyBase64`(UTF-8→Base64, 보안 아님). 생성/수정은 `multipart/form-data`.
+- 게시글/댓글 본문은 `bodyBase64`(UTF-8→Base64, 보안 아님). 생성/수정은 `multipart/form-data`. rich 요청은 `bodyFormat=TIPTAP_JSON` + `bodyDocumentBase64`(Base64 canonical JSON)를 쓰고 `bodyBase64`와 동시 전송은 금지. 기존 rich 글에 `bodyFormat` 누락·`PLAIN_TEXT`로 오는 구형 수정 요청은 저장 없이 409 `RICH_TEXT_CLIENT_REQUIRED`로 거부한다(`BoardService.updatePost`).
+- rich `body_document`(canonical 문서)에는 `blob:`/`data:`/외부 URL·`src` 원문을 저장하지 않고 `imageKey`(UUID) 참조만 남긴다. 서버 codec이 image node attribute를 `imageKey`·`alt`로 제한하고 unknown node/mark/attribute·raw HTML·`src`를 저장 전에 거부한다(`400 INVALID_RICH_DOCUMENT`). 프론트 serializer도 runtime 속성을 제거한다.
+- 첨부 한도는 일반 첨부 + inline 이미지 **합계 게시글당 5개**(`APP_ATTACHMENTS_MAX_COUNT`), inline 이미지 파일당 **10MB**(`APP_ATTACHMENTS_INLINE_IMAGES_MAX_FILE_SIZE`)이고 PNG/JPEG만 허용한다(SVG/GIF/외부 URL 제외). 브라우저 pending registry는 편집 세션당 20개·100MB(`front/composables/useInlineImageDraft.ts`)로 초과 붙여넣기를 거부하고 저장·취소·unmount 시 `blob:` URL을 해제한다. (docs/05, docs/07)
 - 운영에서 `docker compose down -v` / 무분별한 volume·prune 금지 (첨부 데이터 손실). 수동 compose는 `LLM_ENV_FILE=/home/ubuntu/llm/.env`를 설정하고 `--project-name ubuntu --env-file .env -f docker-compose.yml`을 명시.
 - 로컬 `.env`의 `LLM_FRONT_IMAGE`/`LLM_BACK_IMAGE`는 `llm-front:1.0`/`llm-back:1.0`(compose 기본값) 유지. 다른 태그로 이탈하면 규약대로 빌드한 이미지가 컨테이너에 안 붙음(2026-09-04 확인). 의심되면 `docker compose config`의 해석 image와 `docker inspect --format '{{.Config.Image}}' llm-front llm-back`을 대조.
 - 빌드/배포: Hub를 쓰지 않는다. Windows에서 이미지 빌드 → 저장소 `docker/` 폴더에 `docker save` tar 생성 → EC2 `~/llm/` scp → `docker load` → compose up. 프론트 `.\aws\deploy-front.ps1` (`llm-front:1.0`, `mem_limit: 64m`), 백엔드 `.\aws\deploy-back.ps1` (`llm-back:1.0`). 둘 다 `pull_policy: never`. EC2에서 소스 빌드하지 않는다.
@@ -161,7 +166,7 @@ python3 upload_zip_post.py
 
 ```bash
 cd back && ./gradlew clean test
-cd front && npm run typecheck && npm run build
+cd front && npm test && npm run typecheck && npm run build
 ```
 
 로컬 통합 확인 (외부 네트워크 `auto_default` 필요):

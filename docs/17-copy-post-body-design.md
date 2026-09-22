@@ -322,7 +322,7 @@ Clipboard API는 secure context(HTTPS 또는 localhost)에서만 동작한다. `
 
 **HTTP API 변경 없음.** 공개 상세는 이미 인증 없이 본문을 받는다.
 
-```212:230:docs/07-api-reference.md
+```217:227:docs/07-api-reference.md
 ### `GET /api/v1/posts/{id}`
 
 인증: 필요 없음

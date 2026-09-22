@@ -1,6 +1,6 @@
 # 게시글 본문 이미지 붙여넣기·영구 저장 구현 계획서
 
-- 상태: 구현 진행 — Phase 0~7 완료, Phase 8 미착수
+- 상태: 완료 — Phase 0~8 완료(2026-09-22). EC2 배포는 사용자 요청 시 이 문서 Phase 8의 배포 순서를 따라 진행한다.
 - 작성일: 2026-09-20
 - 대상: `front/` Nuxt 3·Vue 3 게시글 작성/수정/조회, `back/` Spring Boot 게시판·첨부 모듈, Flyway
 - 목표: 게시글 작성·수정 중 클립보드 이미지를 즉시 본문에 표시하고, 게시글 저장 후에도 텍스트·이미지 순서와 위치를 유지한다.
@@ -288,7 +288,7 @@ inline 이미지 설정 이름:
 | 5 | 이미지 붙여넣기 임시 보관·글 생성 | 완료 | 새 글에서 붙여넣기→저장→조회 통과 |
 | 6 | 수정·삭제·실패 재시도 완성 | 완료 | 기존/신규 이미지 혼합 수정과 정리 통과 |
 | 7 | 한도·보안·접근성 hardening | 완료 | 경계값·악성 입력·키보드/모바일 점검 통과 |
-| 8 | 전체 회귀·PostgreSQL·통합 smoke·문서화 | 미착수 | 최종 게이트와 배포 순서 기록 완료 |
+| 8 | 전체 회귀·PostgreSQL·통합 smoke·문서화 | 완료 | 최종 게이트와 배포 순서 기록 완료 |
 
 상태 값은 `미착수 / 진행 중 / 중단 / 차단 / 완료`만 사용한다.
 
@@ -938,7 +938,7 @@ Phase 7 완료 조건을 충족했다. 다음 작업은 Phase 8의 문서 갱신
 
 ### Phase 8 — 전체 회귀·PostgreSQL·통합 smoke·문서화
 
-**상태: 미착수**
+**상태: 완료 — 2026-09-22**
 
 #### 진입 전 한도 게이트
 
@@ -1026,6 +1026,22 @@ PostgreSQL 검증:
 - 8083 경유 health와 HTTP smoke가 통과한다.
 - test 수·pass/fail/skip, PostgreSQL 버전, migration 범위, smoke 결과가 재개 기록에 남는다.
 - secret·토큰·비밀번호·실제 이미지의 민감 내용은 기록하지 않는다.
+
+#### Phase 8 완료 기록 — 2026-09-22
+
+- 사용량 상태는 확인 수단이 없어 `알 수 없음`으로 유지하고, 문서 갱신 8건 병렬 → backend/frontend 게이트 병렬 → Docker compose 통합과 Playwright 최종 smoke 병렬 순서로 체크포인트를 나눴다.
+- 문서 갱신: `AGENTS.md`(rich 본문·inline 이미지 계약, V1~V19 수정 금지·V20+ 추가, 프론트 게이트 명령), `docs/04`(paste→blob→multipart→volume→content URL 흐름과 배포 순서), `docs/05`+`.env.example`(`APP_ATTACHMENTS_INLINE_IMAGES_MAX_FILE_SIZE=10MB`, 8192px·25MP는 코드 상수), `docs/06`(V19 컬럼·check·partial unique·백업 영향), `docs/07`(rich multipart·manifest·응답 additive 필드·content endpoint·오류 코드 표), `docs/10`(테스트 구성·Playwright 원칙·paste/create/edit/delete smoke 절차), `docs/14`(MIME 불신·ImageIO full decode·canonical 금지 항목·공개 endpoint 완화), `docs/18`(문서 key 집합 기반 삭제 계산·rollback·커밋 후 삭제 대기열)을 실제 코드와 대조해 갱신했다. 계획 목록 외에는 `docs/12`(배포 순서·롤백 기록)와 `docs/17`(docs/07 인용 줄 번호 보정)만 최소 수정했다.
+- PostgreSQL 커버리지가 비어 있던 4개 항목(레거시 plain fixture 조회, rich 글 생성·수정·삭제, rollback 시 신규 이미지 파일 정리, 커밋 후 파일 삭제 실패·재시도)을 disposable PostgreSQL 전용 `PostgresInlineImageLifecycleTest` 4건으로 추가했다. 프로덕션 코드는 변경하지 않았다.
+- 계획서 3.7의 '목록 검색은 `posts.body` 평문을 사용한다'는 서술과 달리 실제 목록 검색 쿼리(`BoardPostRepository`)는 `p.title`만 조회한다. 이번 기능은 검색 경로를 변경하지 않아 동작 회귀는 없으며, 문서의 '검색·복사용 평문' 표현은 컬럼 용도를 설명하는 수준으로 남겨 두었다.
+- Backend 게이트: JDK 25 경로가 `C:\jdk\jdk-25.0.2+10`으로 바뀐 것을 확인해 Gradle property로 지정했다. disposable `postgres:18`(18.6, host port 55505)에서 기존 PostgreSQL focused 4건과 신규 4건이 통과했고, 같은 URL의 전체 `clean test`는 193건 발견·193건 통과·skip 0·실패·오류 0이다(정적 합계 193, 조건부 PostgreSQL 메서드 8개 전부 실행). flyway history는 V1~V19(schema-creation 포함 20행)이다. URL 없이 실행하는 문서화된 표준 `clean test`도 193건 발견·185건 통과·조건부 8건 skip·실패 0·오류 0으로 확인했다.
+- Frontend 게이트: 로컬 `node_modules`에 `@tiptap` scope가 빠져 typecheck가 실패하는 환경 결함을 발견해 `npm ci`로 lockfile 기준 재설치한 뒤 `npm test` 36/36, `npm run typecheck` 성공, `npm run build` 성공(client 284 modules·SSR 1·route 5 prerender, 절대 API base 없음)을 확인했다. `front/package.json`·lockfile은 변경하지 않았다.
+- Docker compose 통합: 현재 소스로 `llm-back:1.0`(sha256 `cd69e3fb…`, 2026-09-22)과 `llm-front:1.0`(sha256 `16bb0958…`)을 재빌드하고 `up -d --wait --wait-timeout 300` 후 8083 `GET /api/v1/health`가 `{"status":"UP"}`임을 확인했다. 로컬 `.env` DB는 PostgreSQL 17.10(`llm_local`, schema `llm`)이며 기동 시 V19까지 적용됐다.
+- compose HTTP smoke 38/38 통과: admin 로그인, 텍스트-PNG-텍스트 rich 글 생성 201, 상세의 bodyFormat/bodyDocument/attachmentKind/inlineKey/contentUrl, 공개 상세 동일 응답, content endpoint의 `image/png`·inline·nosniff·immutable·bytes 일치, 일반 첨부 download `attachment`·bytes 일치, `DOWNLOAD`의 content 요청 404, 수정으로 inline 교체 후 이전 URL 404·신규 일치, attachments 파일 수 2→2→0으로 커밋 후 정리 확인, 삭제 204·상세 404, 백엔드 로그 무오류. 로컬 DB에 `FILE_CONVERSION_REQUEST` 글이 0건이라 ZIP 조회·다운로드 회귀는 대상 없음으로 기록했다. 검증 후 `docker compose down`(-v 없이)으로 정리하고 volume은 보존했다.
+- Playwright 최종 browser smoke 112/112 assertion 통과: 실제 ClipboardEvent PNG paste(등록 전 서버 요청 0건, `blob:` 표시), 등록 201 후 로그인·공개 상세 순서와 영구 URL, 새로고침 유지, content header·bytes sha256 일치, 수정에서 기존 이미지 삭제·신규 paste 후 이전 404, 일반 첨부 download bytes 일치, 삭제 204 후 상세·content·download 404. disposable schema(`phase8_smoke`)에서 posts/post_attachments/attachment_file_deletions/첨부 파일이 모두 0으로 정리됐고 console.error·pageerror·예상 외 4xx·5xx는 0건이다. DELETE 204 응답 body를 소비하지 않는 기존 전송 계층 특성으로 `net::ERR_ABORTED` 1건이 관측됐으나 이 기능과 무관함을 확인해 기대값으로 분류했다.
+- 브라우저 smoke 도구는 저장소에 추가하지 않았고(npm 캐시의 Playwright 1.63.0 사용), disposable 컨테이너 `llm-phase8-postgres`는 stopped 상태로 보존했으며 공유 `postgres`·`auto_default` 네트워크·운영 환경은 변경하지 않았다. smoke 산출물은 git 무시 영역(`.tower/phase8-smoke/`)과 저장소 밖 `%TEMP%\llm-phase8-smoke\`에만 있다.
+- 비차단 항목: 기존 backend deprecation/unchecked/JVM warning, npm audit notice 4건(중간 1·높음 3), Nitro external warning, 물리 모바일 실기기 미실행(Phase 7 emulation 기록 유지), 로컬 `.env` DB가 PostgreSQL 17.10이라는 점.
+
+Phase 8 완료 조건을 모두 충족했다. 구현·검증은 끝났고, 남은 일은 사용자 요청 시 커밋과 배포 순서에 따른 EC2 배포다.
 
 ## 8. 테스트 매트릭스
 
@@ -1127,27 +1143,27 @@ Docker/health/smoke 결과:
 
 기록에는 secret, JWT, 비밀번호, `.env` 값, PEM 내용, 민감한 이미지 내용, 전체 환경변수 덤프를 넣지 않는다.
 
-## 12. 최신 재개 기록 — Phase 7 완료
+## 12. 최신 재개 기록 — Phase 8 완료
 
 ```text
-기록 일시: 2026-09-21
+기록 일시: 2026-09-22
 사용량 상태: 알 수 없음
-현재 Phase: 8
-Phase 상태: 미착수
-마지막 완료 Phase: 7
-기준 브랜치/커밋: main / 52ac7da89317b3f449ca6faadb775d10a9a3734d
+현재 Phase: 8 (완료)
+Phase 상태: 완료
+마지막 완료 Phase: 8
+기준 브랜치/커밋: main / dc9b1a5 (Phase 8 변경은 미커밋)
 작업 전 git status: clean
-이번 변경 파일: back/src/main/java/com/llm/app/board/service/InlineImageValidator.java, back/src/test/java/com/llm/app/board/service/InlineImageValidatorTest.java, back/src/test/java/com/llm/app/board/service/BoardRichDocumentCodecTest.java, front/utils/postDocument.ts, front/utils/post.ts, front/tests/postDocument.test.cjs, front/tests/post.test.cjs, 계획서
-완료한 계약: inline image full decode와 10MiB·8192px·25MP 경계, 손상/SVG/HTML 거부, image attribute injection 거부, server content URL allowlist, 공개 upload 안내, keyboard/focus/alt/error placeholder/mobile hardening
-통과한 좁은 테스트: 선행 backend 21건 중 1 product fail, frontend 36건 중 2 product fail+1 harness fail 확인; 최종 backend focused 21/21, frontend 36/36, typecheck·generate build 성공
-최신 전체 backend 테스트: clean test 189 discovered, 185 passed, 4 PostgreSQL conditional skipped, 0 failures, 0 errors
-최신 front test/typecheck/build: npm test 36/36, typecheck 성공, build client 284 modules·SSR 1 module·5 routes prerender
-PostgreSQL focused 결과: 조건부 PostgreSQL JUnit suite는 Phase 7에서 미실행. disposable PostgreSQL 18 phase4_smoke schema를 browser smoke에 재사용
-Docker/health/smoke 결과: compose/8083은 미실행. 로컬 backend 8082와 frontend 5174 proxy health UP; Playwright keyboard/accessibility/error/mobile 90/90 assertion 및 사용자 Windows native IME 수동 확인 통과; 예상 외 browser/network/API 오류 0
-실행 중인 프로세스: 없음; preview/frontend/backend/Gradle 종료, disposable PostgreSQL container는 stopped 상태로 보존
-알려진 실패·차단: Phase 8 blocker 없음. PostgreSQL 조건부 4건은 환경 미제공으로 skip. 기존 npm audit notice 4건은 임의 수정하지 않음. 물리 모바일 실기기는 미실행이고 390×844 touch emulation만 통과. smoke 글은 disposable DB에만 잔존
-다음 정확한 작업: Phase 8 문서 갱신 후 disposable PostgreSQL focused migration/upload transaction suite, backend/front 최종 gate, Docker compose 8083 health, Playwright create/read/edit/delete와 DB metadata·deletion queue·실파일 최종 smoke
-주의할 사용자 기존 변경: Phase 7 시작 전 작업 트리 clean; 사용자 기존 변경 없음
+이번 변경 파일: AGENTS.md, .env.example, docs/04-architecture.md, docs/05-configuration.md, docs/06-database.md, docs/07-api-reference.md, docs/10-testing-quality.md, docs/12-ec2-deployment.md, docs/14-security.md, docs/17-copy-post-body-design.md, docs/18-integrity-hardening.md, back/src/test/java/com/llm/app/review/PostgresInlineImageLifecycleTest.java, 계획서
+완료한 계약: Phase 8 문서 갱신 + PostgreSQL 커버리지 4항목 테스트 추가 + backend/frontend 전체 게이트 + Docker compose 8083 health·HTTP smoke 38/38 + Playwright 최종 smoke 112/112
+통과한 좁은 테스트: 기존 PostgreSQL focused 4/4, 신규 PostgresInlineImageLifecycleTest 4/4
+최신 전체 backend 테스트: clean test 193건 발견·193 통과·skip 0·실패 0·오류 0 (disposable PostgreSQL 18.6, LLM_TEST_POSTGRES_URL 제공)
+최신 front test/typecheck/build: npm test 36/36, typecheck 성공, build client 284 modules·SSR 1 module·route 5 prerender
+PostgreSQL focused 결과: disposable postgres:18(18.6) port 55505에서 V1~V19 적용·Hibernate validate·rich lifecycle 4건 통과
+Docker/health/smoke 결과: llm-back:1.0(cd69e3fb…)·llm-front:1.0(16bb0958…) 재빌드, up -d --wait 후 8083 health {"status":"UP"}, HTTP smoke 38/38, compose down(-v 없이)으로 정리·volume 보존
+실행 중인 프로세스: 없음. Gradle daemon·dev 서버 종료, disposable llm-phase8-postgres는 stopped 상태 보존
+알려진 실패·차단: 없음. FILE_CONVERSION_REQUEST 글이 로컬 DB에 없어 ZIP 회귀는 대상 없음으로 미수행. npm audit notice 4건·물리 모바일 실기기 미실행은 기존 비차단 항목
+다음 정확한 작업: 사용자 요청 시 커밋(한글 메시지) 후 Phase 8 배포 순서에 따라 EC2 배포
+주의할 사용자 기존 변경: 없음(Phase 8 시작 전 작업 트리 clean)
 ```
 
 ## 13. 최종 완료 기준
@@ -1166,11 +1182,11 @@ Docker/health/smoke 결과: compose/8083은 미실행. 로컬 backend 8082와 fr
 - [x] inline content endpoint가 verified content type, inline disposition, nosniff를 반환한다.
 - [x] 신규 파일 rollback 정리와 커밋 후 삭제 재시도가 검증된다.
 - [x] plain 기존 게시글과 FILE_CONVERSION_REQUEST ZIP 회귀가 없다.
-- [ ] backend 전체 테스트와 PostgreSQL focused migration/transaction 검증이 통과한다.
+- [x] backend 전체 테스트와 PostgreSQL focused migration/transaction 검증이 통과한다.
 - [x] frontend test, typecheck, generate build가 통과한다.
-- [ ] 8083 경유 health와 create/read/edit/delete HTTP smoke가 통과한다.
-- [ ] API·DB·설정·보안·테스트·운영 문서가 실제 구현과 일치한다.
-- [ ] 각 Phase 상태와 사용량 한도·중단·재개 기록이 최신이다.
+- [x] 8083 경유 health와 create/read/edit/delete HTTP smoke가 통과한다.
+- [x] API·DB·설정·보안·테스트·운영 문서가 실제 구현과 일치한다.
+- [x] 각 Phase 상태와 사용량 한도·중단·재개 기록이 최신이다.
 
 ## 14. 참고 자료
 

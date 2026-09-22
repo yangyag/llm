@@ -100,6 +100,73 @@ flowchart LR
 3. `board`·`upload` 등 `auth` 외부 모듈의 각 보호 컨트롤러가 공개 계약인 `AuthenticationGateway.authenticate`를 호출합니다. `auth.internal`의 `JwtProvider` 구현이 토큰과 현재 계정 존재 여부를 검증하고 고유 계정 ID를 반환합니다. JWT subject는 계정 ID이며 `tokenVersion=2`가 필요합니다.
 4. 서비스 계층이 게시글 생성 시 `author_username`을 기록하고, 수정/삭제 시 **작성자 본인 또는 ADMIN 여부**(`admins.role`)를 검증한 뒤 게시글, 댓글, 첨부파일을 처리합니다.
 
+### 게시글 본문 이미지 붙여넣기와 영구 저장
+
+본문 이미지는 DB가 아니라 기존 첨부파일 volume에 저장한다. `posts.body_document`에는 이미지 위치를 가리키는 `imageKey`(UUID)만 canonical JSON으로 남고, 이미지-첨부 연결은 `post_attachments.attachment_kind='INLINE_IMAGE'`와 `inline_key`가 담당한다(V19).
+
+```text
+편집 중 (브라우저 메모리)
+  ClipboardEvent
+      -> PNG/JPEG File (메모리, 서버 요청 없음)
+          -> URL.createObjectURL -> blob: URL (화면 표시 전용)
+          -> inlineAttachmentImage node { imageKey(UUID v4), alt }
+등록 (multipart, 한 번의 요청)
+  -> POST /api/v1/posts 또는 PUT /api/v1/posts/{id}
+      -> 문서·manifest·파일 집합 검증 (디스크·DB 변경 전)
+      -> 단일 트랜잭션: posts row + post_attachments row
+          -> 실제 bytes는 기존 attachment volume (UUID 저장명)
+조회·렌더
+  -> GET /api/v1/posts/{id}: attachments[].contentUrl
+      -> PostDocumentReader + NodeView: imageKey -> contentUrl
+          -> GET /api/v1/posts/{id}/attachments/{attachmentId}/content
+```
+
+#### 편집 중 (등록 전)
+
+1. `PostDocumentEditor.client.vue`의 paste handler가 clipboard의 실제 image item(PNG/JPEG)만 가로챕니다. 텍스트 paste는 기존 동작을 유지하고, 지원하지 않는 이미지 형식은 node를 만들지 않고 한국어 오류를 표시합니다.
+2. `useInlineImageDraft` registry가 파일별로 UUID v4 `imageKey`를 생성하고(`crypto.randomUUID()`, 없으면 `crypto.getRandomValues()`), 파일명을 `pasted-image-<timestamp>-<short-id>.png|jpg`로 바꾼 뒤 `blob:` URL을 만듭니다.
+3. NodeView는 canonical 문서가 아니라 registry의 `blob:` URL로 이미지를 표시합니다. canonical 문서에는 `imageKey`와 정규화된 `alt`만 남고 `src`, `data:` URL, 외부 URL은 들어가지 않습니다.
+4. 등록 전에는 서버 요청도 DB 행도 만들지 않습니다. pending registry는 20개·100MB로 제한하고, undo를 위해 문서에서 지운 node의 파일도 편집 세션 동안 유지하되 제출 payload에는 현재 canonical 문서가 참조하는 key만 넣습니다.
+
+#### 등록 (multipart)
+
+rich 요청은 기존 plain 요청에 다음 필드를 더합니다.
+
+| 필드 | 형식 | 규칙 |
+| --- | --- | --- |
+| `bodyFormat` | 문자열 | rich 글은 `TIPTAP_JSON`, 누락 시 `PLAIN_TEXT` |
+| `bodyDocumentBase64` | Base64 UTF-8 JSON | `TIPTAP_JSON`에서 필수 |
+| `inlineImageManifestBase64` | Base64 UTF-8 JSON | `[{ "imageKey": ..., "fileIndex": ... }]`, 신규 inline 이미지가 있을 때 필수 |
+| `inlineImages` | 반복 multipart file | manifest의 `fileIndex`가 가리키는 파일 |
+| `attachments` | 반복 multipart file | 기존 일반 첨부 |
+| `removeAttachmentIds` | 반복 값(수정만) | 일반 `DOWNLOAD` 첨부 삭제에만 사용 |
+
+1. `BoardPostController`의 `POST /api/v1/posts`(201)와 `PUT /api/v1/posts/{id}`가 multipart를 받고, 기존과 같이 `AuthenticationGateway.authenticate`로 인증합니다.
+2. `BoardRichDocumentCodec`이 문서를 strict decode하고 whitelist schema로 canonical JSON을 만들며 평문을 추출합니다. 이미지 node는 평문에서 `[이미지: alt]`(alt가 없으면 `[이미지]`)가 되어 검색과 본문 복사에 내부 UUID가 노출되지 않습니다.
+3. `BoardService`가 manifest 길이와 파일 수, `fileIndex` 중복·누락, `imageKey` 중복, 문서가 참조한 key 집합과 manifest/existing key 집합의 일치를 검사합니다. `InlineImageValidator`가 ImageIO reader로 실제 PNG/JPEG 여부·dimensions·payload를 확인하고 검증된 `content_type`만 저장합니다.
+4. 일반 첨부와 본문 이미지는 `APP_ATTACHMENTS_MAX_COUNT`(기본 5개)를 합계로 공유합니다. 최종 개수 검증까지 디스크·DB를 건드리기 전에 끝냅니다.
+5. `@Transactional` 트랜잭션에서 게시글 행(`body` 평문, `body_format`, `body_document`)과 `post_attachments` 행을 저장하고, 실제 bytes는 `AttachmentStorageService`가 기존 attachment volume(`APP_ATTACHMENTS_ROOT_PATH`)에 UUID 저장명으로 씁니다. 신규 파일은 `AttachmentFileLifecycle.trackCreated`에 등록해 rollback 시 정리하고, 문서에서 빠진 기존 inline 이미지는 같은 트랜잭션에서 metadata를 삭제하고 커밋 후 실파일 삭제 대기열(60초 주기 재시도)에 넣습니다.
+
+#### 조회·렌더
+
+1. 상세 응답은 `body`(추출 평문), `bodyFormat`, `bodyDocument`, `attachments[]`를 돌려주고, inline 이미지 항목은 `attachmentKind=INLINE_IMAGE`, `inlineKey`, `downloadUrl`, `contentUrl`을 포함합니다.
+2. `PostBodyReader`는 plain 글에서 기존 문단 렌더링을 유지하고 `TIPTAP_JSON`일 때만 `PostDocumentReader`를 사용합니다. 본문 복사는 문서 JSON이 아니라 추출 평문 `body`를 씁니다.
+3. `buildInlineImageSources`가 `inlineKey -> contentUrl` map을 만들되 `/api/v1/posts/{id}/attachments/{attachmentId}/content` 형식의 서버 상대경로만 등록합니다. NodeView는 이 map으로 `img src`를 채우고, 해석에 실패하거나 로딩이 실패하면 대체 placeholder를 표시합니다.
+4. content endpoint는 해당 글의 `INLINE_IMAGE`만 반환합니다. 일반 `DOWNLOAD` 첨부나 다른 글의 attachment ID는 404입니다.
+
+| 응답 header | 값 |
+| --- | --- |
+| `Content-Type` | 서버가 검증해 저장한 `image/png` 또는 `image/jpeg` |
+| `Content-Disposition` | `inline` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Cache-Control` | `public, max-age=31536000, immutable` |
+
+URL의 attachment ID가 바뀌지 않으므로 inline 이미지 응답은 영구 캐시합니다. 기존 download endpoint의 `Content-Disposition: attachment` 계약은 변경하지 않습니다.
+
+#### 호환성과 배포 순서
+
+rich 본문은 additive 응답 필드라 새 backend + 구형 front 조합에서도 게시글을 읽을 수 있습니다. 이때 본문은 `posts.body`의 추출 평문으로 표시되고 inline 이미지는 구분되지 않은 채 첨부 목록에 나타날 수 있습니다. 구형 front가 rich 글을 평문으로 덮어쓰지 못하도록, `TIPTAP_JSON` 글에 `bodyFormat`이 누락되거나 `PLAIN_TEXT`인 수정 요청은 409 `RICH_TEXT_CLIENT_REQUIRED`로 거부하고 저장하지 않습니다. 따라서 backend를 먼저 배포해 V19와 rich API를 활성화한 뒤 front를 배포합니다.
+
 ### ZIP 청크 업로드
 
 1. 배포된 `upload_zip_post.py`가 ZIP 바이트를 읽고 SHA-256을 계산합니다.
@@ -137,5 +204,8 @@ flowchart LR
 
 - 프론트 이미지는 빌드 시점 `NUXT_PUBLIC_API_BASE` 값을 정적 번들에 포함할 수 있습니다.
 - 운영에서는 Nginx proxy가 같은 origin의 `/api/`를 백엔드로 전달하므로 `NUXT_PUBLIC_API_BASE`를 비워 둡니다.
-- 백엔드는 DB와 파일 volume을 상태 저장소로 사용합니다.
+- 백엔드는 DB와 파일 volume을 상태 저장소로 사용합니다. 본문 이미지 bytes도 일반 첨부와 같은 attachment volume에 들어가고 DB에는 metadata와 canonical 문서만 남습니다.
+- rich 본문과 inline 이미지 확장은 V19 additive migration으로만 들어갑니다. 배포 전 운영 Flyway history와 로컬 migration 파일을 대조합니다.
+- 배포 순서는 backend → front입니다. backend만 먼저 배포한 상태에서도 구형 front는 rich 글을 추출 평문 `body`로 읽을 수 있지만, 구형 front의 rich 글 수정 요청은 409 `RICH_TEXT_CLIENT_REQUIRED`로 거부됩니다.
+- 프론트 이미지(`NUXT_PUBLIC_API_BASE` 등)와 백엔드 이미지를 되돌릴 수 있도록 배포한 이미지 식별자를 기록합니다. rich 글 생성 후 이전 backend로 롤백하면 구형 backend가 알지 못하는 `body_format`·`body_document`가 남을 수 있으므로 롤백 중에는 게시글 쓰기를 중지합니다.
 - AI provider API key 설정은 새 답변 생성에 사용되지 않습니다. AI endpoint는 `410 Gone` / `AI_REPLY_DISABLED`를 반환하고 legacy AI 행 보호 코드만 유지합니다.

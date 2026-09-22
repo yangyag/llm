@@ -225,6 +225,8 @@ Authorization: Bearer <jwt>
   "id": 1,
   "title": "title",
   "body": "plain text",
+  "bodyFormat": "PLAIN_TEXT",
+  "bodyDocument": null,
   "mode": "NORMAL",
   "conversionReady": false,
   "authorUsername": "member1",
@@ -236,7 +238,36 @@ Authorization: Bearer <jwt>
 }
 ```
 
-`attachments`는 첨부파일 배열입니다(없으면 빈 배열). 각 항목은 다음 형식이며, 일반 게시글은 최대 5개까지 가질 수 있습니다. 업로드 세션 finalize로 만들어진 `FILE_CONVERSION_REQUEST` 게시글은 항상 1개(원본 ZIP)입니다.
+`bodyFormat`은 `PLAIN_TEXT` 또는 `TIPTAP_JSON`입니다. `body`는 두 형식 모두 항상 평문이며, rich 글은 서버가 검증된 문서에서 추출한 텍스트입니다(검색·복사용). `bodyDocument`는 검증·정규화된 Tiptap JSON 객체이고 `TIPTAP_JSON` 글에서만 값이 있으며, `PLAIN_TEXT` 글은 `null`입니다. 두 필드는 additive이므로 새 backend와 기존 클라이언트를 조합해도 클라이언트는 `body` 평문을 그대로 표시할 수 있습니다.
+
+rich 글의 본문 필드 예시:
+
+```json
+{
+  "body": "텍스트[이미지: 스크린샷]",
+  "bodyFormat": "TIPTAP_JSON",
+  "bodyDocument": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          { "type": "text", "text": "텍스트" },
+          {
+            "type": "inlineAttachmentImage",
+            "attrs": {
+              "imageKey": "b1e09b73-1111-4444-8888-123456789abc",
+              "alt": "스크린샷"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`attachments`는 첨부파일 배열입니다(없으면 빈 배열). 각 항목은 다음 형식이며, 일반 게시글은 일반 첨부와 inline 이미지를 합쳐 최대 5개까지 가질 수 있습니다. 업로드 세션 finalize로 만들어진 `FILE_CONVERSION_REQUEST` 게시글은 항상 1개(원본 ZIP)입니다.
 
 ```json
 {
@@ -244,7 +275,25 @@ Authorization: Bearer <jwt>
   "originalFilename": "archive.zip",
   "size": 12345,
   "contentType": "application/zip",
-  "downloadUrl": "/api/v1/posts/1/attachments/10"
+  "attachmentKind": "DOWNLOAD",
+  "inlineKey": null,
+  "downloadUrl": "/api/v1/posts/1/attachments/10",
+  "contentUrl": null
+}
+```
+
+`attachmentKind`는 `DOWNLOAD`(일반 첨부) 또는 `INLINE_IMAGE`(본문 이미지)입니다. `inlineKey`는 본문 이미지의 문서 참조 UUID이고 `DOWNLOAD`는 `null`입니다. `contentUrl`은 본문 표시 전용 URL이고 `DOWNLOAD`는 `null`입니다.
+
+```json
+{
+  "id": 11,
+  "originalFilename": "pasted-image-1758412800000-b1e09b73.png",
+  "size": 20480,
+  "contentType": "image/png",
+  "attachmentKind": "INLINE_IMAGE",
+  "inlineKey": "b1e09b73-1111-4444-8888-123456789abc",
+  "downloadUrl": "/api/v1/posts/1/attachments/11",
+  "contentUrl": "/api/v1/posts/1/attachments/11/content"
 }
 ```
 
@@ -264,6 +313,43 @@ Authorization: Bearer <jwt>
 }
 ```
 
+### rich 본문 형식과 inline 이미지 (생성·수정 공통)
+
+게시글 생성·수정 multipart에서 본문 형식을 지정하고, 편집기에 붙여넣은 본문 이미지를 같은 요청으로 전송할 수 있습니다. 기존 plain 요청 필드는 그대로 유지됩니다.
+
+| 필드 | 형식 | 규칙 |
+| --- | --- | --- |
+| `bodyFormat` | 문자열 | `PLAIN_TEXT`(기본) 또는 `TIPTAP_JSON`. 누락하면 `PLAIN_TEXT` |
+| `bodyBase64` | Base64 UTF-8 | `PLAIN_TEXT` 전용 본문. `TIPTAP_JSON`과 함께 보내면 거부 |
+| `bodyDocumentBase64` | Base64 UTF-8 JSON | `TIPTAP_JSON`에서 필수인 Tiptap 문서 |
+| `inlineImageManifestBase64` | Base64 UTF-8 JSON | 신규 inline 이미지가 있으면 필수인 manifest 배열 |
+| `inlineImages` | 반복 multipart file | manifest `fileIndex`와 연결되는 이미지 파일. 같은 이름으로 순서대로 전송 |
+
+manifest 형식(Base64 인코딩 전 JSON):
+
+```json
+[
+  {
+    "imageKey": "b1e09b73-1111-4444-8888-123456789abc",
+    "fileIndex": 0
+  }
+]
+```
+
+검증 규칙:
+
+- `bodyBase64`와 `bodyDocumentBase64`는 한 요청에 함께 보낼 수 없습니다. `PLAIN_TEXT`에서 `bodyDocumentBase64`만 보내거나 `TIPTAP_JSON`에서 `bodyBase64`를 보내도 거부되며, 모두 400 `INVALID_RICH_DOCUMENT`입니다.
+- `TIPTAP_JSON`은 `bodyDocumentBase64`가 필수입니다. 문서는 `doc` 루트와 허용 node·mark·attribute만 가질 수 있고, Base64 decode 5MiB·추출 평문 1,000,000자·node 20,000개·깊이 20 한도를 통과해야 합니다.
+- manifest와 `inlineImages`는 개수가 정확히 같아야 합니다. 한쪽만 보내면 400 `INVALID_ATTACHMENT_REQUEST`입니다.
+- `fileIndex`는 `0..n-1`을 중복 없이 정확히 한 번씩 사용해야 합니다.
+- manifest `imageKey`는 UUID여야 하고 중복될 수 없습니다.
+- 생성 시 문서가 참조하는 `imageKey` 집합과 manifest `imageKey` 집합이 정확히 같아야 합니다.
+- 수정 시 문서의 `imageKey`는 이 글에 유지되는 기존 inline 이미지 키이거나 이번 요청의 신규 manifest 키여야 합니다. 다른 글의 키나 존재하지 않는 키는 거부됩니다. 신규 업로드에 기존 키를 재사용하거나 manifest 키를 문서에서 참조하지 않아도 거부됩니다.
+- 수정에서 새 문서가 참조하지 않는 기존 inline 이미지는 서버가 삭제 대상으로 계산해 자동 삭제합니다.
+- inline 이미지는 PNG/JPEG만 허용합니다. 서버가 `ImageIO`로 실제 바이트의 형식과 dimensions를 검증하고, 파일당 기본 10MB(`APP_ATTACHMENTS_INLINE_IMAGES_MAX_FILE_SIZE`), 너비·높이 각 8192px, 총 25,000,000px 한도를 적용합니다. 검증된 형식이 저장 `contentType`이 됩니다.
+- 일반 첨부와 inline 이미지의 합계는 게시글당 최대 5개입니다. 개수 검증은 파일 저장·DB 변경 전에 수행됩니다.
+- 위반 오류는 400 `INVALID_RICH_DOCUMENT`(문서·본문 필드), 400 `INVALID_ATTACHMENT_REQUEST`(manifest·파일·문서 key 불일치, 개수 초과), 413 `ATTACHMENT_TOO_LARGE`(파일 크기 초과)입니다.
+
 ### `POST /api/v1/posts`
 
 인증: 필요
@@ -275,9 +361,13 @@ Content-Type: `multipart/form-data`
 | 필드 | 필수 | 설명 |
 | --- | --- | --- |
 | `title` | 예 | 200자 이하 |
-| `bodyBase64` | 아니오 | UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
+| `bodyBase64` | 아니오 | `PLAIN_TEXT` 본문. UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
+| `bodyFormat` | 아니오 | `PLAIN_TEXT`(기본) 또는 `TIPTAP_JSON` |
+| `bodyDocumentBase64` | 아니오 | `TIPTAP_JSON`일 때 필수인 Base64 문서 |
+| `inlineImageManifestBase64` | 아니오 | 신규 inline 이미지가 있을 때 필수인 manifest(위 "rich 본문 형식과 inline 이미지" 참조) |
+| `inlineImages` | 아니오 | 본문 이미지 파일. 같은 이름으로 여러 개 전송 |
 | `mode` | 아니오 | 기본 `NORMAL`. 수동 `FILE_CONVERSION_REQUEST` 생성은 거부 |
-| `attachments` | 아니오 | 첨부파일. 같은 이름 `attachments`로 여러 개 전송 가능(최대 5개, 파일당 100MB) |
+| `attachments` | 아니오 | 첨부파일. 같은 이름 `attachments`로 여러 개 전송 가능(일반 첨부 + inline 이미지 합계 최대 5개, 파일당 100MB) |
 
 응답: 게시글 상세(`authorUserId`는 계정 ID, `authorUsername`은 작성 시점의 표시 이름), HTTP 201
 
@@ -294,18 +384,26 @@ Content-Type: `multipart/form-data`
 | 필드 | 필수 | 설명 |
 | --- | --- | --- |
 | `title` | 예 | 200자 이하 |
-| `bodyBase64` | 아니오 | UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
+| `bodyBase64` | 아니오 | `PLAIN_TEXT` 본문. UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
+| `bodyFormat` | 아니오 | `PLAIN_TEXT`(기본) 또는 `TIPTAP_JSON`. 기존 rich 글은 `TIPTAP_JSON`이 필수 |
+| `bodyDocumentBase64` | 아니오 | `TIPTAP_JSON`일 때 필수인 Base64 문서 |
+| `inlineImageManifestBase64` | 아니오 | 이번 수정에서 추가하는 신규 inline 이미지 manifest |
+| `inlineImages` | 아니오 | 이번 수정에서 추가하는 신규 본문 이미지 파일 |
 | `mode` | 아니오 | 기본 `NORMAL` |
-| `attachments` | 아니오 | 추가할 새 첨부파일. 같은 이름으로 여러 개 전송 가능 |
-| `removeAttachmentIds` | 아니오 | 삭제할 기존 첨부파일 id. 여러 개 전송 가능 |
+| `attachments` | 아니오 | 추가할 새 일반 첨부파일. 같은 이름으로 여러 개 전송 가능 |
+| `removeAttachmentIds` | 아니오 | 삭제할 기존 `DOWNLOAD` 첨부 id. 여러 개 전송 가능 |
 
 응답: 게시글 상세, HTTP 200
 
 제약:
 
 - 새 `attachments` 추가와 `removeAttachmentIds` 삭제는 한 요청에서 함께 보낼 수 있습니다(일부 삭제 + 일부 추가).
-- 삭제·추가 반영 후 게시글의 총 첨부파일 수가 5개를 넘으면 거부됩니다(`INVALID_ATTACHMENT_REQUEST`).
+- 삭제·추가 반영 후 게시글의 총 첨부파일 수가 5개를 넘으면 거부됩니다(`INVALID_ATTACHMENT_REQUEST`). 이때 일반 첨부와 inline 이미지의 합계를 계산합니다.
 - `removeAttachmentIds`에 해당 게시글의 첨부가 아닌 id가 있으면 거부됩니다(`INVALID_ATTACHMENT_REQUEST`).
+- `removeAttachmentIds`는 `DOWNLOAD` 첨부 전용입니다. `INLINE_IMAGE` id를 넣으면 400 `INVALID_ATTACHMENT_REQUEST`이며, inline 이미지 삭제는 문서에서 참조를 제거해 서버가 자동 계산하게 합니다.
+- 기존 `TIPTAP_JSON` 글의 수정 요청에서 `bodyFormat`이 누락되거나 `PLAIN_TEXT`이면 저장하지 않고 409 `RICH_TEXT_CLIENT_REQUIRED`를 반환합니다. 구형 plain 클라이언트가 rich 문서와 inline 이미지를 유실시키는 것을 막습니다.
+- `PLAIN_TEXT` 글을 `TIPTAP_JSON`으로 전환하는 수정은 허용되지만, rich 글을 다시 plain으로 되돌리는 요청은 제공하지 않습니다.
+- rich 본문·inline 이미지 필드의 manifest·key 검증은 위 "rich 본문 형식과 inline 이미지" 절을 따릅니다.
 - `mode=FILE_CONVERSION_REQUEST`는 생성과 수정 모두에서 거부됩니다. 파일 변환 게시글은 업로드 세션 finalize로만 만들어집니다.
 - `FILE_CONVERSION_REQUEST` 게시글에 첨부파일이 있으면 수정할 수 없습니다.
 
@@ -414,13 +512,32 @@ Content-Type: `multipart/form-data`
 
 인증: 필요 없음
 
-`attachmentId`는 상세 응답 `attachments[].id`(또는 `downloadUrl`)에서 얻습니다. 해당 첨부가 그 게시글의 것이 아니면 404입니다.
+`attachmentId`는 상세 응답 `attachments[].id`(또는 `downloadUrl`)에서 얻습니다. 해당 첨부가 그 게시글의 것이 아니면 404입니다. `INLINE_IMAGE` 첨부도 이 URL로 내려받을 수 있고 항상 `Content-Disposition: attachment`입니다.
 
 응답:
 
 - 파일 stream
 - `Content-Disposition: attachment`
 - `Content-Type`은 저장된 content type이 있으면 사용하고, 없으면 `application/octet-stream`
+
+### `GET /api/v1/posts/{id}/attachments/{attachmentId}/content`
+
+인증: 필요 없음
+
+본문에 표시되는 inline 이미지 전용 URL입니다. `attachmentId`는 상세 응답 `attachments[].contentUrl`에서 얻습니다.
+
+응답:
+
+- 검증된 이미지 파일 stream
+- `Content-Type`: `image/png` 또는 `image/jpeg`. 저장 시 서버가 실제 바이트를 검증해 기록한 값만 사용합니다.
+- `Content-Disposition: inline`
+- `X-Content-Type-Options: nosniff`
+- `Cache-Control: public, max-age=31536000, immutable`
+
+제약:
+
+- 해당 게시글의 `INLINE_IMAGE` 첨부만 반환합니다. 존재하지 않는 글·첨부, 다른 글의 첨부, `DOWNLOAD` 첨부, 저장 content type이 PNG/JPEG가 아닌 첨부는 모두 404 `NOT_FOUND`입니다.
+- 첨부 ID가 바뀌지 않으므로 응답을 1년간 immutable로 캐시합니다.
 
 ## Upload sessions
 
@@ -479,26 +596,30 @@ Content-Type: `multipart/form-data`
 
 ## 주요 오류 코드
 
-| 코드 | 의미 |
-| --- | --- |
-| `INVALID_CREDENTIALS` | 인증 실패, 토큰 누락/만료, 삭제된 계정. 단, `/api/v1/auth/me`는 body 없이 401을 반환 |
-| `FORBIDDEN` | 권한 없음. 사용자 관리 API를 USER가 호출한 경우, 남의 게시글/댓글을 수정/삭제하려는 경우(작성자 본인/ADMIN 아님), 레거시(작성자 없음) 글/댓글을 USER가 수정/삭제하려는 경우 |
-| `DUPLICATE_USERNAME` | 사용자 추가 시 username 중복 |
-| `LAST_ADMIN_PROTECTED` | 마지막 남은 ADMIN 삭제/강등 불가 |
-| `SELF_DELETE_NOT_ALLOWED` | 자기 자신의 계정 삭제 불가 |
-| `INVALID_REQUEST` | validation 또는 JSON parsing 실패 |
-| `INVALID_ENCODED_BODY` | bodyBase64 decode 실패 |
-| `FILE_CONVERSION_LOCKED` | 파일 변환 게시글 수정 불가 |
-| `AI_REPLY_LOCKED` | AI 답변 수정/삭제 불가 |
-| `AI_REPLY_NOT_ALLOWED` | 해당 게시글에 AI 답변 생성 불가 |
-| `INVALID_AI_PROVIDER` | provider 값 오류 |
-| `INVALID_ATTACHMENT_REQUEST` | 첨부파일 요청 조합 오류 |
-| `INVALID_FILE_CONVERSION_REQUEST` | 수동 파일 변환 게시글 생성/수정 요청 오류 |
-| `AI_PROVIDER_NOT_CONFIGURED` | provider API key 누락 |
-| `AI_REPLY_GENERATION_FAILED` | 외부 AI API 호출 실패 |
-| `ATTACHMENT_TOO_LARGE` | 일반 첨부파일 또는 최종 생성 첨부파일 크기 초과 |
-| `ATTACHMENT_STORAGE_ERROR` | 파일 저장/읽기/삭제 실패 |
-| `INVALID_UPLOAD_SESSION_REQUEST` | 업로드 세션 요청 오류. 청크 크기/번호/해시 불일치 포함 |
-| `UPLOAD_SESSION_STATE_ERROR` | 만료, 완료, finalizing 상태 오류 |
-| `NOT_FOUND` | 리소스 없음 |
-| `INTERNAL_ERROR` | 예상하지 못한 서버 오류 |
+| 코드 | HTTP | 의미 |
+| --- | --- | --- |
+| `INVALID_CREDENTIALS` | 401 | 인증 실패, 토큰 누락/만료, 삭제된 계정. 단, `/api/v1/auth/me`는 body 없이 401을 반환 |
+| `FORBIDDEN` | 403 | 권한 없음. 사용자 관리 API를 USER가 호출한 경우, 남의 게시글/댓글을 수정/삭제하려는 경우(작성자 본인/ADMIN 아님), 레거시(작성자 없음) 글/댓글을 USER가 수정/삭제하려는 경우 |
+| `DUPLICATE_USERNAME` | 409 | 사용자 추가 시 username 중복 |
+| `LAST_ADMIN_PROTECTED` | 409 | 마지막 남은 ADMIN 삭제/강등 불가 |
+| `SELF_DELETE_NOT_ALLOWED` | 409 | 자기 자신의 계정 삭제 불가 |
+| `INVALID_REQUEST` | 400 | validation 또는 JSON parsing 실패 |
+| `INVALID_ENCODED_BODY` | 400 | bodyBase64 decode 실패 |
+| `INVALID_RICH_DOCUMENT` | 400 | rich 문서 검증 실패. `bodyDocumentBase64` decode/JSON/schema/한도 위반, `bodyBase64`와 `bodyDocumentBase64` 동시 전송 |
+| `FILE_CONVERSION_LOCKED` | 403 | 파일 변환 게시글 수정 불가 |
+| `AI_REPLY_LOCKED` | 403 | AI 답변 수정/삭제 불가 |
+| `AI_REPLY_NOT_ALLOWED` | 400 | 해당 게시글에 AI 답변 생성 불가 |
+| `INVALID_AI_PROVIDER` | 400 | provider 값 오류 |
+| `INVALID_ATTACHMENT_REQUEST` | 400 | 첨부파일 요청 조합 오류. 일반 첨부 + inline 이미지 합계 5개 초과, manifest·파일·문서 key 불일치, `fileIndex`/`imageKey` 중복, `removeAttachmentIds`에 다른 글 id나 `INLINE_IMAGE` id 포함 |
+| `INVALID_FILE_CONVERSION_REQUEST` | 400 | 수동 파일 변환 게시글 생성/수정 요청 오류 |
+| `RICH_TEXT_CLIENT_REQUIRED` | 409 | 기존 rich 글을 `bodyFormat` 누락 또는 `PLAIN_TEXT` 요청으로 수정 시도 |
+| `AI_PROVIDER_NOT_CONFIGURED` | 503 | provider API key 누락 |
+| `AI_REPLY_GENERATION_FAILED` | 502 | 외부 AI API 호출 실패 |
+| `AI_REPLY_DISABLED` | 410 | AI 답변 기능 종료. 신규 생성 요청 거부 |
+| `ATTACHMENT_TOO_LARGE` | 413 | 일반 첨부파일, inline 이미지 또는 최종 생성 첨부파일 크기 초과 |
+| `ATTACHMENT_STORAGE_ERROR` | 500 | 파일 저장/읽기/삭제 실패 |
+| `INVALID_UPLOAD_SESSION_REQUEST` | 400 | 업로드 세션 요청 오류. 청크 크기/번호/해시 불일치 포함 |
+| `UPLOAD_SESSION_STATE_ERROR` | 409 | 만료, 완료, finalizing 상태 오류 |
+| `CONFLICT` | 409 | DB 무결성·동시성 충돌. 응답 메시지는 상세 원인을 노출하지 않음 |
+| `NOT_FOUND` | 404 | 리소스 없음. 다른 글의 첨부, `DOWNLOAD` 첨부의 content 요청 포함 |
+| `INTERNAL_ERROR` | 500 | 예상하지 못한 서버 오류 |

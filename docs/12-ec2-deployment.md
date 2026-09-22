@@ -156,6 +156,29 @@ curl -fsS https://yangyag.duckdns.org/api/v1/health
 
 도메인과 HTTPS 경로는 DNS/프록시 설정 상태에 따라 달라질 수 있습니다.
 
+## rich 본문·inline 이미지 배포 순서 (2026-09-22)
+
+V19 rich 본문·inline 이미지가 들어간 배포는 backend를 먼저, front를 나중에 올립니다. 계획서 Phase 8(2026-09-22)의 '배포 순서'·'롤백 원칙' 기록을 기준으로 하며, 동작 근거는 docs/04의 '호환성과 배포 순서' 절을 참조합니다.
+
+1. 운영 Flyway history와 로컬 migration 파일 V1~V19를 대조합니다(아래 "Flyway 마이그레이션 주의"의 확인 쿼리 사용). 불일치가 있으면 배포하지 않습니다.
+2. backend 이미지를 배포하고 V19 migration 적용과 기동을 확인합니다.
+3. 기존 front 이미지로 rich 글이 추출 평문으로 표시되는 plain body fallback과 기존 API를 확인합니다.
+4. front 이미지를 배포합니다.
+5. 실제 paste/create/read/edit/delete smoke를 수행합니다.
+
+운영 규칙:
+
+- health는 어디서든 front proxy 8083 경유로 확인합니다(`curl -fsS http://127.0.0.1:8083/api/v1/health`).
+- `docker compose down -v`, volume prune, Flyway history 직접 수정은 금지합니다.
+- 순서는 backend 먼저, front 나중입니다. backend만 먼저 올라간 상태에서 구형 front가 rich 글을 평문으로 표시하는 것은 정상이며, 구형 front의 rich 글 수정 요청은 새 backend가 409 `RICH_TEXT_CLIENT_REQUIRED`로 거부합니다.
+
+롤백 원칙:
+
+- V19는 additive이므로 운영에서 컬럼을 즉시 제거하지 않습니다.
+- 배포 전 이전 backend/front 이미지 식별자를 기록해 복구할 수 있게 합니다.
+- 구형 front로 롤백하면 rich 글은 추출 평문으로 표시되고 inline 이미지는 일반 다운로드 카드로 보일 수 있습니다.
+- rich 글 생성 후 이전 backend로 롤백하면 구형 backend가 `body`만 수정하고 알지 못하는 `body_format`·`body_document`는 그대로 남아 새 backend 복구 후 편집 내용이 어긋날 수 있습니다. 이전 backend 사용 중에는 게시글 쓰기를 중지하고 새 backend 복구를 우선합니다.
+
 ## Flyway 마이그레이션 주의 (V13 이력 충돌)
 
 2026-08-08 배포에서 EC2 운영 DB에 **이전 버전의 `V13__create_ai_reply_jobs.sql`**(ai_reply_jobs/ai_reply_outbox 테이블 생성, 로컬 저장소에는 없는 파일)이 이미 적용되어 있어 새 이미지의 `V13__add_role_to_admins.sql`과 체크섬 충돌로 `llm-back`이 시작하지 못하는 문제가 있었습니다. 해당 기능은 현재 코드에 없으므로 `llm.flyway_schema_history`에서 version=13 행만 제거하고 새 이미지의 V13~V15(`add role to admins` → `add author to posts` → `backfill post author as admin`)를 적용해 해결했습니다. 이후 배포(V14~V16: 게시글/댓글 작성자 컬럼과 백필)도 history-파일 일치를 확인한 뒤 적용해야 합니다.

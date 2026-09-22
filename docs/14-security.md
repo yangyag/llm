@@ -20,6 +20,7 @@
 - `GET /api/v1/posts`
 - `GET /api/v1/posts/{id}`
 - `GET /api/v1/posts/{id}/attachments/{attachmentId}`
+- `GET /api/v1/posts/{id}/attachments/{attachmentId}/content`
 - `POST /api/v1/auth/login`
 
 ## 역할 기반 인가
@@ -123,6 +124,52 @@ ZIP 세션 결과 제한:
 - `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE`
 
 저장 시 원본 파일명에서 경로 요소를 제거하고 UUID 기반 저장명을 사용합니다.
+
+## 본문 inline 이미지
+
+게시글 본문에 붙여넣은 이미지는 일반 첨부와 같은 volume·삭제 생명주기를 사용하지만 검증과 응답 계약이 다릅니다. 검증은 모두 저장 전에 끝나며, 실패하면 파일·DB 변경이 없습니다.
+
+파일 검증:
+
+- 브라우저가 보낸 MIME과 확장자를 신뢰하지 않습니다. 붙여넣기 시 `image/png`/`image/jpeg`만 허용하는 것은 UX 필터이며(`front/composables/useInlineImageDraft.ts`), 서버는 `InlineImageValidator`가 `ImageIO` reader의 실제 format name으로 PNG/JPEG를 판정합니다. 판정한 형식으로 `content_type`을 덮어쓰고, 파일명은 표시용으로만 쓰며 저장명은 기존 UUID 방식을 유지합니다.
+- 너비·높이·pixel 한도를 먼저 확인한 뒤 `ImageReader.read(0)`으로 payload 전체를 decode합니다. header만 남은 손상 PNG/JPEG도 저장 전에 거부됩니다.
+- 형식·손상·빈 파일은 400 `INVALID_ATTACHMENT_REQUEST`, 크기 초과는 413 `ATTACHMENT_TOO_LARGE`입니다.
+
+한도:
+
+- 파일당 10MB — `APP_ATTACHMENTS_INLINE_IMAGES_MAX_FILE_SIZE`(기본 `10MB`)
+- 너비·높이 각 8192px, 총 25,000,000px — 코드 상수(`InlineImageValidator.MAX_WIDTH`/`MAX_HEIGHT`/`MAX_PIXELS`)이며 압축 폭탄·메모리 사용 완화 목적입니다.
+- 일반 첨부와 inline 이미지는 `APP_ATTACHMENTS_MAX_COUNT`(기본 5) 합계 한도를 공유하고, inline 이미지를 포함한 전체 multipart 요청은 기존 `APP_ATTACHMENTS_MAX_REQUEST_SIZE` 안에 있어야 합니다.
+
+canonical 문서 금지 항목:
+
+서버는 클라이언트 JSON을 그대로 저장하지 않고 `BoardRichDocumentCodec`으로 정규화합니다. 허용 node·mark·attribute whitelist 밖 구조와 다음 항목은 400 `INVALID_RICH_DOCUMENT`로 거부합니다.
+
+- `src`(Base64 data URL, `javascript:`, 외부 HTTP URL 포함), `style`, event handler(`onerror`/`onclick`), raw HTML node·field
+- `data:`, `blob:`, `javascript:` URL은 canonical 문서에 저장될 수 없습니다. 상세 화면의 첨부 metadata resolver도 서버 `contentUrl` 패턴(`/api/v1/posts/<id>/attachments/<id>/content`)만 신뢰하고, 편집 중 pending 이미지는 컴포넌트 registry의 `blob:` URL로만 해석합니다(`front/utils/postDocument.ts`).
+- 문서 한도는 decoded 5MiB, 추출 평문 1,000,000자, node 20,000개, 중첩 깊이 20, alt 200자입니다.
+
+alt 처리:
+
+- alt는 최대 200자 문자열로만 저장하며 HTML로 해석하지 않습니다. `<img src=x onerror=alert(1)>` 같은 markup형 alt도 escape 없이 text·attribute 값으로 보존되고, 렌더링은 Vue text·attribute binding만 사용합니다(`v-html` 없음).
+- NUL과 단독 UTF-16 surrogate는 거부하고 정상 surrogate pair는 보존합니다.
+
+공개 content endpoint:
+
+`GET /api/v1/posts/{postId}/attachments/{attachmentId}/content`
+
+- 게시글 상세와 같은 공개 endpoint입니다. 게시글이 공개이면 본문 이미지도 함께 공개되므로, URL을 아는 사람은 인증 없이 원본을 받을 수 있습니다.
+- 완화: 해당 글에 속하고 `attachmentKind=INLINE_IMAGE`이며 저장된 `content_type`이 `image/png`/`image/jpeg`인 경우만 반환합니다(`BoardService.getInlineAttachmentContent`). 일반 `DOWNLOAD` 첨부, 다른 글의 첨부, 그 외 형식은 모두 404이며 응답에 저장 경로나 파일명을 노출하지 않습니다.
+- header: 검증된 `Content-Type`, `Content-Disposition: inline`, `X-Content-Type-Options: nosniff`, `Cache-Control: public, max-age=31536000, immutable`. attachment ID가 불변이라 1년 immutable cache를 사용합니다.
+- 기존 download endpoint의 `Content-Disposition: attachment` 계약은 변경하지 않습니다.
+- 업로드 확인 문구는 첨부파일과 본문 이미지가 게시글과 함께 공개됨을 명시합니다(`front/utils/post.ts`의 `ATTACHMENT_ENVIRONMENT_CONFIRM_MESSAGE`). create 폼과 edit 패널마다 1회 확인하고 paste와 파일 선택이 같은 확인 상태를 공유합니다(`front/stores/postDetail.ts`).
+
+악성 입력 거부 근거:
+
+- `InlineImageValidatorTest`: `image/png` MIME을 위장한 비이미지 bytes, GIF, 빈 파일, SVG/HTML 문자열, 33바이트로 잘린 PNG, 10MiB 경계, 8191/8192/8193px, 25MP 경계를 각각 거부·허용으로 검증합니다.
+- `BoardRichDocumentCodecTest`: `src`(data/javascript), `style`, `onerror`/`onclick`, raw HTML field, NUL·단독 surrogate alt 거부와 markup형 alt의 텍스트 보존을 검증합니다.
+- `BoardPostControllerTest`: inline content의 `nosniff`·immutable header, 일반 첨부 `/content` 404, 다른 글 첨부 404, 가짜 PNG 업로드 400을 검증합니다.
+- `front/tests/postDocument.test.cjs`: 외부 HTTP, `data:`, `blob:`, `javascript:`, protocol-relative, 앞뒤 공백·경로 변형이 resolver에서 무시되는지 검증합니다.
 
 ## 업로드 세션 암호화
 

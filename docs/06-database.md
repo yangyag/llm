@@ -4,7 +4,7 @@
 
 ## Spring Modulith refactor와 테스트 DB 구분
 
-이번 Spring Modulith refactor는 Flyway V1~V18 SQL, 운영 schema, 테이블 구조를 변경하지 않습니다. H2 전체 테스트는 Flyway 없이 Hibernate `create-drop`으로 실행하는 빠른 회귀 경로이고, PostgreSQL 검증은 별도의 보완 경로입니다. `PostgresMigrationTest`는 disposable PostgreSQL에 V1~V18을 적용하고 Hibernate validate를 확인하며, `PostgresUploadFinalizeTest`는 같은 종류의 disposable DB에서 finalize transaction의 rollback·commit 경계를 확인합니다. finalize focused 테스트는 본문 flush 이후 실패 (a), 명시적 session/part 삭제 flush 뒤 본문 실패 (b), 실제 commit 단계 지연 삭제 실패 (c)를 모두 포함합니다. 최신 focused 실행은 Docker image `postgres:1.0`(PostgreSQL 17.10)을 localhost port `55432`에서 사용했으며, 이는 stated production PostgreSQL 18과 다른 테스트 환경입니다.
+이번 Spring Modulith refactor는 당시 최신이던 Flyway V1~V18 SQL, 운영 schema, 테이블 구조를 변경하지 않았습니다. H2 전체 테스트는 Flyway 없이 Hibernate `create-drop`으로 실행하는 빠른 회귀 경로이고, PostgreSQL 검증은 별도의 보완 경로입니다. `PostgresMigrationTest`는 disposable PostgreSQL에 V1~V19를 적용하고 Hibernate validate를 확인하며, `PostgresUploadFinalizeTest`는 같은 종류의 disposable DB에서 finalize transaction의 rollback·commit 경계를 확인합니다. finalize focused 테스트는 본문 flush 이후 실패 (a), 명시적 session/part 삭제 flush 뒤 본문 실패 (b), 실제 commit 단계 지연 삭제 실패 (c)를 모두 포함합니다. 최신 focused 실행은 2026-09-22 disposable `postgres:18`(PostgreSQL 18.6, host port 55505)에서 수행했습니다. 이 실행에서 V17~V19 적용·Hibernate validate와 함께 레거시 plain fixture 조회, rich 글 생성·수정·삭제, rollback 파일 정리, 커밋 후 삭제 실패·재시도(신규 `PostgresInlineImageLifecycleTest` 4건 포함 focused 8건)를 검증했고, 이 환경은 운영과 같은 PostgreSQL 18 계열입니다. 참고로 로컬 `.env` DB는 PostgreSQL 17.10(`llm_local`, schema `llm`)입니다.
 
 ## 연결 설정
 
@@ -44,9 +44,9 @@ spring.flyway.create-schemas=true
 
 | 테이블 | 역할 |
 | --- | --- |
-| `posts` | 게시글 본문, 제목, 모드, 작성자(`author_username`), 생성/수정 시각 |
+| `posts` | 게시글 본문(검색·복사용 평문 `body`, rich canonical 문서 `body_document`), 제목, 모드, 작성자(`author_username`), 생성/수정 시각 |
 | `post_replies` | 댓글과 AI 답변(작성자 `author_username`, AI 답변은 null) |
-| `post_attachments` | 게시글 첨부파일 메타데이터(일반 게시글 최대 5개) |
+| `post_attachments` | 게시글 첨부파일 메타데이터. 일반 첨부(`DOWNLOAD`)와 본문 이미지(`INLINE_IMAGE`)를 함께 저장하며 합계 최대 5개 |
 | `admins` | 사용자 계정(ADMIN/USER 역할) |
 | `upload_sessions` | ZIP 청크 업로드 세션 |
 | `upload_session_parts` | 세션별 청크 파일 메타데이터 |
@@ -74,10 +74,23 @@ spring.flyway.create-schemas=true
 | `V16__add_author_to_replies.sql` | `post_replies.author_username` 추가. 작성자 본인/관리자 수정·삭제 권한 기준. 기존 일반 댓글은 `admin`으로 백필(AI 답변 제외) |
 | `V17__bind_ownership_to_user_ids.sql` | 글·댓글·업로드에 계정 ID 연결. 표시 이름과 계정 생성 시점이 맞는 행만 백필하며 계정 삭제 시 ID를 null로 설정 |
 | `V18__create_attachment_file_deletions.sql` | 첨부파일 삭제를 커밋 후 처리하기 위한 영속 대기열 |
+| `V19__add_rich_post_and_inline_attachment_metadata.sql` | `posts.body_format`/`body_document`, `post_attachments.attachment_kind`/`inline_key` 추가. 기존 글·첨부는 `PLAIN_TEXT`/`DOWNLOAD`로 백필 |
+
+## rich 본문·inline 이미지 metadata (V19)
+
+V19는 게시글 본문 형식과 본문에 붙여넣은 이미지(이하 inline 이미지)의 metadata를 추가합니다. 이미지 bytes는 DB가 아니라 기존 첨부 volume(`APP_ATTACHMENTS_ROOT_PATH`)에 저장하고, DB에는 rich canonical 문서 JSON과 attachment metadata만 둡니다.
+
+- `posts.body_format`: `varchar(30) not null default 'PLAIN_TEXT'`이며 `check (body_format in ('PLAIN_TEXT', 'TIPTAP_JSON'))`(`ck_posts_body_format`)로 두 값만 허용합니다.
+- `posts.body_document`: `text` nullable입니다. `body_format='PLAIN_TEXT'`이면 null, `TIPTAP_JSON`이면 not null이어야 합니다(`ck_posts_body_format_document`). rich 글도 검색·본문 복사에 쓰는 `posts.body`에는 서버가 canonical 문서에서 추출한 평문이 들어갑니다.
+- `post_attachments.attachment_kind`: `varchar(30) not null default 'DOWNLOAD'`이며 `check (attachment_kind in ('DOWNLOAD', 'INLINE_IMAGE'))`(`ck_post_attachments_kind`)로 두 값만 허용합니다.
+- `post_attachments.inline_key`: `uuid` nullable입니다. `DOWNLOAD`이면 null, `INLINE_IMAGE`이면 not null이어야 합니다(`ck_post_attachments_kind_inline_key`).
+- `(post_id, inline_key)` partial unique index(`uk_post_attachments_post_inline_key`, `where inline_key is not null`)로 한 글 안에서 inline key 중복을 막습니다. `inline_key`가 null인 일반 첨부는 index 대상이 아닙니다.
+- 기존 행 backfill: 신규 컬럼이 `not null default`로 추가되어 기존 글은 전부 `PLAIN_TEXT`/`body_document=null`, 기존 첨부는 전부 `DOWNLOAD`/`inline_key=null`이 됩니다. 기존 글을 일괄 rich로 변환하지 않으며, 편집 화면에서 저장한 글만 `TIPTAP_JSON`으로 전환됩니다. 업로드 세션 finalize가 만드는 `FILE_CONVERSION_REQUEST` 첨부는 항상 `DOWNLOAD`입니다.
+- Hibernate `ddl-auto=validate` 관계: 두 enum 컬럼은 `@Enumerated(EnumType.STRING)`로 `varchar(30)`, `body_document`는 `columnDefinition = "text"`, `inline_key`는 `uuid`로 매핑되어 V19 적용 후 validate를 통과합니다. `PostgresMigrationTest`가 V16 fixture에 V17~V19를 적용한 뒤 전체 entity validate와 check·partial unique index 위반(`SQLException`), 기존 행 backfill 값을 함께 검증합니다.
 
 ## 도메인 제약
 
-- `post_attachments.post_id`는 더 이상 unique가 아닙니다(V12). 한 게시글에 여러 첨부파일을 허용하며, 개수 상한(일반 게시글 5개)은 애플리케이션(`app.attachments.max-count`)에서 강제합니다. 업로드 세션 finalize로 만든 `FILE_CONVERSION_REQUEST` 게시글은 항상 첨부 1개입니다.
+- `post_attachments.post_id`는 더 이상 unique가 아닙니다(V12). 한 게시글에 여러 첨부파일을 허용하며, 개수 상한(일반 첨부와 본문 inline 이미지 합계 5개)은 애플리케이션(`app.attachments.max-count`)에서 강제합니다. 업로드 세션 finalize로 만든 `FILE_CONVERSION_REQUEST` 게시글은 항상 첨부 1개입니다.
 - `post_replies.post_id`는 게시글 삭제 시 cascade 삭제됩니다.
 - `upload_session_parts.session_id`는 세션 삭제 시 cascade 삭제됩니다.
 - `upload_session_parts`는 `(session_id, chunk_number)` unique 제약을 가집니다.
@@ -145,6 +158,8 @@ order by status;
 
 - DB: `pg_dump` 또는 볼륨 snapshot
 - 첨부파일: `ubuntu_llm-back-attachments` volume
+- rich 본문의 canonical 문서 JSON과 attachment metadata는 DB(`posts.body_document`, `post_attachments`)에만 있고 이미지 bytes는 첨부 volume에 있으므로, DB dump와 첨부 volume을 함께 복원해야 본문 이미지가 온전합니다. 한쪽만 복구하면 본문 이미지 조회가 404가 되거나 참조 없는 고아 파일이 volume에 남습니다.
+- 용량 영향: rich 글은 글 수에 비례해 문서 JSON만큼 DB dump가 커지고, 이미지 bytes는 dump에 포함되지 않고 첨부 volume 사용량으로 잡힙니다.
 - 업로드 임시 파일: `ubuntu_llm-back-upload-sessions` volume. 일반적으로 복구 우선순위는 낮지만 장애 조사에는 필요할 수 있습니다.
 
 예시:
