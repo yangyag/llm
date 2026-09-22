@@ -129,7 +129,7 @@ function handleLogout() {
         <p v-if="detail.detailLoading" class="empty-state">불러오는 중...</p>
         <template v-else-if="detail.selectedPost">
           <PostDetail />
-          <section class="reply-thread">
+          <section v-if="detail.postActionMode !== 'edit'" class="reply-thread">
             <h3 class="reply-thread-title">
               답변
               <span class="reply-count">{{ detail.selectedPost.replies.length }}</span>
