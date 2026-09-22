@@ -6,12 +6,12 @@ import type { PostInlineImageUpload } from "~/types/api";
 export const MAX_PENDING_INLINE_IMAGES = 20;
 export const MAX_PENDING_INLINE_IMAGE_BYTES = 100 * 1024 * 1024;
 export const MAX_INLINE_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
-export const UNSUPPORTED_INLINE_IMAGE_MESSAGE = "본문에는 PNG 또는 JPEG 이미지만 붙여넣을 수 있습니다.";
-export const INLINE_IMAGE_FILE_SIZE_MESSAGE = "본문 이미지는 파일당 최대 10MB까지 붙여넣을 수 있습니다.";
-export const INLINE_IMAGE_REGISTRY_COUNT_MESSAGE = "붙여넣은 이미지는 편집 세션당 최대 20개까지 보관할 수 있습니다. 글을 저장하거나 편집을 취소한 뒤 다시 시도해 주세요.";
-export const INLINE_IMAGE_REGISTRY_BYTES_MESSAGE = "붙여넣은 이미지 임시 보관 용량은 최대 100MB입니다. 글을 저장하거나 편집을 취소한 뒤 다시 시도해 주세요.";
+export const UNSUPPORTED_INLINE_IMAGE_MESSAGE = "본문 이미지는 PNG 또는 JPEG 파일만 추가할 수 있습니다.";
+export const INLINE_IMAGE_FILE_SIZE_MESSAGE = "본문 이미지는 파일당 최대 10MB까지 추가할 수 있습니다.";
+export const INLINE_IMAGE_REGISTRY_COUNT_MESSAGE = "본문 이미지는 편집 세션당 최대 20개까지 보관할 수 있습니다. 글을 저장하거나 편집을 취소한 뒤 다시 시도해 주세요.";
+export const INLINE_IMAGE_REGISTRY_BYTES_MESSAGE = "본문 이미지 임시 보관 용량은 최대 100MB입니다. 글을 저장하거나 편집을 취소한 뒤 다시 시도해 주세요.";
 export const INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE = "일반 첨부파일과 본문 이미지는 합쳐서 최대 5개까지 등록할 수 있습니다.";
-export const MISSING_INLINE_IMAGE_FILE_MESSAGE = "본문 이미지 임시 파일을 찾을 수 없습니다. 이미지를 다시 붙여넣어 주세요.";
+export const MISSING_INLINE_IMAGE_FILE_MESSAGE = "본문 이미지 임시 파일을 찾을 수 없습니다. 이미지를 다시 추가해 주세요.";
 
 const SUPPORTED_INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg"]);
 
@@ -64,6 +64,36 @@ export function createUuidV4(source?: InlineImageCrypto): string {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function resolveInlineImageType(
+  file: Pick<File, "type" | "name">
+): "image/png" | "image/jpeg" | null {
+  const type = file.type.toLowerCase();
+  if (type === "image/png" || type === "image/jpeg") {
+    return type;
+  }
+  if (type === "image/jpg" || type === "image/pjpeg") {
+    return "image/jpeg";
+  }
+  if (type === "image/x-png") {
+    return "image/png";
+  }
+  if (type !== "" && type !== "application/octet-stream") {
+    return null;
+  }
+  const dotIndex = file.name.lastIndexOf(".");
+  if (dotIndex < 0) {
+    return null;
+  }
+  const extension = file.name.slice(dotIndex + 1).toLowerCase();
+  if (extension === "png") {
+    return "image/png";
+  }
+  if (extension === "jpg" || extension === "jpeg") {
+    return "image/jpeg";
+  }
+  return null;
 }
 
 export function readClipboardImageFiles(
@@ -131,9 +161,9 @@ export function useInlineImageDraft(options: InlineImageDraftOptions): {
     entries.value.reduce((total, entry) => total + entry.file.size, 0)
   );
 
-  function pastedImageFileName(imageKey: string, file: File): string {
-    const extension = file.type === "image/jpeg" ? "jpg" : "png";
-    return `pasted-image-${now()}-${imageKey.slice(0, 8)}.${extension}`;
+  function inlineImageFileName(imageKey: string, file: File): string {
+    const extension = resolveInlineImageType(file) === "image/jpeg" ? "jpg" : "png";
+    return `inline-image-${now()}-${imageKey.slice(0, 8)}.${extension}`;
   }
 
   function nextImageKeys(count: number): string[] {
@@ -157,7 +187,7 @@ export function useInlineImageDraft(options: InlineImageDraftOptions): {
       return { entries: [], error: null };
     }
     for (const file of files) {
-      if (!SUPPORTED_INLINE_IMAGE_TYPES.has(file.type)) {
+      if (!resolveInlineImageType(file)) {
         return { entries: [], error: UNSUPPORTED_INLINE_IMAGE_MESSAGE };
       }
       if (file.size > MAX_INLINE_IMAGE_FILE_SIZE) {
@@ -180,7 +210,7 @@ export function useInlineImageDraft(options: InlineImageDraftOptions): {
       for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
         const imageKey = keys[index];
-        const renamed = renameFile(file, pastedImageFileName(imageKey, file));
+        const renamed = renameFile(file, inlineImageFileName(imageKey, file));
         const objectUrl = createObjectURL(renamed);
         created.push({ imageKey, file: renamed, objectUrl });
       }

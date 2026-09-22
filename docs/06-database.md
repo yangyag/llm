@@ -78,7 +78,7 @@ spring.flyway.create-schemas=true
 
 ## rich 본문·inline 이미지 metadata (V19)
 
-V19는 게시글 본문 형식과 본문에 붙여넣은 이미지(이하 inline 이미지)의 metadata를 추가합니다. 이미지 bytes는 DB가 아니라 기존 첨부 volume(`APP_ATTACHMENTS_ROOT_PATH`)에 저장하고, DB에는 rich canonical 문서 JSON과 attachment metadata만 둡니다.
+V19는 게시글 본문 형식과 본문에 추가한 이미지(이하 inline 이미지)의 metadata를 추가합니다. 이미지 bytes는 DB가 아니라 기존 첨부 volume(`APP_ATTACHMENTS_ROOT_PATH`)에 저장하고, DB에는 rich canonical 문서 JSON과 attachment metadata만 둡니다.
 
 - `posts.body_format`: `varchar(30) not null default 'PLAIN_TEXT'`이며 `check (body_format in ('PLAIN_TEXT', 'TIPTAP_JSON'))`(`ck_posts_body_format`)로 두 값만 허용합니다.
 - `posts.body_document`: `text` nullable입니다. `body_format='PLAIN_TEXT'`이면 null, `TIPTAP_JSON`이면 not null이어야 합니다(`ck_posts_body_format_document`). rich 글도 검색·본문 복사에 쓰는 `posts.body`에는 서버가 canonical 문서에서 추출한 평문이 들어갑니다.

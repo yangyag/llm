@@ -19,7 +19,7 @@ const inlineSources = inlineDraft.inlineSources;
 const activeInlineImageCount = computed(() =>
   collectInlineImageKeys(detail.postForm.bodyDocument).length
 );
-const inlineImagePasteCapacity = computed(() =>
+const inlineImageSlotCapacity = computed(() =>
   Math.max(MAX_ATTACHMENTS - detail.postAttachmentFiles.length, 0)
 );
 
@@ -31,7 +31,7 @@ function onInlineImageError(message: string) {
   detail.error = message;
 }
 
-function registerPastedImages(files: readonly File[]): InlineImageDraftRegistrationResult {
+function registerInlineImages(files: readonly File[]): InlineImageDraftRegistrationResult {
   const result = inlineDraft.register(files);
   if (!result.error && result.entries.length > 0) {
     detail.error = "";
@@ -67,8 +67,8 @@ onBeforeUnmount(() => {
       <PostDocumentEditor
         v-model="detail.postForm.bodyDocument"
         :inline-sources="inlineSources"
-        :register-pasted-images="registerPastedImages"
-        :max-active-inline-images="inlineImagePasteCapacity"
+        :register-inline-images="registerInlineImages"
+        :max-active-inline-images="inlineImageSlotCapacity"
         @inline-image-error="onInlineImageError"
       />
     </div>

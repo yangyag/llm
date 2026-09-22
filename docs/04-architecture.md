@@ -100,13 +100,13 @@ flowchart LR
 3. `board`·`upload` 등 `auth` 외부 모듈의 각 보호 컨트롤러가 공개 계약인 `AuthenticationGateway.authenticate`를 호출합니다. `auth.internal`의 `JwtProvider` 구현이 토큰과 현재 계정 존재 여부를 검증하고 고유 계정 ID를 반환합니다. JWT subject는 계정 ID이며 `tokenVersion=2`가 필요합니다.
 4. 서비스 계층이 게시글 생성 시 `author_username`을 기록하고, 수정/삭제 시 **작성자 본인 또는 ADMIN 여부**(`admins.role`)를 검증한 뒤 게시글, 댓글, 첨부파일을 처리합니다.
 
-### 게시글 본문 이미지 붙여넣기와 영구 저장
+### 게시글 본문 이미지 추가(붙여넣기·파일 선택)와 영구 저장
 
 본문 이미지는 DB가 아니라 기존 첨부파일 volume에 저장한다. `posts.body_document`에는 이미지 위치를 가리키는 `imageKey`(UUID)만 canonical JSON으로 남고, 이미지-첨부 연결은 `post_attachments.attachment_kind='INLINE_IMAGE'`와 `inline_key`가 담당한다(V19).
 
 ```text
 편집 중 (브라우저 메모리)
-  ClipboardEvent
+  ClipboardEvent 또는 파일 선택
       -> PNG/JPEG File (메모리, 서버 요청 없음)
           -> URL.createObjectURL -> blob: URL (화면 표시 전용)
           -> inlineAttachmentImage node { imageKey(UUID v4), alt }
@@ -123,8 +123,8 @@ flowchart LR
 
 #### 편집 중 (등록 전)
 
-1. `PostDocumentEditor.client.vue`의 paste handler가 clipboard의 실제 image item(PNG/JPEG)만 가로챕니다. 텍스트 paste는 기존 동작을 유지하고, 지원하지 않는 이미지 형식은 node를 만들지 않고 한국어 오류를 표시합니다.
-2. `useInlineImageDraft` registry가 파일별로 UUID v4 `imageKey`를 생성하고(`crypto.randomUUID()`, 없으면 `crypto.getRandomValues()`), 파일명을 `pasted-image-<timestamp>-<short-id>.png|jpg`로 바꾼 뒤 `blob:` URL을 만듭니다.
+1. `PostDocumentEditor.client.vue`의 paste handler가 clipboard의 실제 image item(PNG/JPEG)만 가로챕니다. 텍스트 paste는 기존 동작을 유지하고, 지원하지 않는 이미지 형식은 node를 만들지 않고 한국어 오류를 표시합니다. 같은 등록·삽입 로직은 에디터의 "본문 이미지 추가" 버튼 파일 선택(`accept=image/png,image/jpeg`, 다중 선택)에도 사용합니다.
+2. `useInlineImageDraft` registry가 파일별로 UUID v4 `imageKey`를 생성하고(`crypto.randomUUID()`, 없으면 `crypto.getRandomValues()`), 파일명을 `inline-image-<timestamp>-<short-id>.png|jpg`로 바꾼 뒤 `blob:` URL을 만듭니다.
 3. NodeView는 canonical 문서가 아니라 registry의 `blob:` URL로 이미지를 표시합니다. canonical 문서에는 `imageKey`와 정규화된 `alt`만 남고 `src`, `data:` URL, 외부 URL은 들어가지 않습니다.
 4. 등록 전에는 서버 요청도 DB 행도 만들지 않습니다. pending registry는 20개·100MB로 제한하고, undo를 위해 문서에서 지운 node의 파일도 편집 세션 동안 유지하되 제출 payload에는 현재 canonical 문서가 참조하는 key만 넣습니다.
 

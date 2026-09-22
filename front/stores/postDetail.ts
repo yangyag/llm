@@ -346,7 +346,7 @@ export const usePostDetailStore = defineStore("postDetail", {
       } catch (submitError) {
         const err = submitError as ApiError;
         if (err.code === "INVALID_ATTACHMENT_REQUEST") {
-          this.error = `첨부파일 요청이 올바르지 않습니다. 첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있습니다.`;
+          this.error = `첨부파일 요청이 올바르지 않습니다. 첨부파일·본문 이미지는 합쳐서 최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있고, 본문 이미지는 PNG/JPEG 형식이며 8192px·25,000,000 픽셀 한도 이내여야 합니다.`;
         } else {
           this.error = err.message;
         }
@@ -411,7 +411,7 @@ export const usePostDetailStore = defineStore("postDetail", {
         } else if (err.code === "FORBIDDEN") {
           this.error = "작성자 본인 또는 관리자만 수정할 수 있습니다.";
         } else if (err.code === "INVALID_ATTACHMENT_REQUEST") {
-          this.error = `첨부파일 요청이 올바르지 않습니다. 첨부파일은 글당 최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있습니다.`;
+          this.error = `첨부파일 요청이 올바르지 않습니다. 첨부파일·본문 이미지는 합쳐서 최대 ${MAX_ATTACHMENTS}개까지 등록할 수 있고, 본문 이미지는 PNG/JPEG 형식이며 8192px·25,000,000 픽셀 한도 이내여야 합니다.`;
         } else {
           this.error = err.message;
         }

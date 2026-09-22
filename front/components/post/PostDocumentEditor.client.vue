@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
+import { ref, watch } from "vue";
 import { EditorContent, useEditor } from "@tiptap/vue-3";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
@@ -8,7 +8,8 @@ import { collectInlineImageKeys, emptyPostDocument, toCanonicalPostDocument } fr
 import {
   INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE,
   UNSUPPORTED_INLINE_IMAGE_MESSAGE,
-  readClipboardImageFiles
+  readClipboardImageFiles,
+  resolveInlineImageType
 } from "~/composables/useInlineImageDraft";
 import type { InlineImageDraftRegistrationResult } from "~/composables/useInlineImageDraft";
 import { InlineAttachmentImage } from "./inlineAttachmentImage";
@@ -18,7 +19,7 @@ const props = withDefaults(defineProps<{
   modelValue: PostDocument;
   inlineSources?: Record<string, string>;
   ariaLabel?: string;
-  registerPastedImages?: (files: readonly File[]) => InlineImageDraftRegistrationResult;
+  registerInlineImages?: (files: readonly File[]) => InlineImageDraftRegistrationResult;
   maxActiveInlineImages?: number;
 }>(), {
   inlineSources: () => ({}),
@@ -31,12 +32,85 @@ const emit = defineEmits<{
   "inline-image-error": [message: string];
 }>();
 
+const inlineImageInput = ref<HTMLInputElement | null>(null);
+
 function resolveSource(imageKey: string): string | null {
   const raw = props.inlineSources[imageKey];
   if (!raw) {
     return null;
   }
   return raw.startsWith("blob:") ? raw : getApiUrl(raw);
+}
+
+function insertRegisteredImages(files: readonly File[], alt: string): void {
+  const register = props.registerInlineImages;
+  const instance = editor.value;
+  if (!register || !instance || files.length === 0) {
+    return;
+  }
+  if (files.some((file) => !resolveInlineImageType(file))) {
+    emit("inline-image-error", UNSUPPORTED_INLINE_IMAGE_MESSAGE);
+    return;
+  }
+  const activeCount = collectInlineImageKeys(instance.state.doc.toJSON()).length;
+  if (activeCount + files.length > props.maxActiveInlineImages) {
+    emit("inline-image-error", INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE);
+    return;
+  }
+  const result = register(files);
+  if (result.error) {
+    emit("inline-image-error", result.error);
+    return;
+  }
+  if (result.entries.length === 0) {
+    return;
+  }
+  const lastKey = result.entries[result.entries.length - 1].imageKey;
+  instance.chain().focus().insertContent(
+    result.entries.map((entry) => ({
+      type: "inlineAttachmentImage",
+      attrs: { imageKey: entry.imageKey, alt }
+    }))
+  ).command(({ tr, state }) => {
+    let nodeEnd = -1;
+    tr.doc.descendants((node, pos) => {
+      if (node.type.name === "inlineAttachmentImage" && node.attrs.imageKey === lastKey) {
+        nodeEnd = pos + node.nodeSize;
+        return false;
+      }
+      return true;
+    });
+    if (nodeEnd < 0) {
+      return true;
+    }
+    const next = tr.doc.resolve(nodeEnd).nodeAfter;
+    if (next?.isTextblock) {
+      tr.setSelection(TextSelection.create(tr.doc, nodeEnd + 1));
+    } else {
+      tr.insert(nodeEnd, state.schema.nodes.paragraph.create());
+      tr.setSelection(TextSelection.create(tr.doc, nodeEnd + 1));
+    }
+    return true;
+  }).run();
+}
+
+function openInlineImagePicker() {
+  inlineImageInput.value?.click();
+}
+
+function onInlineImageInputChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  try {
+    if (files.length > 0) {
+      insertRegisteredImages(files, "선택한 이미지");
+    }
+  } finally {
+    input.value = "";
+    if (files.length > 0 && document.activeElement === input) {
+      editor.value?.chain().focus().run();
+    }
+  }
 }
 
 const editor = useEditor({
@@ -53,10 +127,9 @@ const editor = useEditor({
       "aria-label": props.ariaLabel,
       "aria-multiline": "true"
     },
-    handlePaste: (view, event) => {
-      const register = props.registerPastedImages;
+    handlePaste: (_view, event) => {
       const clipboard = readClipboardImageFiles(event.clipboardData);
-      if (!clipboard.hasImage || !register) {
+      if (!clipboard.hasImage || !props.registerInlineImages) {
         return false;
       }
       event.preventDefault();
@@ -64,46 +137,7 @@ const editor = useEditor({
         emit("inline-image-error", UNSUPPORTED_INLINE_IMAGE_MESSAGE);
         return true;
       }
-      const activeCount = collectInlineImageKeys(view.state.doc.toJSON()).length;
-      if (activeCount + clipboard.files.length > props.maxActiveInlineImages) {
-        emit("inline-image-error", INLINE_IMAGE_ATTACHMENT_COUNT_MESSAGE);
-        return true;
-      }
-      const result = register(clipboard.files);
-      if (result.error) {
-        emit("inline-image-error", result.error);
-        return true;
-      }
-      if (result.entries.length === 0) {
-        return true;
-      }
-      const lastKey = result.entries[result.entries.length - 1].imageKey;
-      editor.value?.chain().focus().insertContent(
-        result.entries.map((entry) => ({
-          type: "inlineAttachmentImage",
-          attrs: { imageKey: entry.imageKey, alt: "붙여넣은 이미지" }
-        }))
-      ).command(({ tr, state }) => {
-        let nodeEnd = -1;
-        tr.doc.descendants((node, pos) => {
-          if (node.type.name === "inlineAttachmentImage" && node.attrs.imageKey === lastKey) {
-            nodeEnd = pos + node.nodeSize;
-            return false;
-          }
-          return true;
-        });
-        if (nodeEnd < 0) {
-          return true;
-        }
-        const next = tr.doc.resolve(nodeEnd).nodeAfter;
-        if (next?.isTextblock) {
-          tr.setSelection(TextSelection.create(tr.doc, nodeEnd + 1));
-        } else {
-          tr.insert(nodeEnd, state.schema.nodes.paragraph.create());
-          tr.setSelection(TextSelection.create(tr.doc, nodeEnd + 1));
-        }
-        return true;
-      }).run();
+      insertRegisteredImages(clipboard.files, "붙여넣은 이미지");
       return true;
     }
   },
@@ -129,10 +163,55 @@ watch(
 </script>
 
 <template>
+  <div v-if="registerInlineImages" class="post-document-editor-toolbar">
+    <input
+      ref="inlineImageInput"
+      class="post-document-editor-file-input"
+      type="file"
+      accept="image/png,image/jpeg"
+      multiple
+      tabindex="-1"
+      aria-label="본문 이미지 파일 선택"
+      aria-hidden="true"
+      @change="onInlineImageInputChange"
+    />
+    <button type="button" class="ghost-button" :disabled="maxActiveInlineImages <= 0" @click="openInlineImagePicker">
+      본문 이미지 추가
+    </button>
+  </div>
   <EditorContent :editor="editor" />
 </template>
 
 <style scoped>
+.post-document-editor-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.post-document-editor-toolbar .ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.post-document-editor-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .post-document-editor-toolbar .ghost-button {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
 :deep(.post-document-editor) {
   min-height: 240px;
   padding: 12px 14px;

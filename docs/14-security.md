@@ -127,11 +127,11 @@ ZIP 세션 결과 제한:
 
 ## 본문 inline 이미지
 
-게시글 본문에 붙여넣은 이미지는 일반 첨부와 같은 volume·삭제 생명주기를 사용하지만 검증과 응답 계약이 다릅니다. 검증은 모두 저장 전에 끝나며, 실패하면 파일·DB 변경이 없습니다.
+게시글 본문에 추가한 이미지는 일반 첨부와 같은 volume·삭제 생명주기를 사용하지만 검증과 응답 계약이 다릅니다. 검증은 모두 저장 전에 끝나며, 실패하면 파일·DB 변경이 없습니다.
 
 파일 검증:
 
-- 브라우저가 보낸 MIME과 확장자를 신뢰하지 않습니다. 붙여넣기 시 `image/png`/`image/jpeg`만 허용하는 것은 UX 필터이며(`front/composables/useInlineImageDraft.ts`), 서버는 `InlineImageValidator`가 `ImageIO` reader의 실제 format name으로 PNG/JPEG를 판정합니다. 판정한 형식으로 `content_type`을 덮어쓰고, 파일명은 표시용으로만 쓰며 저장명은 기존 UUID 방식을 유지합니다.
+- 브라우저가 보낸 MIME과 확장자를 신뢰하지 않습니다. 붙여넣기·파일 선택 시 `image/png`/`image/jpeg`만 허용하는 것은 UX 필터이며(`front/composables/useInlineImageDraft.ts`), 서버는 `InlineImageValidator`가 `ImageIO` reader의 실제 format name으로 PNG/JPEG를 판정합니다. 판정한 형식으로 `content_type`을 덮어쓰고, 파일명은 표시용으로만 쓰며 저장명은 기존 UUID 방식을 유지합니다.
 - 너비·높이·pixel 한도를 먼저 확인한 뒤 `ImageReader.read(0)`으로 payload 전체를 decode합니다. header만 남은 손상 PNG/JPEG도 저장 전에 거부됩니다.
 - 형식·손상·빈 파일은 400 `INVALID_ATTACHMENT_REQUEST`, 크기 초과는 413 `ATTACHMENT_TOO_LARGE`입니다.
 

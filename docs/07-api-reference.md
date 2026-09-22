@@ -287,7 +287,7 @@ rich 글의 본문 필드 예시:
 ```json
 {
   "id": 11,
-  "originalFilename": "pasted-image-1758412800000-b1e09b73.png",
+  "originalFilename": "inline-image-1758412800000-b1e09b73.png",
   "size": 20480,
   "contentType": "image/png",
   "attachmentKind": "INLINE_IMAGE",
@@ -315,7 +315,7 @@ rich 글의 본문 필드 예시:
 
 ### rich 본문 형식과 inline 이미지 (생성·수정 공통)
 
-게시글 생성·수정 multipart에서 본문 형식을 지정하고, 편집기에 붙여넣은 본문 이미지를 같은 요청으로 전송할 수 있습니다. 기존 plain 요청 필드는 그대로 유지됩니다.
+게시글 생성·수정 multipart에서 본문 형식을 지정하고, 편집기에 붙여넣거나 파일 선택으로 추가한 본문 이미지를 같은 요청으로 전송할 수 있습니다. 기존 plain 요청 필드는 그대로 유지됩니다.
 
 | 필드 | 형식 | 규칙 |
 | --- | --- | --- |
@@ -367,7 +367,7 @@ Content-Type: `multipart/form-data`
 | `inlineImageManifestBase64` | 아니오 | 신규 inline 이미지가 있을 때 필수인 manifest(위 "rich 본문 형식과 inline 이미지" 참조) |
 | `inlineImages` | 아니오 | 본문 이미지 파일. 같은 이름으로 여러 개 전송 |
 | `mode` | 아니오 | 기본 `NORMAL`. 수동 `FILE_CONVERSION_REQUEST` 생성은 거부 |
-| `attachments` | 아니오 | 첨부파일. 같은 이름 `attachments`로 여러 개 전송 가능(일반 첨부 + inline 이미지 합계 최대 5개, 파일당 100MB) |
+| `attachments` | 아니오 | 첨부파일. 같은 이름 `attachments`로 여러 개 전송 가능(일반 첨부 파일당 100MB, 본문 이미지 포함 합계 최대 5개) |
 
 응답: 게시글 상세(`authorUserId`는 계정 ID, `authorUsername`은 작성 시점의 표시 이름), HTTP 201
 

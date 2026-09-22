@@ -108,7 +108,7 @@ test('createUuidV4 prefers randomUUID and falls back to RFC 4122 getRandomValues
   assert.match(deterministic, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
-test('declined confirmation creates nothing; accepted files get pasted-image names', () => {
+test('declined confirmation creates nothing; accepted files get inline-image names', () => {
   const mod = draftModule();
   const { draft, urls } = makeDraft(mod, { confirmUpload: () => false });
   const declined = draft.register([fakeFile('a.png', 10, 'image/png')]);
@@ -125,11 +125,11 @@ test('declined confirmation creates nothing; accepted files get pasted-image nam
   assert.equal(result.error, null);
   assert.equal(result.entries.length, 2);
   assert.equal(result.entries[0].imageKey, K_A);
-  assert.equal(result.entries[0].file.name, 'pasted-image-1700000000123-aaaaaaaa.png');
+  assert.equal(result.entries[0].file.name, 'inline-image-1700000000123-aaaaaaaa.png');
   assert.equal(result.entries[0].file.size, 10);
   assert.equal(result.entries[0].file.type, 'image/png');
   assert.equal(result.entries[0].file.lastModified, 777);
-  assert.equal(result.entries[1].file.name, 'pasted-image-1700000000123-bbbbbbbb.jpg');
+  assert.equal(result.entries[1].file.name, 'inline-image-1700000000123-bbbbbbbb.jpg');
   assert.equal(result.entries[1].file.type, 'image/jpeg');
   assert.deepEqual(accepted.urls, [result.entries[0].objectUrl, result.entries[1].objectUrl]);
 });
@@ -161,7 +161,7 @@ test('per-file size boundary accepts 10MiB and rejects anything above', () => {
   assert.equal(accepted.error, null);
   assert.equal(accepted.entries.length, 2);
   const rejected = draft.register([fakeFile('over.png', max + 1, 'image/png')]);
-  assert.equal(rejected.error, '본문 이미지는 파일당 최대 10MB까지 붙여넣을 수 있습니다.');
+  assert.equal(rejected.error, '본문 이미지는 파일당 최대 10MB까지 추가할 수 있습니다.');
   assert.equal(rejected.entries.length, 0);
   assert.equal(draft.entries.value.length, 2);
 });
@@ -173,7 +173,7 @@ test('registry limits enforce 20 entries and 100MiB total without real allocatio
   assert.equal(countDraft.draft.register(twenty).error, null);
   assert.equal(countDraft.draft.entries.value.length, 20);
   const overflow = countDraft.draft.register([fakeFile('x.png', 1, 'image/png')]);
-  assert.equal(overflow.error, '붙여넣은 이미지는 편집 세션당 최대 20개까지 보관할 수 있습니다. 글을 저장하거나 편집을 취소한 뒤 다시 시도해 주세요.');
+  assert.equal(overflow.error, '본문 이미지는 편집 세션당 최대 20개까지 보관할 수 있습니다. 글을 저장하거나 편집을 취소한 뒤 다시 시도해 주세요.');
   assert.equal(overflow.entries.length, 0);
 
   const bytesDraft = makeDraft(mod);
@@ -182,7 +182,7 @@ test('registry limits enforce 20 entries and 100MiB total without real allocatio
   assert.equal(bytesDraft.draft.register(hundred).error, null);
   assert.equal(bytesDraft.draft.totalBytes.value, 100 * mib);
   const tooLarge = bytesDraft.draft.register([fakeFile('tiny.png', 1, 'image/png')]);
-  assert.equal(tooLarge.error, '붙여넣은 이미지 임시 보관 용량은 최대 100MB입니다. 글을 저장하거나 편집을 취소한 뒤 다시 시도해 주세요.');
+  assert.equal(tooLarge.error, '본문 이미지 임시 보관 용량은 최대 100MB입니다. 글을 저장하거나 편집을 취소한 뒤 다시 시도해 주세요.');
   assert.equal(tooLarge.entries.length, 0);
 });
 
@@ -206,7 +206,7 @@ test('buildUploads follows document order, keeps deleted pending entries, and re
   assert.deepEqual(clone(draft.buildUploads(ordered).inlineImages).map(upload => upload.imageKey), [K_B, K_A]);
 
   const missing = draft.buildUploads({ type: 'doc', content: [imageNode(K_C)] });
-  assert.equal(missing.error, '본문 이미지 임시 파일을 찾을 수 없습니다. 이미지를 다시 붙여넣어 주세요.');
+  assert.equal(missing.error, '본문 이미지 임시 파일을 찾을 수 없습니다. 이미지를 다시 추가해 주세요.');
   assert.equal(missing.inlineImages.length, 0);
 });
 
@@ -231,7 +231,7 @@ test('buildUploads retains existing keys without uploads and still rejects unkno
   assert.equal(draft.entries.value.length, 2);
 
   const unknown = draft.buildUploads({ type: 'doc', content: [imageNode(K_D)] }, [K_C]);
-  assert.equal(unknown.error, '본문 이미지 임시 파일을 찾을 수 없습니다. 이미지를 다시 붙여넣어 주세요.');
+  assert.equal(unknown.error, '본문 이미지 임시 파일을 찾을 수 없습니다. 이미지를 다시 추가해 주세요.');
   assert.equal(unknown.inlineImages.length, 0);
 });
 
@@ -293,4 +293,40 @@ test('collectInlineImageKeys walks nested content in document order and rejects 
   assert.equal(collectInlineImageKeys({ type: 'doc', content: [{ type: 'video' }] }).length, 0);
   assert.equal(collectInlineImageKeys(null).length, 0);
   assert.equal(collectInlineImageKeys('text').length, 0);
+});
+
+test('resolveInlineImageType normalizes MIME aliases and falls back to PNG/JPEG extensions', () => {
+  const { resolveInlineImageType } = draftModule();
+  assert.equal(resolveInlineImageType(fakeFile('a.png', 1, 'image/png')), 'image/png');
+  assert.equal(resolveInlineImageType(fakeFile('a.jpg', 1, 'image/jpeg')), 'image/jpeg');
+  assert.equal(resolveInlineImageType(fakeFile('a.jpg', 1, 'image/jpg')), 'image/jpeg');
+  assert.equal(resolveInlineImageType(fakeFile('a.jpg', 1, 'image/pjpeg')), 'image/jpeg');
+  assert.equal(resolveInlineImageType(fakeFile('a.png', 1, 'image/x-png')), 'image/png');
+  assert.equal(resolveInlineImageType(fakeFile('shot.PNG', 1, '')), 'image/png');
+  assert.equal(resolveInlineImageType(fakeFile('photo.JPG', 1, '')), 'image/jpeg');
+  assert.equal(resolveInlineImageType(fakeFile('photo.jpeg', 1, 'application/octet-stream')), 'image/jpeg');
+  assert.equal(resolveInlineImageType(fakeFile('anim.gif', 1, 'image/gif')), null);
+  assert.equal(resolveInlineImageType(fakeFile('anim.gif', 1, '')), null);
+  assert.equal(resolveInlineImageType(fakeFile('noext', 1, '')), null);
+  assert.equal(resolveInlineImageType(fakeFile('g.png.exe', 1, '')), null);
+});
+
+test('register accepts MIME alias and extension fallback files with normalized names', () => {
+  const mod = draftModule();
+  const alias = makeDraft(mod).draft.register([fakeFile('photo.JPG', 20, 'image/jpg')]);
+  assert.equal(alias.error, null);
+  assert.ok(alias.entries[0].file.name.endsWith('.jpg'));
+
+  const fallback = makeDraft(mod).draft.register([fakeFile('shot.PNG', 10, '')]);
+  assert.equal(fallback.error, null);
+  assert.ok(fallback.entries[0].file.name.endsWith('.png'));
+});
+
+test('register rejects unsupported image types with the shared PNG/JPEG message', () => {
+  const mod = draftModule();
+  const { draft } = makeDraft(mod);
+  const rejected = draft.register([fakeFile('anim.gif', 5, 'image/gif')]);
+  assert.equal(rejected.error, '본문 이미지는 PNG 또는 JPEG 파일만 추가할 수 있습니다.');
+  assert.equal(rejected.entries.length, 0);
+  assert.equal(draft.entries.value.length, 0);
 });

@@ -49,7 +49,7 @@ const keptDownloadCount = computed(() =>
 const activeInlineImageCount = computed(() =>
   collectInlineImageKeys(detail.postEditForm.bodyDocument).length
 );
-const inlineImagePasteCapacity = computed(() =>
+const inlineImageSlotCapacity = computed(() =>
   Math.max(MAX_ATTACHMENTS - keptDownloadCount.value - detail.postEditAttachmentFiles.length, 0)
 );
 const combinedAttachmentCount = computed(() =>
@@ -64,7 +64,7 @@ function onInlineImageError(message: string) {
   detail.postActionError = message;
 }
 
-function registerPastedImages(files: readonly File[]): InlineImageDraftRegistrationResult {
+function registerInlineImages(files: readonly File[]): InlineImageDraftRegistrationResult {
   const result = inlineDraft.register(files);
   if (!result.error && result.entries.length > 0) {
     detail.postActionError = "";
@@ -108,8 +108,8 @@ onBeforeUnmount(() => {
       <PostDocumentEditor
         v-model="detail.postEditForm.bodyDocument"
         :inline-sources="inlineSources"
-        :register-pasted-images="registerPastedImages"
-        :max-active-inline-images="inlineImagePasteCapacity"
+        :register-inline-images="registerInlineImages"
+        :max-active-inline-images="inlineImageSlotCapacity"
         @inline-image-error="onInlineImageError"
       />
     </div>
@@ -172,7 +172,7 @@ onBeforeUnmount(() => {
       </li>
     </ul>
 
-    <p v-if="detail.postActionError" class="panel-error">{{ detail.postActionError }}</p>
+    <p v-if="detail.postActionError" class="panel-error" role="alert">{{ detail.postActionError }}</p>
     <div class="action-form-actions">
       <button type="submit" class="ghost-button" :disabled="detail.submitting">게시글 수정</button>
       <button type="button" class="ghost-button" @click="onCancel">취소</button>

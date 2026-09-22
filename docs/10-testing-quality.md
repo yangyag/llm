@@ -116,7 +116,7 @@ Remove-Item Env:LLM_TEST_POSTGRES_URL
 | DB migration | 백엔드 테스트와 실제 PostgreSQL 연결 검증. 루트 compose에는 PostgreSQL 서비스가 없으므로 로컬/EC2의 외부 DB 또는 별도 PostgreSQL을 준비 |
 | 프론트 UI/API client | `cd front && npm test && npm run typecheck && npm run build` |
 | rich 본문·inline 이미지 backend 계약 | `cd back && .\gradlew.bat '-Porg.gradle.java.installations.paths=<JAVA_25_HOME>' clean test`와 focused PostgreSQL(`PostgresMigrationTest`, `PostgresUploadFinalizeTest`, `PostgresInlineImageLifecycleTest`), content endpoint header·bytes 확인 |
-| rich 본문·inline 이미지 frontend UI | `cd front && npm test && npm run typecheck && npm run build` 후 paste/create/edit/delete 브라우저 자동화 smoke |
+| rich 본문·inline 이미지 frontend UI | `cd front && npm test && npm run typecheck && npm run build` 후 붙여넣기·파일 선택을 포함한 paste/create/edit/delete 브라우저 자동화 smoke |
 | Dockerfile/compose | 프론트는 `cd front && npm run build` 후 `docker compose --profile build build front-build`. 백엔드는 `build back-build`. 이어서 `docker compose up -d --wait` |
 | EC2 배포 절차 | `auto_default` 존재와 `docker compose --project-name ubuntu --env-file .env -f docker-compose.yml config --quiet`를 확인하고 Compose pull/up/ps 및 8083 health 경로 검증 |
 | 운영 env 변경 | 컨테이너 재기동, `docker inspect`, health, 기능 smoke test |
@@ -157,15 +157,15 @@ paste/create/edit/delete 최종 smoke 절차:
 2. 텍스트-이미지-텍스트 글 생성
 3. 로그인 상세·공개 상세 조회
 4. content endpoint headers·bytes 확인
-5. 기존 이미지 1개 삭제, 신규 이미지 1개 추가 수정
+5. 기존 이미지 1개 삭제, 신규 이미지 2개 추가 수정(붙여넣기 1건 + "본문 이미지 추가" 버튼 파일 선택 1건)
 6. 새로고침 후 순서·이미지 유지 확인
 7. 일반 첨부 다운로드 유지 확인
 8. `FILE_CONVERSION_REQUEST` ZIP 조회·다운로드 회귀 확인
 9. 삭제 후 metadata와 삭제 대기열·실파일 상태 확인
 
-등록 전 create 요청 0건, 붙여넣기 직후 `blob:` 표시, 저장 실패 시 편집 상태·blob 유지 후 재시도, 저장 성공·정상 이탈·unmount 시 object URL 정확히 1회 해제가 함께 assertion 대상입니다. content endpoint headers·bytes와 DB metadata, 삭제 대기열·실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit이나 직접 HTTP·PostgreSQL 검증으로 보완하고 Playwright 결과와 구분해 기록합니다. 이 기능의 완료 조건은 8083 경유 health와 이 paste/create/edit/delete smoke 통과입니다.
+등록 전 create 요청 0건, 붙여넣기 직후 `blob:` 표시, 저장 실패 시 편집 상태·blob 유지 후 재시도, 저장 성공·정상 이탈·unmount 시 object URL 정확히 1회 해제가 함께 assertion 대상입니다. content endpoint headers·bytes와 DB metadata, 삭제 대기열·실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit이나 직접 HTTP·PostgreSQL 검증으로 보완하고 Playwright 결과와 구분해 기록합니다. 이 기능의 완료 조건은 8083 경유 health와 이 paste/create/edit/delete smoke 통과입니다. 파일 선택 버튼으로 추가하는 경로는 같은 등록·삽입 로직을 공유하지만, 브라우저 smoke 재실행 전이므로 아직 미검증으로 기록합니다.
 
-2026-09-22 최종 통합 결과: 현재 소스로 재빌드한 이미지로 compose 스택을 기동해 8083 경유 HTTP smoke 38/38 통과, Playwright 최종 browser smoke 112/112 assertion 통과(disposable PostgreSQL·로컬 8082/5174, console error·page error·예상 외 4xx·5xx 0건)를 확인했습니다.
+2026-09-22 최종 통합 결과: 현재 소스로 재빌드한 이미지로 compose 스택을 기동해 8083 경유 HTTP smoke 38/38 통과, Playwright 최종 browser smoke 112/112 assertion 통과(disposable PostgreSQL·로컬 8082/5174, console error·page error·예상 외 4xx·5xx 0건)를 확인했습니다(파일 선택 버튼 도입 이전 실행).
 
 ## 실패 분석 기준
 
