@@ -56,6 +56,8 @@ llm-back          llm-back:1.0               healthy  8080/tcp
 yangyag-postgres  postgres:18                healthy  127.0.0.1:5432->5432/tcp
 ```
 
+2026-09-22 KST rich 본문·inline 이미지 배포 후 확인도 위와 같은 3개 컨테이너가 healthy였고, 운영 `llm.flyway_schema_history`는 V1~V19가 모두 success입니다.
+
 이전 확인(2026-05-31 KST)도 동일한 3개 컨테이너였습니다.
 
 백엔드는 호스트 8080에 직접 공개되지 않습니다. 헬스체크는 front proxy를 경유합니다.
@@ -178,6 +180,14 @@ V19 rich 본문·inline 이미지가 들어간 배포는 backend를 먼저, fron
 - 배포 전 이전 backend/front 이미지 식별자를 기록해 복구할 수 있게 합니다.
 - 구형 front로 롤백하면 rich 글은 추출 평문으로 표시되고 inline 이미지는 일반 다운로드 카드로 보일 수 있습니다.
 - rich 글 생성 후 이전 backend로 롤백하면 구형 backend가 `body`만 수정하고 알지 못하는 `body_format`·`body_document`는 그대로 남아 새 backend 복구 후 편집 내용이 어긋날 수 있습니다. 이전 backend 사용 중에는 게시글 쓰기를 중지하고 새 backend 복구를 우선합니다.
+
+### 배포 실행 기록 (2026-09-22 KST)
+
+1. 배포 전 운영 Flyway history(V1~V18, description·success)와 로컬 migration 파일이 일치함을 확인했습니다. 새 backend 기동 시 V19 `add rich post and inline attachment metadata`만 추가 적용됐습니다.
+2. backend를 먼저 배포했습니다. `llm-back`은 healthy, `curl -fsS http://127.0.0.1:8083/api/v1/health`는 `{"status":"UP"}`였고, 구형 front 이미지 상태에서 목록·상세 API 응답을 확인했습니다.
+3. front를 배포했습니다. `llm-front`는 healthy이고 배포된 `_nuxt` 자산 목록이 로컬 build 산출물과 동일함을 확인했습니다.
+4. 읽기 전용 smoke: 기존 `FILE_CONVERSION_REQUEST` 글 상세가 `bodyFormat=PLAIN_TEXT`·`bodyDocument=null`, 첨부가 `DOWNLOAD`(`inlineKey`·`contentUrl` null)로 응답했고, zip 다운로드가 `200`·`application/zip`·`Content-Disposition: attachment`(15,317,873 bytes)로 유지됐습니다. `DOWNLOAD` 첨부의 content endpoint는 `404`입니다. 작성·수정 smoke는 운영 계정으로 사용자가 브라우저에서 직접 확인합니다.
+5. 롤백 기준: 배포 전 이미지 `llm-back 9b638c09…`·`llm-front 31d86731…`을 EC2에서 각각 `llm-back:rollback-20260908`·`llm-front:rollback-20260905` 태그로 보존했습니다. 롤백 시 해당 태그를 `llm-back:1.0`/`llm-front:1.0`으로 다시 태그하고 compose를 재기동합니다.
 
 ## Flyway 마이그레이션 주의 (V13 이력 충돌)
 
