@@ -65,12 +65,14 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 | `ExternalAiReplyGeneratorDefaultsTest` | 1 | legacy AI provider 기본값 및 종료된 기능의 잔재 |
 | `ApplicationModulesDiagnosticTest` | 1 | Spring Modulith 모듈 경계·순환·내부 접근·허용 의존 strict verification |
 | `GeneratedAttachmentPolicyTest` | 3 | board 공개 생성 첨부 크기 정책과 제한 경계 |
+| `HttpRequestLimitsTest` | 5 | 실제 내장 Tomcat(RANDOM_PORT)에서 405 `METHOD_NOT_ALLOWED`+`Allow`, 415 `UNSUPPORTED_MEDIA_TYPE`, 깨진 multipart 400, Tomcat 기본 2MB를 넘는 rich 본문 201, 텍스트 필드 8MB 초과 413 |
+| `UploadSessionChunkWireLimitTest` | 3 | 암호화 청크 JSON 필드의 Jackson 문자열 한도에서 계산한 최대 청크(11,249,976바이트) 왕복 성공과 다음 크기 거부, 설정값 상한 적용 |
 | `SecurityAndStorageRegressionTest` | 10 | 삭제 계정 쓰기·업로드 차단, username 재사용 시 토큰/소유권 분리, 일반·inline 첨부 rollback 정리와 커밋 후 삭제 재시도, 긴 ZIP 제목 |
 | `PostgresMigrationTest` | 1 | V1~V16 적용 후 V17~V19 3개 upgrade, 소유권 백필, 삭제 FK, V19 기본값·check·partial unique, Hibernate validate |
 | `PostgresUploadFinalizeTest` | 3 | disposable PostgreSQL finalize transaction rollback·commit failure와 파일 정리 |
 | `PostgresInlineImageLifecycleTest` | 4 | disposable PostgreSQL에서 레거시 plain fixture 조회, rich 글 생성·수정·삭제, rollback 파일 정리, 커밋 후 삭제 실패·재시도 |
 
-정적 합계는 193건이며, 조건부 PostgreSQL 메서드 8건(`PostgresMigrationTest` 1건, `PostgresUploadFinalizeTest` 3건, `PostgresInlineImageLifecycleTest` 4건)은 `LLM_TEST_POSTGRES_URL`이 있을 때만 실행됩니다. 최신 전체 실행(2026-09-22, disposable `postgres:18` PostgreSQL 18.6)은 `clean test` 193건 발견·193건 통과·skip 0·실패 0·오류 0입니다. 같은 날 `LLM_TEST_POSTGRES_URL` 없이 실행한 표준 `clean test`는 193건 발견·185건 통과·조건부 8건 skip·실패 0·오류 0입니다.
+정적 합계는 201건이며, 조건부 PostgreSQL 메서드 8건(`PostgresMigrationTest` 1건, `PostgresUploadFinalizeTest` 3건, `PostgresInlineImageLifecycleTest` 4건)은 `LLM_TEST_POSTGRES_URL`이 있을 때만 실행됩니다. 최신 실행(2026-09-25): 표준 `clean test` 201건 발견·193건 통과·조건부 8건 skip·실패 0·오류 0, 같은 날 disposable `postgres:18`로 실행한 조건부 8건 모두 통과. 이전 기록(2026-09-22): 193건 발견·193건 통과(disposable `postgres:18` PostgreSQL 18.6).
 
 ## 프론트 테스트 구성
 
@@ -167,6 +169,8 @@ paste/create/edit/delete 최종 smoke 절차:
 등록 전 create 요청 0건, 붙여넣기 직후 `blob:` 표시, 저장 실패 시 편집 상태·blob 유지 후 재시도, 저장 성공·정상 이탈·unmount 시 object URL 정확히 1회 해제가 함께 assertion 대상입니다. content endpoint headers·bytes와 DB metadata, 삭제 대기열·실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit이나 직접 HTTP·PostgreSQL 검증으로 보완하고 Playwright 결과와 구분해 기록합니다. 이 기능의 완료 조건은 8083 경유 health와 이 paste/create/edit/delete smoke 통과입니다. 파일 선택 버튼으로 추가하는 경로는 같은 등록·삽입 로직을 공유하며, 2026-09-25 사용자 수동 확인에서 정상 동작했습니다. 이 경로의 Playwright 자동화 smoke는 아직 재실행하지 않았습니다.
 
 2026-09-25 편집기 정규화 확인: disposable `postgres:18`과 로컬 8082/5174에서 내장 브라우저로 `0. ` 입력, `<ol type="a">` 붙여넣기, 편집기 안 이미지 복사·붙여넣기(중복 제외 안내, 원본 유지) 후 새 글 등록과 수정 저장을 수행하고, API로 저장된 본문(번호 목록 `start=1`/`type=null`, 이후 입력 문장, inline 이미지 1개)을 확인했습니다. console error 0건. 붙여넣기는 합성 `ClipboardEvent`로 수행했고 OS 클립보드는 거치지 않았습니다.
+
+2026-09-25 요청 한도·오류 응답 확인: disposable `postgres:18`, 로컬 8082(`APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE=100MB`로 기동해 11,249,976바이트 상한 경고 확인)와 5174에서 수행했습니다. `upload_zip_post.py`로 최대 청크(`--chunk-size-base64-chars 14999968`) 25MB ZIP 3청크 업로드·finalize 성공, 한 단계 큰 청크(14999972)는 세션 생성에서 400, 기본 청크 3MB ZIP 업로드 성공을 확인했습니다. 내장 브라우저에서 두 ZIP 다운로드 SHA-256이 원본과 일치했고, 글쓰기 화면에서 90만 자 본문(Base64 약 3.67MB) 등록이 201로 성공했으며, 405(`Allow: POST, GET`)·415·깨진 multipart 400을 확인했습니다. 백엔드 로그 오류 0건.
 
 2026-09-22 최종 통합 결과: 현재 소스로 재빌드한 이미지로 compose 스택을 기동해 8083 경유 HTTP smoke 38/38 통과, Playwright 최종 browser smoke 112/112 assertion 통과(disposable PostgreSQL·로컬 8082/5174, console error·page error·예상 외 4xx·5xx 0건)를 확인했습니다(파일 선택 버튼 도입 이전 실행).
 

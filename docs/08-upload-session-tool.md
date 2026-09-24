@@ -72,7 +72,8 @@ LLM_UPLOAD_CHUNK_SIZE_BASE64_CHARS=1398104
 
 - `chunkSizeBase64Chars`는 4의 배수여야 합니다.
 - `totalChunks`는 `fileSizeBytes`와 `chunkSizeBase64Chars`로 계산한 값과 같아야 합니다.
-- decode 후 chunk 크기는 `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE` 이하이어야 합니다.
+- decode 후 chunk 크기는 `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE`(기본 `8MB`) 이하이어야 합니다. 세션 생성 단계에서 검사하므로 너무 큰 청크 크기는 청크를 올리기 전에 400 `INVALID_UPLOAD_SESSION_REQUEST`로 거부됩니다.
+- 이 설정과 무관한 전송 상한이 있습니다. 청크는 암호화된 JSON 문자열 필드(`A11`) 하나로 전송되고 Jackson 기본 문자열 길이 한도는 2천만 자이므로, decode 후 11,249,976바이트(`--chunk-size-base64-chars` 14,999,968)가 최대입니다. 설정값이 이보다 크면 백엔드가 기동 시 경고를 남기고 이 값으로 낮춥니다. 2026-09-25 이전에는 이 상한을 넘는 청크 크기로도 세션이 만들어진 뒤 모든 청크 업로드가 400으로 실패했습니다.
 - 최종 파일 크기는 `APP_ATTACHMENTS_MAX_GENERATED_FILE_SIZE` 이하이어야 합니다.
 
 ## 암호화 wire format

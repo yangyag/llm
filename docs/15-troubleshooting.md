@@ -221,6 +221,7 @@ docker logs --tail 100 llm-back
 
 - `APP_ATTACHMENTS_MAX_FILE_SIZE`(파일당) 초과 → 413 `ATTACHMENT_TOO_LARGE`
 - `APP_ATTACHMENTS_MAX_REQUEST_SIZE`(여러 첨부 합산) 또는 nginx `client_max_body_size` 초과 → 413
+- 파일이 아닌 텍스트 필드(본문 Base64 등) 합계가 `server.tomcat.max-http-form-post-size`(8MB) 초과 → 413 `ATTACHMENT_TOO_LARGE`. 첨부가 없어도 본문이 매우 길면 발생합니다(docs/05).
 - 첨부 개수가 `APP_ATTACHMENTS_MAX_COUNT`(기본 5)를 초과 → 400 `INVALID_ATTACHMENT_REQUEST`
 - `removeAttachmentIds`에 해당 게시글 첨부가 아닌 id 포함 → 400 `INVALID_ATTACHMENT_REQUEST`
 - attachment volume 쓰기 권한 또는 용량 문제
@@ -244,6 +245,7 @@ docker volume ls | grep llm-back-attachments
 - 세션 만료
 - secret 불일치
 - `APP_ATTACHMENTS_MAX_GENERATED_FILE_SIZE` 초과
+- 세션 생성 시 `decoded chunk size exceeds the upload session size limit`: 청크가 `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE`(기본 8MB) 또는 전송 상한 11,249,976바이트를 넘음. `--chunk-size-base64-chars`를 줄입니다(기본값 1398104 권장, docs/08).
 - `APP_UPLOAD_SESSIONS_ROOT_PATH` 미설정으로 예상한 volume이 아닌 JVM temp 경로를 사용하는 상황
 
 대응:

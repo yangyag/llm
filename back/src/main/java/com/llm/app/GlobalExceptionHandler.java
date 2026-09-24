@@ -30,19 +30,25 @@ import com.llm.app.upload.exception.UploadSessionStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+	private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
 	@ExceptionHandler(ForbiddenException.class)
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleForbidden(
@@ -222,6 +228,8 @@ public class GlobalExceptionHandler {
 		RuntimeException exception,
 		HttpServletRequest request
 	) {
+		// 응답 메시지는 고정 문구라 원인 IOException은 로그로만 남긴다.
+		log.error("Attachment storage failure on {}", request.getRequestURI(), exception);
 		return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "ATTACHMENT_STORAGE_ERROR", exception.getMessage(), request);
 	}
 
@@ -255,21 +263,73 @@ public class GlobalExceptionHandler {
 		return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", exception.getMessage(), request);
 	}
 
+	// 크기 초과(MaxUploadSizeExceededException)는 위의 더 구체적인 처리기가 413으로 받는다.
+	@ExceptionHandler(MultipartException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleMalformedMultipart(
+		MultipartException exception,
+		HttpServletRequest request
+	) {
+		return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "malformed multipart request", request);
+	}
+
 	@ExceptionHandler(Exception.class)
 	public org.springframework.http.ResponseEntity<ErrorResponse> handleUnexpected(
 		Exception exception,
 		HttpServletRequest request
 	) {
-		return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", exception.getMessage(), request);
+		// 405·415·파라미터 누락 등 Spring MVC 예외는 상태 코드를 스스로 알고 있다. 500으로 뭉개지 않는다.
+		if (exception instanceof org.springframework.web.ErrorResponse frameworkError
+			&& frameworkError.getStatusCode().is4xxClientError()) {
+			return buildResponse(
+				frameworkError.getStatusCode(),
+				frameworkErrorCode(frameworkError.getStatusCode()),
+				frameworkErrorMessage(frameworkError),
+				frameworkError.getHeaders(),
+				request
+			);
+		}
+		// Generic message on purpose: raw exception text can carry SQL, paths or class names.
+		log.error("Unexpected error on {} {}", request.getMethod(), request.getRequestURI(), exception);
+		return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "unexpected server error", request);
+	}
+
+	private static String frameworkErrorCode(HttpStatusCode status) {
+		return switch (status.value()) {
+			case 404 -> "NOT_FOUND";
+			case 405 -> "METHOD_NOT_ALLOWED";
+			case 406 -> "NOT_ACCEPTABLE";
+			case 413 -> "ATTACHMENT_TOO_LARGE";
+			case 415 -> "UNSUPPORTED_MEDIA_TYPE";
+			default -> "INVALID_REQUEST";
+		};
+	}
+
+	private static String frameworkErrorMessage(org.springframework.web.ErrorResponse frameworkError) {
+		String detail = frameworkError.getBody().getDetail();
+		if (detail != null && !detail.isBlank()) {
+			return detail;
+		}
+		HttpStatus status = HttpStatus.resolve(frameworkError.getStatusCode().value());
+		return status == null ? "request failed" : status.getReasonPhrase();
 	}
 
 	private org.springframework.http.ResponseEntity<ErrorResponse> buildResponse(
-		HttpStatus status,
+		HttpStatusCode status,
 		String code,
 		String message,
 		HttpServletRequest request
 	) {
+		return buildResponse(status, code, message, new HttpHeaders(), request);
+	}
+
+	private org.springframework.http.ResponseEntity<ErrorResponse> buildResponse(
+		HttpStatusCode status,
+		String code,
+		String message,
+		HttpHeaders headers,
+		HttpServletRequest request
+	) {
 		ErrorResponse body = new ErrorResponse(code, message, Instant.now(), request.getRequestURI());
-		return org.springframework.http.ResponseEntity.status(status).body(body);
+		return org.springframework.http.ResponseEntity.status(status).headers(headers).body(body);
 	}
 }

@@ -1,5 +1,6 @@
 package com.llm.app.upload.service;
 
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.llm.app.upload.exception.UploadSessionChunkTooLargeException;
 import com.llm.app.upload.exception.UploadSessionStorageException;
 import java.io.IOException;
@@ -31,10 +32,34 @@ public class UploadSessionStorageService {
 	 */
 	public UploadSessionStorageService(
 		@Value("${app.upload-sessions.root-path:${java.io.tmpdir}/llm-upload-sessions}") String rootPath,
-		@Value("${app.upload-sessions.max-decoded-chunk-size:100MB}") DataSize maxDecodedChunkSize
+		@Value("${app.upload-sessions.max-decoded-chunk-size:8MB}") DataSize maxDecodedChunkSize
 	) {
 		this.rootPath = Paths.get(rootPath).toAbsolutePath().normalize();
-		this.maxDecodedChunkSizeBytes = maxDecodedChunkSize.toBytes();
+		long transmittable = maxTransmittableDecodedChunkSize(StreamReadConstraints.defaults().getMaxStringLength());
+		if (maxDecodedChunkSize.toBytes() > transmittable) {
+			log.warn(
+				"app.upload-sessions.max-decoded-chunk-size {} exceeds what one encrypted JSON chunk field can carry; using {} bytes",
+				maxDecodedChunkSize,
+				transmittable
+			);
+		}
+		this.maxDecodedChunkSizeBytes = Math.min(maxDecodedChunkSize.toBytes(), transmittable);
+	}
+
+	/**
+	 * 암호화된 청크 필드(A11) 하나가 JSON 문자열 길이 한도 안에 들어가는 최대 decode 크기를 계산한다.
+	 *
+	 * <p>A11은 base64url(패딩 없음) 인코딩한 {@code version(1) + nonce(12) + AES-GCM(JSON 문자열) + tag(16)}이고,
+	 * JSON 문자열은 청크 Base64 앞뒤에 따옴표 2개가 붙는다. 이보다 큰 청크는 컨트롤러가 요청 본문을 읽는
+	 * 단계에서 Jackson {@code StreamReadConstraints}에 걸려 모든 업로드가 400으로 실패한다.</p>
+	 *
+	 * @param maxJsonStringLength JSON 문자열 값의 최대 길이
+	 * @return 전송 가능한 청크의 최대 decode 바이트 수
+	 */
+	static long maxTransmittableDecodedChunkSize(int maxJsonStringLength) {
+		long maxPayloadBytes = (long) maxJsonStringLength * 3 / 4;
+		long maxChunkBase64Chars = maxPayloadBytes - 1 - 12 - 16 - 2;
+		return (maxChunkBase64Chars / 4) * 3;
 	}
 
 	/**

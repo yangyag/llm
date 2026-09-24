@@ -603,7 +603,10 @@ Content-Type: `multipart/form-data`
 | `DUPLICATE_USERNAME` | 409 | 사용자 추가 시 username 중복 |
 | `LAST_ADMIN_PROTECTED` | 409 | 마지막 남은 ADMIN 삭제/강등 불가 |
 | `SELF_DELETE_NOT_ALLOWED` | 409 | 자기 자신의 계정 삭제 불가 |
-| `INVALID_REQUEST` | 400 | validation 또는 JSON parsing 실패 |
+| `INVALID_REQUEST` | 400 | validation 또는 JSON parsing 실패, 형식이 깨진 multipart 요청, 필수 요청 파라미터 누락 |
+| `METHOD_NOT_ALLOWED` | 405 | 해당 경로가 지원하지 않는 HTTP 메서드. `Allow` 헤더로 허용 메서드를 알려줌 |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | 지원하지 않는 Content-Type (예: 게시글 생성·수정에 multipart가 아닌 JSON) |
+| `NOT_ACCEPTABLE` | 406 | 요청한 `Accept` 형식으로 응답할 수 없음 |
 | `INVALID_ENCODED_BODY` | 400 | bodyBase64 decode 실패 |
 | `INVALID_RICH_DOCUMENT` | 400 | rich 문서 검증 실패. `bodyDocumentBase64` decode/JSON/schema/한도 위반, `bodyBase64`와 `bodyDocumentBase64` 동시 전송 |
 | `FILE_CONVERSION_LOCKED` | 403 | 파일 변환 게시글 수정 불가 |
@@ -616,10 +619,10 @@ Content-Type: `multipart/form-data`
 | `AI_PROVIDER_NOT_CONFIGURED` | 503 | provider API key 누락 |
 | `AI_REPLY_GENERATION_FAILED` | 502 | 외부 AI API 호출 실패 |
 | `AI_REPLY_DISABLED` | 410 | AI 답변 기능 종료. 신규 생성 요청 거부 |
-| `ATTACHMENT_TOO_LARGE` | 413 | 일반 첨부파일, inline 이미지 또는 최종 생성 첨부파일 크기 초과 |
+| `ATTACHMENT_TOO_LARGE` | 413 | 일반 첨부파일, inline 이미지 또는 최종 생성 첨부파일 크기 초과. multipart 텍스트 필드(본문 등) 합계가 8MB를 넘어도 같은 코드 |
 | `ATTACHMENT_STORAGE_ERROR` | 500 | 파일 저장/읽기/삭제 실패 |
 | `INVALID_UPLOAD_SESSION_REQUEST` | 400 | 업로드 세션 요청 오류. 청크 크기/번호/해시 불일치 포함 |
 | `UPLOAD_SESSION_STATE_ERROR` | 409 | 만료, 완료, finalizing 상태 오류 |
 | `CONFLICT` | 409 | DB 무결성·동시성 충돌. 응답 메시지는 상세 원인을 노출하지 않음 |
 | `NOT_FOUND` | 404 | 리소스 없음. 다른 글의 첨부, `DOWNLOAD` 첨부의 content 요청 포함 |
-| `INTERNAL_ERROR` | 500 | 예상하지 못한 서버 오류 |
+| `INTERNAL_ERROR` | 500 | 예상하지 못한 서버 오류. 응답 메시지는 고정 문구(`unexpected server error`)이고 원인은 백엔드 로그(`GlobalExceptionHandler`)에 남음 |

@@ -67,6 +67,8 @@ jdbc:postgresql://${APP_DB_HOST}:${APP_DB_PORT}/${APP_DB_NAME}?currentSchema=${A
 
 `APP_ATTACHMENTS_MAX_REQUEST_SIZE`와 front `nginx.conf`의 `client_max_body_size`(현재 `500M`)는 함께 맞춰야 합니다. 둘 중 작은 값이 실효 상한이며, 8083(front proxy) 경유 요청은 nginx 한도를 먼저 거칩니다. nginx 값은 정적 설정이라 키우려면 front 이미지를 다시 빌드해야 합니다.
 
+multipart 요청의 텍스트 필드(파일 제외) 합계는 Tomcat `maxPostSize`가 따로 제한합니다. `application.properties`의 `server.tomcat.max-http-form-post-size=8MB`로 고정되어 있으며 환경 변수는 없습니다. rich 문서 최대 5MiB(Base64 약 7MB)와 plain 본문 100만 자(Base64 최대 약 4MB)가 들어가도록 정한 값입니다. Tomcat 기본값 2MB에서는 한글 약 50만 자 이상의 본문이 413 `ATTACHMENT_TOO_LARGE`로 거부됐습니다(2026-09-25 수정). 본문 codec 한도를 키울 때는 이 값도 함께 맞춥니다.
+
 ## Upload sessions
 
 | 변수 | 기본/예시 | 설명 |
@@ -74,7 +76,7 @@ jdbc:postgresql://${APP_DB_HOST}:${APP_DB_PORT}/${APP_DB_NAME}?currentSchema=${A
 | `APP_UPLOAD_SESSIONS_ROOT_PATH` | `.env.example`/Compose 예시: `/var/lib/llm/upload-sessions` | 청크 임시 저장 루트 |
 | `APP_UPLOAD_SESSIONS_EXPIRATION_MS` | `86400000` | 세션 만료 시간 |
 | `APP_UPLOAD_SESSIONS_CLEANUP_FIXED_DELAY_MS` | `3600000` | 만료 세션 정리 주기 |
-| `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE` | `100MB` | 청크 1개의 decode 후 최대 크기. `.env.example`에 포함되며 백엔드 default도 `100MB` |
+| `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE` | `8MB` | 청크 1개의 decode 후 최대 크기. `.env.example`과 백엔드 default 모두 `8MB`. 암호화 JSON 필드 한도 때문에 실효 상한은 11,249,976바이트(Base64 14,999,968자)이며, 더 큰 값을 설정하면 기동 시 경고를 남기고 이 값으로 낮춘다 |
 | `APP_UPLOAD_SESSIONS_SECRET` | secret | 백엔드 AES-GCM wire codec secret |
 | `LLM_UPLOAD_SESSIONS_SECRET` | secret | 업로드 스크립트 전용 override. 없으면 `APP_UPLOAD_SESSIONS_SECRET` 사용 |
 | `LLM_UPLOAD_CHUNK_SIZE_BASE64_CHARS` | `1398104` | 업로드 스크립트 기본 base64 청크 길이 |
