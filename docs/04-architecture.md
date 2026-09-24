@@ -127,6 +127,7 @@ flowchart LR
 2. `useInlineImageDraft` registry가 파일별로 UUID v4 `imageKey`를 생성하고(`crypto.randomUUID()`, 없으면 `crypto.getRandomValues()`), 파일명을 `inline-image-<timestamp>-<short-id>.png|jpg`로 바꾼 뒤 `blob:` URL을 만듭니다.
 3. NodeView는 canonical 문서가 아니라 registry의 `blob:` URL로 이미지를 표시합니다. canonical 문서에는 `imageKey`와 정규화된 `alt`만 남고 `src`, `data:` URL, 외부 URL은 들어가지 않습니다.
 4. 등록 전에는 서버 요청도 DB 행도 만들지 않습니다. pending registry는 20개·100MB로 제한하고, undo를 위해 문서에서 지운 node의 파일도 편집 세션 동안 유지하되 제출 payload에는 현재 canonical 문서가 참조하는 key만 넣습니다.
+5. 편집기 상태가 canonical 규칙을 벗어나면 v-model이 갱신되지 않으므로, `postDocumentNormalizer.ts` 플러그인이 입력·붙여넣기 직후 바로잡습니다. 번호 목록의 `start`는 1~1,000,000으로 맞추고 `type`은 지웁니다(`0. ` 입력, `<ol type="a">` 붙여넣기). 허용 밖 코드 언어는 지우고, 200자를 넘는 alt는 자르며, 키가 없거나 중복된 이미지는 기존 이미지를 남기고 제외한 뒤 안내합니다(편집기 안 이미지 복사·붙여넣기). 제외한 자리는 빈 문단으로 바꾸고, 사본이 선택돼 있었다면 커서를 그 문단에 두어 다음 입력이 원본 이미지를 덮어쓰지 않게 합니다. 그래도 canonical로 바꿀 수 없으면 오류를 표시하고 저장을 막습니다.
 
 #### 등록 (multipart)
 

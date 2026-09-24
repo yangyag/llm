@@ -22,9 +22,11 @@ const LIST_ITEM_BLOCKS = new Set([
   "inlineAttachmentImage"
 ]);
 const ALLOWED_MARKS = new Set(["bold", "code", "italic", "strike", "underline"]);
-const MAX_ALT_LENGTH = 200;
-const LANGUAGE_PATTERN = /^[A-Za-z0-9_+.#-]{1,50}$/;
-const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+export const MAX_ALT_LENGTH = 200;
+export const MIN_ORDERED_LIST_START = 1;
+export const MAX_ORDERED_LIST_START = 1_000_000;
+export const LANGUAGE_PATTERN = /^[A-Za-z0-9_+.#-]{1,50}$/;
+export const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -187,8 +189,8 @@ function canonicalizeNode(
           if (
             typeof startValue !== "number" ||
             !Number.isInteger(startValue) ||
-            startValue < 1 ||
-            startValue > 1_000_000
+            startValue < MIN_ORDERED_LIST_START ||
+            startValue > MAX_ORDERED_LIST_START
           ) {
             return null;
           }

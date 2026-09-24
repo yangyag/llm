@@ -13,7 +13,13 @@ import {
 } from "~/composables/useInlineImageDraft";
 import type { InlineImageDraftRegistrationResult } from "~/composables/useInlineImageDraft";
 import { InlineAttachmentImage } from "./inlineAttachmentImage";
+import { PostDocumentNormalizer, readNormalizeIssues } from "./postDocumentNormalizer";
 import type { PostDocument } from "~/types/api";
+
+const DUPLICATE_INLINE_IMAGE_MESSAGE = "같은 본문 이미지는 한 번만 넣을 수 있어 중복된 이미지를 제외했습니다.";
+const INVALID_INLINE_IMAGE_MESSAGE = "불러올 수 없는 본문 이미지를 제외했습니다.";
+const UNSAVABLE_DOCUMENT_MESSAGE =
+  "본문에 저장할 수 없는 서식이 있어 마지막 변경이 반영되지 않았습니다. 방금 입력하거나 붙여넣은 내용을 되돌린 뒤 다시 시도해 주세요.";
 
 const props = withDefaults(defineProps<{
   modelValue: PostDocument;
@@ -30,9 +36,19 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   "update:modelValue": [value: PostDocument];
   "inline-image-error": [message: string];
+  "document-error": [message: string];
 }>();
 
 const inlineImageInput = ref<HTMLInputElement | null>(null);
+let documentError = "";
+
+function setDocumentError(message: string): void {
+  if (message === documentError) {
+    return;
+  }
+  documentError = message;
+  emit("document-error", message);
+}
 
 function resolveSource(imageKey: string): string | null {
   const raw = props.inlineSources[imageKey];
@@ -118,7 +134,8 @@ const editor = useEditor({
   editable: true,
   extensions: [
     StarterKit.configure({ link: false }),
-    InlineAttachmentImage.configure({ resolveSource })
+    InlineAttachmentImage.configure({ resolveSource }),
+    PostDocumentNormalizer
   ],
   editorProps: {
     attributes: {
@@ -141,11 +158,23 @@ const editor = useEditor({
       return true;
     }
   },
+  onTransaction: ({ appendedTransactions }) => {
+    const issues = readNormalizeIssues(appendedTransactions);
+    if (issues.includes("duplicate-image")) {
+      emit("inline-image-error", DUPLICATE_INLINE_IMAGE_MESSAGE);
+    } else if (issues.includes("invalid-image")) {
+      emit("inline-image-error", INVALID_INLINE_IMAGE_MESSAGE);
+    }
+  },
   onUpdate: ({ editor: instance }) => {
     const canonical = toCanonicalPostDocument(instance.getJSON());
-    if (canonical) {
-      emit("update:modelValue", canonical);
+    if (!canonical) {
+      // 정규화로도 고치지 못한 상태. 조용히 넘어가면 이후 입력이 저장되지 않으므로 알리고 저장을 막는다.
+      setDocumentError(UNSAVABLE_DOCUMENT_MESSAGE);
+      return;
     }
+    setDocumentError("");
+    emit("update:modelValue", canonical);
   }
 });
 

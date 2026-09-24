@@ -80,10 +80,11 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 | --- | --- | --- |
 | `postDetail.test.cjs` | 16 | Pinia store의 응답 순서 역전·조회 실패·저장 중 이동·ID 불일치·계정 ID 권한 표시, rich 글 생성·수정의 inline pending 업로드 집합·일반 첨부와 합산한 5개 한도·실패 시 초안 유지·업로드 확인 1회 |
 | `postDocument.test.cjs` | 6 | plain 본문의 줄바꿈 보존 변환, canonical serializer의 runtime 속성 제거와 marks 정규화, `bodyFormat` type guard와 plain fallback, inline content URL allowlist와 DOWNLOAD 분리, rich payload Base64 |
-| `inlineImageDraft.test.cjs` | 12 | clipboard PNG/JPEG 추출·텍스트 paste 유지·미지원 형식 표시, UUID v4 fallback, 파일명·10MB 경계, pending registry 20개·100MB, 문서 순서 업로드·기존/예약 key·manifest index, object URL 해제 멱등 |
+| `inlineImageDraft.test.cjs` | 15 | clipboard PNG/JPEG 추출·텍스트 paste 유지·미지원 형식 표시, UUID v4 fallback, 파일명·10MB 경계, MIME 별칭·확장자 fallback, pending registry 20개·100MB, 문서 순서 업로드·기존/예약 key·manifest index, object URL 해제 멱등 |
+| `postDocumentNormalizer.test.cjs` | 9 | 실제 Tiptap 스키마에서 번호 목록 `start`/`type`·코드 언어·긴 alt 정규화, 중복 이미지(기존 이미지 유지)·키 없는 이미지 제외, 선택된 사본 제외 후 커서 위치(원본 이미지 보존), 유일한 자식 제외 시 문서 구조 유지, 정상 입력은 추가 트랜잭션 없음 |
 | `post.test.cjs` | 2 | 일반 첨부 0/1/5 병합 경계와 6번째 절단, 업로드 공개 안내 문구 |
 
-정적 합계는 36건입니다. 2026-09-22 최종 실행에서 `npm test` 36/36 통과(inlineImageDraft 12·postDetail 16·postDocument 6·post 2), `npm run typecheck`·`npm run build` 성공(client module 284개·SSR 1개·route 5개 prerender)을 확인했습니다.
+정적 합계는 48건입니다. 2026-09-25 실행에서 `npm test` 48/48 통과(inlineImageDraft 15·postDetail 16·postDocument 6·postDocumentNormalizer 9·post 2), `npm run typecheck`·`npm run build` 성공을 확인했습니다. 이전 기록: 2026-09-22 `npm test` 36/36 통과, build client module 284개·SSR 1개·route 5개 prerender.
 
 ## 추가 회귀 검증
 
@@ -164,6 +165,8 @@ paste/create/edit/delete 최종 smoke 절차:
 9. 삭제 후 metadata와 삭제 대기열·실파일 상태 확인
 
 등록 전 create 요청 0건, 붙여넣기 직후 `blob:` 표시, 저장 실패 시 편집 상태·blob 유지 후 재시도, 저장 성공·정상 이탈·unmount 시 object URL 정확히 1회 해제가 함께 assertion 대상입니다. content endpoint headers·bytes와 DB metadata, 삭제 대기열·실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit이나 직접 HTTP·PostgreSQL 검증으로 보완하고 Playwright 결과와 구분해 기록합니다. 이 기능의 완료 조건은 8083 경유 health와 이 paste/create/edit/delete smoke 통과입니다. 파일 선택 버튼으로 추가하는 경로는 같은 등록·삽입 로직을 공유하며, 2026-09-25 사용자 수동 확인에서 정상 동작했습니다. 이 경로의 Playwright 자동화 smoke는 아직 재실행하지 않았습니다.
+
+2026-09-25 편집기 정규화 확인: disposable `postgres:18`과 로컬 8082/5174에서 내장 브라우저로 `0. ` 입력, `<ol type="a">` 붙여넣기, 편집기 안 이미지 복사·붙여넣기(중복 제외 안내, 원본 유지) 후 새 글 등록과 수정 저장을 수행하고, API로 저장된 본문(번호 목록 `start=1`/`type=null`, 이후 입력 문장, inline 이미지 1개)을 확인했습니다. console error 0건. 붙여넣기는 합성 `ClipboardEvent`로 수행했고 OS 클립보드는 거치지 않았습니다.
 
 2026-09-22 최종 통합 결과: 현재 소스로 재빌드한 이미지로 compose 스택을 기동해 8083 경유 HTTP smoke 38/38 통과, Playwright 최종 browser smoke 112/112 assertion 통과(disposable PostgreSQL·로컬 8082/5174, console error·page error·예상 외 4xx·5xx 0건)를 확인했습니다(파일 선택 버튼 도입 이전 실행).
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import AttachmentDropzone from "./AttachmentDropzone.vue";
 import PostDocumentEditor from "./PostDocumentEditor.client.vue";
 import { usePostDetailStore } from "~/stores/postDetail";
@@ -41,6 +41,8 @@ const inlineSources = computed(() => ({
   ...existingSources.value,
   ...inlineDraft.inlineSources.value
 }));
+// 편집기 내용이 저장 형식으로 바뀌지 않는 동안에는 이전 본문이 저장되지 않도록 제출을 막는다.
+const documentError = ref("");
 const keptDownloadCount = computed(() =>
   downloadAttachments.value.filter(
     (attachment) => !detail.removeAttachmentIds.has(attachment.id)
@@ -64,6 +66,16 @@ function onInlineImageError(message: string) {
   detail.postActionError = message;
 }
 
+function onDocumentError(message: string) {
+  const previous = documentError.value;
+  documentError.value = message;
+  if (message) {
+    detail.postActionError = message;
+  } else if (detail.postActionError === previous) {
+    detail.postActionError = "";
+  }
+}
+
 function registerInlineImages(files: readonly File[]): InlineImageDraftRegistrationResult {
   const result = inlineDraft.register(files);
   if (!result.error && result.entries.length > 0) {
@@ -73,6 +85,10 @@ function registerInlineImages(files: readonly File[]): InlineImageDraftRegistrat
 }
 
 async function onSubmit() {
+  if (documentError.value) {
+    detail.postActionError = documentError.value;
+    return;
+  }
   const prepared = inlineDraft.buildUploads(
     detail.postEditForm.bodyDocument,
     existingInlineKeys.value
@@ -111,6 +127,7 @@ onBeforeUnmount(() => {
         :register-inline-images="registerInlineImages"
         :max-active-inline-images="inlineImageSlotCapacity"
         @inline-image-error="onInlineImageError"
+        @document-error="onDocumentError"
       />
     </div>
     <p class="section-meta">{{ getPostBodyHelp() }}</p>
