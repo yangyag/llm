@@ -163,7 +163,7 @@ paste/create/edit/delete 최종 smoke 절차:
 8. `FILE_CONVERSION_REQUEST` ZIP 조회·다운로드 회귀 확인
 9. 삭제 후 metadata와 삭제 대기열·실파일 상태 확인
 
-등록 전 create 요청 0건, 붙여넣기 직후 `blob:` 표시, 저장 실패 시 편집 상태·blob 유지 후 재시도, 저장 성공·정상 이탈·unmount 시 object URL 정확히 1회 해제가 함께 assertion 대상입니다. content endpoint headers·bytes와 DB metadata, 삭제 대기열·실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit이나 직접 HTTP·PostgreSQL 검증으로 보완하고 Playwright 결과와 구분해 기록합니다. 이 기능의 완료 조건은 8083 경유 health와 이 paste/create/edit/delete smoke 통과입니다. 파일 선택 버튼으로 추가하는 경로는 같은 등록·삽입 로직을 공유하지만, 브라우저 smoke 재실행 전이므로 아직 미검증으로 기록합니다.
+등록 전 create 요청 0건, 붙여넣기 직후 `blob:` 표시, 저장 실패 시 편집 상태·blob 유지 후 재시도, 저장 성공·정상 이탈·unmount 시 object URL 정확히 1회 해제가 함께 assertion 대상입니다. content endpoint headers·bytes와 DB metadata, 삭제 대기열·실파일 상태처럼 브라우저 DOM 밖의 항목은 JUnit이나 직접 HTTP·PostgreSQL 검증으로 보완하고 Playwright 결과와 구분해 기록합니다. 이 기능의 완료 조건은 8083 경유 health와 이 paste/create/edit/delete smoke 통과입니다. 파일 선택 버튼으로 추가하는 경로는 같은 등록·삽입 로직을 공유하며, 2026-09-25 사용자 수동 확인에서 정상 동작했습니다. 이 경로의 Playwright 자동화 smoke는 아직 재실행하지 않았습니다.
 
 2026-09-22 최종 통합 결과: 현재 소스로 재빌드한 이미지로 compose 스택을 기동해 8083 경유 HTTP smoke 38/38 통과, Playwright 최종 browser smoke 112/112 assertion 통과(disposable PostgreSQL·로컬 8082/5174, console error·page error·예상 외 4xx·5xx 0건)를 확인했습니다(파일 선택 버튼 도입 이전 실행).
 

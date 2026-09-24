@@ -191,7 +191,7 @@ docker logs --tail 100 llm-back
 
 대응:
 
-- 브라우저 localStorage의 `auth_token`, `auth_username`, `auth_last_activity` 삭제 후 재로그인
+- 브라우저 localStorage의 `auth_token`, `auth_user_id`, `auth_username`, `auth_role`, `auth_last_activity` 삭제 후 재로그인
 - DB `admins` 계정 확인
 
 ## 사용 중 갑자기 로그아웃됨

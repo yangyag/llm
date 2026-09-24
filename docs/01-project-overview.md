@@ -1,6 +1,6 @@
 # 프로젝트 개요
 
-`llm`은 익명 게시판, 관리자 로그인, 사용자 관리(ADMIN/USER), 첨부파일, 단일 ZIP 청크 업로드, AI 답변 생성을 제공하는 monorepo입니다. 프론트엔드는 Nuxt 3/Vue 3/TypeScript/Pinia, 백엔드는 Spring Boot, 데이터베이스는 PostgreSQL을 사용하며, 배포 단위는 Docker Compose입니다.
+`llm`은 게시판(비로그인 공개 조회, 로그인 사용자 작성), 로그인, 사용자 관리(ADMIN/USER), 첨부파일·본문 이미지, 단일 ZIP 청크 업로드를 제공하는 monorepo입니다. AI 답변 생성은 2026-09-03에 종료되었습니다. 프론트엔드는 Nuxt 3/Vue 3/TypeScript/Pinia, 백엔드는 Spring Boot, 데이터베이스는 PostgreSQL을 사용하며, 배포 단위는 Docker Compose입니다.
 
 ## 주요 기능
 
@@ -9,7 +9,8 @@
 - 유휴 1시간 또는 서버의 토큰 거부(401) 시 프론트엔드 자동 로그아웃
 - 게시글 목록, 상세, 작성, 수정, 삭제(작성자 본인 또는 ADMIN만 수정/삭제 가능)
 - 댓글 작성, 수정, 삭제(댓글도 작성자 본인 또는 ADMIN만 수정/삭제 가능)
-- 게시글 첨부파일 다중 업로드(일반 게시글 최대 5개, 파일당 100MB), 개별 삭제, 다운로드
+- 게시글 rich 본문(Tiptap) 편집과 본문 이미지(PNG/JPEG, 붙여넣기·파일 선택, 파일당 10MB)
+- 게시글 첨부파일 다중 업로드(일반 첨부 + 본문 이미지 합계 최대 5개, 일반 첨부 파일당 100MB), 개별 삭제, 다운로드
 - 게시글 검색
 - 게시글 일괄 삭제
 - AI 답변 레거시 데이터 조회·보호 및 비활성 endpoint(410 `AI_REPLY_DISABLED`)
@@ -67,7 +68,7 @@
 - 사용자 계정은 ADMIN/USER 역할을 가지며 기존 계정은 전부 ADMIN으로 승계됩니다. 마지막 남은 ADMIN은 삭제하거나 USER로 강등할 수 없습니다.
 - `APP_JWT_SECRET`와 `APP_UPLOAD_SESSIONS_SECRET`는 운영에서 반드시 별도 값으로 설정해야 합니다.
 - 일반 게시글/댓글 body는 Base64로 전송하지만 보안 기능이 아닙니다.
-- 게시글/댓글 작성 시 작성자(`posts.author_username` / `post_replies.author_username`)가 기록되며, 수정/삭제는 작성자 본인 또는 ADMIN만 가능합니다. null인 레거시 글/댓글은 ADMIN만 수정/삭제할 수 있습니다(V14~V16). AI 답변은 작성자가 없고 수정/삭제 자체가 불가합니다.
+- 게시글/댓글 작성 시 작성자 계정 ID(`posts.author_user_id` / `post_replies.author_user_id`, V17)와 표시 이름(`author_username`)이 기록됩니다. 수정/삭제 권한은 계정 ID로 판정하며 작성자 본인 또는 ADMIN만 가능합니다. 계정 ID가 null인 레거시 글/댓글은 ADMIN만 수정/삭제할 수 있습니다. AI 답변은 작성자가 없고 수정/삭제 자체가 불가합니다.
 - `FILE_CONVERSION_REQUEST` 게시글은 수동 생성할 수 없고 업로드 세션 finalize로만 생성됩니다.
 - 파일 변환 게시글에 첨부파일이 생기면 게시글 수정이 막힙니다.
 - AI 답변은 수정/삭제가 막힙니다.

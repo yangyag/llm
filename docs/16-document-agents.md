@@ -23,6 +23,11 @@
 | `docs/14-security.md` | `security-agent` | 인증/인가, secret, CORS, 네트워크 노출 | 이상 없음 |
 | `docs/15-troubleshooting.md` | `troubleshooting-agent` | 증상별 원인과 대응, 운영 확인 명령 | 이상 없음 |
 | `docs/16-document-agents.md` | `review-report-agent` | 담당 배정, 리뷰 결과, 완료 근거 | 이상 없음 |
+| `docs/17-copy-post-body-design.md` | 미배정 | 본문 복사 설계와 현재 구현 차이 | 리뷰 기록 없음 |
+| `docs/18-integrity-hardening.md` | 미배정 | 계정 ID 전환, 첨부 파일·metadata 일관성 | 리뷰 기록 없음 |
+| `docs/19-modulith-architecture-map.md` | 미배정 | 모듈 경계, 공개 계약, 허용 의존 | 리뷰 기록 없음 |
+
+17~19번 문서는 담당 에이전트 리뷰 체계 도입 이후에 추가되어 아래 리뷰 결과 표에 포함되지 않습니다.
 
 ## 공통 리뷰 기준
 

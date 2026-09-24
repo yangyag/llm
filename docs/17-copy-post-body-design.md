@@ -3,10 +3,25 @@
 | 항목 | 값 |
 | --- | --- |
 | 문서 | 게시글 본문 복사 (clipboard) 설계 |
-| 작성 | TBD |
+| 작성 | yangyag |
 | 날짜 | 2026-08-27 |
-| 상태 | Draft |
+| 상태 | 구현됨(2026-08-27 `6f1f798`). 2026-09-04 상세 화면 재디자인(`a285ba0`)으로 구현 위치·동작 일부 변경 |
 | 범위 | 프론트엔드 UI만. 백엔드/DB/env 변경 없음 |
+
+## 현재 구현 상태 (2026-09-25 확인)
+
+아래 설계는 최초 구현 기준입니다. 현재 본문 복사는 로그인 상세와 공개 상세가 함께 쓰는 `front/components/post/PostBodyReader.vue`의 읽기 도구 막대에 있으며, 설계와 다음이 다릅니다.
+
+| 항목 | 설계 | 현재 구현 |
+| --- | --- | --- |
+| 위치 | 로그인 `.inline-actions`(링크 복사 옆), 공개 `.detail-top` | 두 화면 공통 `PostBodyReader` 도구 막대(글자 크기 버튼 옆) |
+| 라벨 | `본문 복사` / `복사됨!` | `복사` / `복사됨!` |
+| 상태·핸들러 | 스토어 `postBodyCopied`·`handleCopyPostBody`, 공개 페이지 로컬 ref | 컴포넌트 로컬 `copied`·`copyFailed`·`copyBody` |
+| 클립보드 호출 | `writeClipboardText`(secure context 가드) | `navigator.clipboard.writeText` 직접 호출. `writeClipboardText`는 링크 복사(`handleCopyPostLink`)만 사용 |
+| 빈 본문 판정 | `body.length === 0`(`trim()` 없음) | 빈 줄 기준 문단을 `trim()`한 뒤 문단이 없으면 disabled. 공백만 있는 본문도 disabled |
+| 실패 문구 | HTTPS 안내와 고정 실패 문장 구분 | "클립보드 복사에 실패했습니다. 직접 드래그해서 복사해 주세요." 하나 |
+
+변환글(`FILE_CONVERSION_REQUEST`)에서 버튼을 렌더하지 않고 핸들러도 막는 점, 저장된 평문 `body`만 복사하는 점은 설계와 같습니다. rich 글(`TIPTAP_JSON`)은 추출 평문 `body`(이미지는 `[이미지: alt]`)를 복사합니다.
 
 ## Overview
 
@@ -56,7 +71,7 @@
 - 백엔드 엔드포인트, DTO, Flyway, `application.properties` / `.env` 변경.
 - 리치 텍스트/HTML 복사. 본문은 항상 plaintext (`white-space: pre-wrap`).
 - 댓글·AI 답변 복사 버튼.
-- Vitest 등 프론트 단위 테스트 프레임워크 도입(`front/package.json`에 테스트 스크립트 없음).
+- Vitest 등 프론트 단위 테스트 프레임워크 도입(작성 당시 `front/package.json`에 테스트 스크립트 없음. 현재는 `node --test` 기반 `npm test`가 있음, docs/10).
 - HTTP 비보안 origin을 위한 `document.execCommand("copy")` fallback (링크 복사와 동일하게 이번 변경에서 제외).
 - 클립보드 권한 프롬프트 UI, 네이티브 공유 시트(`navigator.share`).
 - 성공 라벨을 `링크 복사됨!` / `본문 복사됨!`으로 분화하거나, 수정 모드에서 본문 복사 버튼을 숨기는 것.
@@ -346,7 +361,7 @@ Clipboard API는 secure context(HTTPS 또는 localhost)에서만 동작한다. `
 
 ## Data Model Changes
 
-없음. `posts.body` 컬럼, Flyway `V1`–`V16`, JPA `ddl-auto=validate` 모두 불변. 복사 대상은 이미 메모리에 있는 JSON `body`이다.
+없음. `posts.body` 컬럼, Flyway `V1`–`V16`(작성 당시 최신), JPA `ddl-auto=validate` 모두 불변. 복사 대상은 이미 메모리에 있는 JSON `body`이다.
 
 `FILE_CONVERSION_REQUEST`의 DB 본문은 업로드 세션 finalize 결과(대량 Base64)일 수 있으나, 이번 기능은 그 값을 클립보드에 올리지 않는다.
 

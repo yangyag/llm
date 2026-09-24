@@ -24,10 +24,11 @@
 | 문서 담당 에이전트와 리뷰 결과 | [16-document-agents.md](./16-document-agents.md) |
 | 게시글 본문 복사 설계 | [17-copy-post-body-design.md](./17-copy-post-body-design.md) |
 | 계정 ID 전환·첨부 일관성 개선 및 검증 | [18-integrity-hardening.md](./18-integrity-hardening.md) |
+| 백엔드 모듈 구조(Spring Modulith)와 의존 규칙 | [19-modulith-architecture-map.md](./19-modulith-architecture-map.md) |
 
 ## 현재 운영 기준
 
-- 로컬 저장소 루트: `/home/yangyag/llm`
+- 로컬 저장소 루트: `C:\dev\llm` (Windows). 문서 예시 명령의 `/home/yangyag/llm`은 저장소 루트를 뜻합니다.
 - EC2 접속 자료: 저장소 루트 `aws/` (`connect.sh` / `connect.ps1` 커밋, PEM은 Git 제외)
 - EC2 접속 키: `aws/test-keypair.pem` (로컬 전용)
 - EC2 운영 디렉터리: `/home/ubuntu/llm`
