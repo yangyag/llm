@@ -244,28 +244,28 @@ rich 글의 본문 필드 예시:
 
 ```json
 {
-  "body": "텍스트[이미지: 스크린샷]",
+  "body": "텍스트\n[이미지: 스크린샷]",
   "bodyFormat": "TIPTAP_JSON",
   "bodyDocument": {
     "type": "doc",
     "content": [
       {
         "type": "paragraph",
-        "content": [
-          { "type": "text", "text": "텍스트" },
-          {
-            "type": "inlineAttachmentImage",
-            "attrs": {
-              "imageKey": "b1e09b73-1111-4444-8888-123456789abc",
-              "alt": "스크린샷"
-            }
-          }
-        ]
+        "content": [{ "type": "text", "text": "텍스트" }]
+      },
+      {
+        "type": "inlineAttachmentImage",
+        "attrs": {
+          "imageKey": "b1e09b73-1111-4444-8888-123456789abc",
+          "alt": "스크린샷"
+        }
       }
     ]
   }
 }
 ```
+
+`inlineAttachmentImage`는 블록 노드입니다. 문단(`paragraph`)이나 제목 안에는 넣을 수 없고 `doc`·`blockquote`의 자식, 또는 `listItem`의 두 번째 이후 자식으로만 올 수 있으며, 위반하면 400 `INVALID_RICH_DOCUMENT`입니다. 평문 `body`에서는 블록 사이가 줄바꿈으로 이어집니다.
 
 `attachments`는 첨부파일 배열입니다(없으면 빈 배열). 각 항목은 다음 형식이며, 일반 게시글은 일반 첨부와 inline 이미지를 합쳐 최대 5개까지 가질 수 있습니다. 업로드 세션 finalize로 만들어진 `FILE_CONVERSION_REQUEST` 게시글은 항상 1개(원본 ZIP)입니다.
 
@@ -598,7 +598,7 @@ Content-Type: `multipart/form-data`
 
 | 코드 | HTTP | 의미 |
 | --- | --- | --- |
-| `INVALID_CREDENTIALS` | 401 | 인증 실패, 토큰 누락/만료, 삭제된 계정. 단, `/api/v1/auth/me`는 body 없이 401을 반환 |
+| `INVALID_CREDENTIALS` | 401 | 인증 실패, 토큰 누락/만료, 삭제된 계정. `/api/v1/auth/me`도 같은 공통 오류 JSON을 반환 |
 | `FORBIDDEN` | 403 | 권한 없음. 사용자 관리 API를 USER가 호출한 경우, 남의 게시글/댓글을 수정/삭제하려는 경우(작성자 본인/ADMIN 아님), 레거시(작성자 없음) 글/댓글을 USER가 수정/삭제하려는 경우 |
 | `DUPLICATE_USERNAME` | 409 | 사용자 추가 시 username 중복 |
 | `LAST_ADMIN_PROTECTED` | 409 | 마지막 남은 ADMIN 삭제/강등 불가 |
