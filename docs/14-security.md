@@ -27,7 +27,7 @@
 
 계정 역할은 `ADMIN`(관리자)과 `USER`(일반사용자) 두 가지입니다. `admins` 테이블의 `role` 컬럼(V13)으로 관리되며, 기존 시드 `admin` 계정을 포함한 모든 기존 계정은 `ADMIN`으로 승계됩니다.
 
-- 쓰기 기능(게시글 작성/댓글/AI 답변/업로드 세션)은 유효한 JWT만 있으면 `USER`도 전부 사용할 수 있습니다.
+- 쓰기 기능(게시글 작성/댓글/업로드 세션)은 유효한 JWT만 있으면 `USER`도 전부 사용할 수 있습니다. AI 답변 endpoint는 인증 후 410 `AI_REPLY_DISABLED`를 반환합니다.
 - 게시글/댓글 **수정/삭제**는 작성자 본인 또는 `ADMIN`만 가능합니다. 작성자가 null인 레거시 글/댓글은 `ADMIN`만 수정/삭제할 수 있습니다. `USER`가 남의 글/댓글을 수정/삭제하면 403 `FORBIDDEN`입니다(코드: `BoardService.ensureCanManagePost`/`ensureCanManageReply`). AI 답변은 작성자 없음 + `AI_REPLY_LOCKED`로 수정/삭제가 차단됩니다. 게시글 일괄 삭제도 포함된 id 전부에 대해 소유권/ADMIN을 검사하며, 하나라도 권한이 없으면 전체가 403으로 실패합니다.
 - 역할 제한이 있는 기능(사용자 관리 API)은 `ADMIN` 전용이며, 이 외에는 게시글 소유권 검사가 추가로 적용됩니다.
 - 인가 방식은 인증과 마찬가지로 Spring Security filter chain이 아니라 컨트롤러에서 공개 인증 계약을 호출하는 방식입니다. `auth` 외부 모듈은 `AuthenticationGateway.authenticate`를 사용하고, `auth.internal`의 `JwtProvider`가 실제 JWT 검증을 수행합니다. JWT에는 role을 넣지 않고 고유 계정 ID를 subject로, `tokenVersion=2`를 claim으로 넣습니다. 이전 username 토큰은 거부하며 재로그인이 필요합니다.

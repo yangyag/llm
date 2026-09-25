@@ -99,7 +99,7 @@ docker compose down
 cd /home/yangyag/llm
 git status --short
 cd back && ./gradlew clean test
-cd ../front && npm run typecheck && npm run build
+cd ../front && npm test && npm run typecheck && npm run build
 ```
 
 ## Git 관리 기준

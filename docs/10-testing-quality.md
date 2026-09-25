@@ -129,9 +129,9 @@ Remove-Item Env:LLM_TEST_POSTGRES_URL
 | rich 본문·inline 이미지 backend 계약 | `cd back && .\gradlew.bat '-Porg.gradle.java.installations.paths=<JAVA_25_HOME>' clean test`와 focused PostgreSQL(`PostgresMigrationTest`, `PostgresUploadFinalizeTest`, `PostgresInlineImageLifecycleTest`), content endpoint header·bytes 확인 |
 | rich 본문·inline 이미지 frontend UI | `cd front && npm test && npm run typecheck && npm run build` 후 붙여넣기·파일 선택을 포함한 paste/create/edit/delete 브라우저 자동화 smoke |
 | Dockerfile/compose | 프론트는 `cd front && npm run build` 후 `docker compose --profile build build front-build`. 백엔드는 `build back-build`. 이어서 `docker compose up -d --wait` |
-| EC2 배포 절차 | `auto_default` 존재와 `docker compose --project-name ubuntu --env-file .env -f docker-compose.yml config --quiet`를 확인하고 Compose pull/up/ps 및 8083 health 경로 검증 |
+| EC2 배포 절차 | `auto_default` 존재와 `docker compose --project-name ubuntu --env-file .env -f docker-compose.yml config --quiet`를 확인하고 Compose up/ps(`pull_policy: never`라 pull 없음) 및 8083 health 경로 검증 |
 | 운영 env 변경 | 컨테이너 재기동, `docker inspect`, health, 기능 smoke test |
-| AI provider 변경 | provider별 성공/오류 smoke test |
+| AI 레거시 코드 변경 | `POST /api/v1/posts/{id}/ai-replies`가 인증 후 410 `AI_REPLY_DISABLED`인지, 기존 AI 답변 조회와 수정·삭제 보호(`AI_REPLY_LOCKED`)가 유지되는지 확인 |
 | 업로드 도구 변경 | 작은 ZIP과 큰 ZIP 업로드, 중단 후 재개 테스트 |
 
 ## 수동 smoke test

@@ -36,7 +36,7 @@ docker logs --tail 100 llm-front
 
 - `llm-front`, `llm-back`, `yangyag-postgres`가 `healthy`
 - health API가 `status=UP`
-- 백엔드 로그에 반복되는 `INTERNAL_ERROR`, DB connection error, AI provider error가 없음
+- 백엔드 로그에 반복되는 `INTERNAL_ERROR`, DB connection error가 없음
 
 ## 배포
 
@@ -90,8 +90,7 @@ docker logs -f llm-back
 - `INVALID_CREDENTIALS`: 로그인 실패, 토큰 누락/만료
 - `TOO_MANY_LOGIN_ATTEMPTS`(429): 같은 IP의 로그인 시도 한도 초과. `Retry-After`만큼 기다리거나 `llm-back` 재시작으로 초기화. 모든 사용자가 동시에 받으면 클라이언트 IP 해석 문제(docs/05 Auth 절)
 - `FORBIDDEN`: 권한 없음. USER가 남의 게시글 수정/삭제, 레거시 글 수정/삭제, 사용자 관리 API 호출
-- `AI_PROVIDER_NOT_CONFIGURED`: API key 누락
-- `AI_REPLY_GENERATION_FAILED`: 외부 AI 호출 실패
+- `AI_REPLY_DISABLED`(410): AI 답변 기능 종료(2026-09-03). 정상 동작이며 장애가 아님
 - `ATTACHMENT_STORAGE_ERROR`: volume 또는 파일 권한 문제
 - `UPLOAD_SESSION_STATE_ERROR`: 세션 만료/완료/finalizing
 
@@ -175,12 +174,9 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d
 4. `yangyag-postgres` health 확인
 5. 최근 `.env` 변경을 되돌릴지 판단
 
-### AI 답변 실패
+### AI 답변 요청이 410으로 거부됨
 
-1. provider API key가 비어 있지 않은지 확인
-2. model 값이 운영 의도와 맞는지 확인
-3. 외부 API status code를 로그에서 확인
-4. 특정 provider만 실패하는지 전체 실패인지 분리
+AI 답변 기능은 2026-09-03에 종료되어 `POST /api/v1/posts/{id}/ai-replies`는 인증 후 항상 410 `AI_REPLY_DISABLED`를 반환합니다. 외부 provider를 호출하지 않으므로 API key·model 점검은 필요 없습니다(docs/09).
 
 ### 업로드 세션 실패
 

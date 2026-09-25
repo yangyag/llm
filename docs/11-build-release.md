@@ -74,10 +74,10 @@ Frontend:
    cd back && ./gradlew clean test
    ```
 
-3. 프론트 타입 검사와 빌드
+3. 프론트 테스트, 타입 검사와 빌드
 
    ```bash
-   cd front && npm run typecheck && npm run build
+   cd front && npm test && npm run typecheck && npm run build
    ```
 
 4. 이미지 빌드

@@ -115,11 +115,13 @@ multipart 요청의 텍스트 필드(파일 제외) 합계는 Tomcat `maxPostSiz
 | `XAI_MODEL` | 환경별 값 | xAI model |
 | `XAI_API_BASE_URL` | `https://api.x.ai/v1` | xAI API base |
 
-로컬 `.env.example`과 현재 로컬 `.env` 예시값:
+로컬 `.env.example`과 현재 로컬 `.env` 예시값(2026-09-25 확인, EC2 값과 같음):
 
-- `OPENAI_MODEL=gpt-5.4`
-- `ANTHROPIC_MODEL=claude-sonnet-4-6`
-- `XAI_MODEL=grok-4.20-0309-reasoning`
+- `OPENAI_MODEL=gpt-5.5`
+- `ANTHROPIC_MODEL=claude-opus-4-7`
+- `XAI_MODEL=grok-4.3`
+
+AI 답변은 2026-09-03에 종료되어 이 값들은 새 provider 호출에 쓰이지 않습니다(docs/09).
 
 2026-05-31 KST에 SSH로 확인한 EC2 `/home/ubuntu/llm/.env` 값:
 

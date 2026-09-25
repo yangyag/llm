@@ -269,23 +269,11 @@ docker inspect llm-back --format '{{range .Config.Env}}{{println .}}{{end}}' \
 docker exec llm-back sh -lc 'ls -ld /var/lib/llm/upload-sessions /tmp/llm-upload-sessions 2>/dev/null || true'
 ```
 
-## AI 답변 실패
+## AI 답변 요청이 410으로 실패
 
-오류별 대응:
+AI 답변 기능은 2026-09-03에 종료되었습니다. `POST /api/v1/posts/{id}/ai-replies`는 인증 후 항상 410 `AI_REPLY_DISABLED`를 반환하며 외부 provider를 호출하지 않습니다. 정상 동작이므로 provider API key·model·base URL을 바꿔도 달라지지 않습니다.
 
-| 오류 | 대응 |
-| --- | --- |
-| `AI_PROVIDER_NOT_CONFIGURED` | provider API key 설정 |
-| `INVALID_AI_PROVIDER` | `GPT`, `CLAUDE`, `GROK` 중 하나 사용 |
-| `AI_REPLY_NOT_ALLOWED` | 대상 게시글이 `FILE_CONVERSION_REQUEST`가 아닌 일반 게시글인지 확인 |
-| `AI_REPLY_GENERATION_FAILED` | 외부 API status, model, base URL 확인 |
-
-확인:
-
-```bash
-grep -E '^(OPENAI_MODEL|ANTHROPIC_MODEL|XAI_MODEL)=' /home/ubuntu/llm/.env
-docker logs --tail 200 llm-back
-```
+`AI_PROVIDER_NOT_CONFIGURED`, `INVALID_AI_PROVIDER`, `AI_REPLY_NOT_ALLOWED`, `AI_REPLY_GENERATION_FAILED`는 종료 전 오류 코드이며 현재 생성 요청에서는 나오지 않습니다(docs/09).
 
 secret key 값은 출력하지 않습니다.
 

@@ -37,7 +37,7 @@
 | Database | PostgreSQL 18 운영 기준, H2 테스트 기준 |
 | Auth | 관리자 계정, BCrypt password hash, JWT HS256 |
 | Storage | Docker volume에 첨부파일과 업로드 세션 파일 저장 |
-| AI | OpenAI chat completions, Anthropic messages, xAI chat completions |
+| AI | 2026-09-03 종료. 종료 전 OpenAI chat completions, Anthropic messages, xAI chat completions 사용(레거시 설정·코드만 남음) |
 | Deployment | Docker Compose. 프론트 `llm-front:1.0`, 백엔드 `llm-back:1.0`. 둘 다 Windows에서 빌드 후 tar로 EC2 `docker load`. Docker Hub 없음 |
 
 ## 사용자 흐름
@@ -53,7 +53,7 @@
 
 ## 현재 확인된 운영 상태
 
-2026-05-31 KST에 `/home/yangyag/aws/test-keypair.pem`으로 EC2에 접속해 읽기 전용 점검을 수행했습니다.
+2026-09-25에 저장소 `aws/test-keypair.pem`으로 EC2에 접속해 읽기 전용 점검을 수행했습니다(최초 점검 2026-05-31).
 
 - EC2 운영 디렉터리: `/home/ubuntu/llm`
 - 실행 중인 LLM 컨테이너: `llm-front`, `llm-back`

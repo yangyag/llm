@@ -1,6 +1,6 @@
 # AGENTS.md
 
-게시판 + AI 답변 + ZIP 청크 업로드 모노레포. Nuxt 3/Vue 3/TypeScript/Pinia 프론트, Spring Boot 백엔드(Java 25), PostgreSQL(Flyway), Docker Compose.
+게시판 + ZIP 청크 업로드 모노레포(AI 답변은 2026-09-03 종료). Nuxt 3/Vue 3/TypeScript/Pinia 프론트, Spring Boot 백엔드(Java 25), PostgreSQL(Flyway), Docker Compose.
 
 ## 저장소 구조
 - `front/` — Nuxt 3/Vue 3/TypeScript/Pinia UI, API 클라이언트, Nginx 설정, 프론트 Dockerfile (Node 22 / npm)
@@ -19,7 +19,7 @@
 - 작업 전후 `git status --short`로 범위 확인. 커밋 메시지는 한글.
 
 ## 아키텍처 핵심
-- 포트: back **8080**(내부 expose 전용, host publish 안 함) / **8082**(로컬 bootRun + Nitro dev proxy 대상) / **8083**(front proxy host 포트 = health 진입점) / 5174(Nuxt dev) / 5432(DB, 외부 차단). health는 어디서든 **8083** 경유.
+- 포트: back **8080**(내부 expose 전용, host publish 안 함) / **8082**(로컬 bootRun + Nitro dev proxy 대상) / **8083**(front proxy host 포트 = health 진입점) / 5174(Nuxt dev) / 5432(DB, 외부 차단). compose 스택의 health는 어디서든 **8083** 경유(bootRun 단독 실행만 8082 직접).
 - 모든 API는 `/api/v1` 아래. front/Nginx가 `/api/` → `http://llm-back:8080` proxy. 운영에선 `NUXT_PUBLIC_API_BASE`를 비워 상대경로 `/api` 사용.
 - 인증은 Spring Security filter chain이 아니라 **컨트롤러별 직접 인증 호출**. `auth` 외부 모듈의 보호 컨트롤러는 공개 계약인 `AuthenticationGateway.authenticate`를 호출하고, `auth.internal` 구현인 `JwtProvider`가 JWT와 계정 존재 여부를 확인한다. JWT subject는 계정 ID + `tokenVersion=2`이며 이전 토큰은 재로그인 필요. 공개 엔드포인트 목록은 docs/14.
 - 게시글/댓글 **수정/삭제는 작성자 본인 또는 ADMIN만** 가능. 작성자 권한은 `posts.author_user_id`/`post_replies.author_user_id`(V17), username은 표시용. 계정 ID가 null인 레거시 글/댓글은 ADMIN만 관리. 업로드 소유권도 `created_by_user_id`로 검사. 검사는 `BoardService.ensureCanManagePost`/`ensureCanManageReply`(USER가 남의 글/댓글 → 403 `FORBIDDEN`). AI 답변은 작성자 없음 + `AI_REPLY_LOCKED`. 게시글 일괄 삭제도 포함 id 전체에 대해 검사 후 부분 삭제 없이 실패. (docs/07, docs/14)
@@ -34,7 +34,7 @@
 
 ## 설정과 비밀값 규칙
 - 전체 환경 변수와 fallback 동작은 **docs/05-configuration.md** + `.env.example` 참조. 실제 실행 기준은 항상 대상 환경의 `.env`.
-- secret(`APP_JWT_SECRET`, `APP_UPLOAD_SESSIONS_SECRET`, `APP_DB_PASSWORD`, `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`XAI_API_KEY`, `LLM_*`, PEM key)은 **문서·Git·로그·화면에 절대 기록 금지**. `.env.example`엔 placeholder만.
+- secret(`APP_JWT_SECRET`, `APP_UPLOAD_SESSIONS_SECRET`, `APP_DB_PASSWORD`, `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/`XAI_API_KEY`, `LLM_UPLOAD_SESSIONS_SECRET`/`LLM_JWT_TOKEN`/`LLM_PASSWORD`, PEM key)은 **문서·Git·로그·화면에 절대 기록 금지**. `.env.example`엔 placeholder만.
 - `.env`, `.env.*`, `llm.env*`는 커밋 금지. `front/node_modules/`, `front/.nuxt/`, `front/.output/`, `back/build/`, `.gradle/`도 커밋 금지.
 - `application.properties`의 DB password/JWT/업로드 secret은 **개발용 fallback** — 운영에선 secret으로 쓰지 말고 `.env`로 덮어쓴다.
 
@@ -111,14 +111,20 @@ docker compose down
 - `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SCHEMA`: 백엔드 DB 연결
 - `APP_ATTACHMENTS_ROOT_PATH`: 첨부파일 저장 경로
 - `APP_ATTACHMENTS_MAX_FILE_SIZE`, `APP_ATTACHMENTS_MAX_REQUEST_SIZE`: 업로드 제한
+- `APP_ATTACHMENTS_INLINE_IMAGES_MAX_FILE_SIZE`: 본문 inline 이미지 파일당 최대 크기(기본 10MB)
+- `APP_ATTACHMENTS_MAX_COUNT`: 게시글당 첨부 개수(일반 첨부 + inline 이미지 합계, 기본 5)
 - `APP_ATTACHMENTS_MAX_GENERATED_FILE_SIZE`: 청크 업로드 후 복원되는 최종 ZIP의 최대 크기
 - `APP_UPLOAD_SESSIONS_ROOT_PATH`: 청크 업로드 세션 임시 파일 저장 경로
 - `APP_UPLOAD_SESSIONS_EXPIRATION_MS`: 업로드 세션 만료 시간
 - `APP_UPLOAD_SESSIONS_CLEANUP_FIXED_DELAY_MS`: 업로드 세션 정리 주기
+- `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE`: 청크 1개의 decode 후 최대 크기(기본 8MB)
 - `APP_UPLOAD_SESSIONS_SECRET`: 업로드 세션 wire JSON 암호화 비밀키
 - `LLM_UPLOAD_SESSIONS_SECRET`: `upload_zip_post.py` 전용 비밀키 오버라이드. 없으면 `APP_UPLOAD_SESSIONS_SECRET`를 사용합니다.
+- `LLM_API_BASE_URL`, `LLM_JWT_TOKEN`, `LLM_USERNAME`, `LLM_PASSWORD`, `LLM_UPLOAD_CHUNK_SIZE_BASE64_CHARS`: `upload_zip_post.py` 접속·로그인·청크 크기
+- `LLM_ENV_FILE`: back 컨테이너 `env_file` 경로(기본 `./.env`, EC2는 `/home/ubuntu/llm/.env`로 export)
 - `APP_JWT_SECRET`: 운영 필수 권장값, 반드시 설정해야 함
 - `APP_JWT_EXPIRATION_MS`: JWT 만료 시간
+- `APP_AUTH_LOGIN_MAX_FAILURES`, `APP_AUTH_LOGIN_WINDOW`: 클라이언트 IP별 로그인 시도 한도(기본 10회 / 15m)
 - AI 답변 종료 전 레거시 설정: `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_API_BASE_URL`
 - `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_API_BASE_URL`
 - `XAI_API_KEY`, `XAI_MODEL`, `XAI_API_BASE_URL`
@@ -147,11 +153,15 @@ cd back
 APP_DB_HOST=localhost SERVER_PORT=8082 ./gradlew bootRun
 ```
 
-- Health: `http://localhost:8083/api/v1/health`
+- Health: `http://localhost:8082/api/v1/health` (단독 실행은 front proxy를 거치지 않음)
 
 #### 단일 ZIP 청크 업로드
 
+스크립트는 `front/public/upload_zip_post.zip` 안에 들어 있습니다. 루트의 `upload_zip_post.py` 원본은 Git에서 제외되어 있으므로 압축을 풀어 실행합니다(docs/08).
+
 ```bash
+unzip front/public/upload_zip_post.zip -d /tmp/llm-upload-tool
+cd /tmp/llm-upload-tool
 python3 upload_zip_post.py
 ```
 
@@ -271,5 +281,7 @@ docker compose --project-name ubuntu --env-file .env -f docker-compose.yml ps
 | 보안 (인증·JWT·secret·CORS·노출) | docs/14-security.md |
 | 문제 해결 (network/health/DB/첨부/ZIP/AI) | docs/15-troubleshooting.md |
 | 문서 에이전트·EC2 읽기전용 점검 | docs/16-document-agents.md |
+| 게시글 본문 복사 설계 | docs/17-copy-post-body-design.md |
 | 계정 ID 전환·첨부 일관성 검증 | docs/18-integrity-hardening.md |
+| 백엔드 모듈 구조(Spring Modulith)·의존 규칙 | docs/19-modulith-architecture-map.md |
 | 전체 문서 인덱스 | docs/index.md |
