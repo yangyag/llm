@@ -76,6 +76,11 @@ spring.flyway.create-schemas=true
 | `V18__create_attachment_file_deletions.sql` | 첨부파일 삭제를 커밋 후 처리하기 위한 영속 대기열 |
 | `V19__add_rich_post_and_inline_attachment_metadata.sql` | `posts.body_format`/`body_document`, `post_attachments.attachment_kind`/`inline_key` 추가. 기존 글·첨부는 `PLAIN_TEXT`/`DOWNLOAD`로 백필 |
 
+마이그레이션 규칙:
+
+- 이미 적용된 migration SQL은 수정하지 않습니다. 스키마 변경은 위 목록의 마지막 번호 다음 버전으로 새 파일을 추가합니다. 적용된 파일을 바꾸면 운영 DB의 Flyway 체크섬과 어긋나 `llm-back`이 시작하지 못합니다(docs/12, docs/15).
+- 테스트는 H2 `create-drop`(Flyway off)이라 DDL 경로가 운영과 다릅니다. migration 변경은 `PostgresMigrationTest` 등 실제 PostgreSQL 검증으로 확인합니다(docs/10).
+
 ## rich 본문·inline 이미지 metadata (V19)
 
 V19는 게시글 본문 형식과 본문에 추가한 이미지(이하 inline 이미지)의 metadata를 추가합니다. 이미지 bytes는 DB가 아니라 기존 첨부 volume(`APP_ATTACHMENTS_ROOT_PATH`)에 저장하고, DB에는 rich canonical 문서 JSON과 attachment metadata만 둡니다.

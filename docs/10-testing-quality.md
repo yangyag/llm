@@ -47,6 +47,11 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 - 첨부파일과 업로드 세션 root는 temp 디렉터리 사용
 - 테스트 multipart 제한은 `2MB`
 
+테스트 원칙은 백엔드 API JUnit(`MockMvc`) 중심입니다. 다만 다음은 H2·MockMvc로 운영과 같게 재현되지 않습니다.
+
+- Tomcat 요청 한도(`max-http-form-post-size`, 405·415·깨진 multipart 등)는 MockMvc가 Tomcat을 거치지 않으므로 실제 내장 Tomcat 테스트(`HttpRequestLimitsTest`, `LoginRateLimitTest`)로 확인합니다.
+- H2는 문자열의 NUL을 받아 주지만 운영 PostgreSQL은 거부합니다. NUL 입력은 애플리케이션이 저장 전에 400으로 거부하므로 테스트는 이 거부를 검증합니다.
+
 현재 테스트 범위(테스트 수는 각 파일의 `@Test` 선언을 정적으로 센 값):
 
 | 테스트 파일 | 테스트 수 | 범위 |

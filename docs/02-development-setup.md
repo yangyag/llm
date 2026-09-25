@@ -25,7 +25,7 @@ git status --short --branch
 다른 위치에 처음 받는 경우:
 
 ```bash
-git clone REPOSITORY_URL llm
+git clone https://github.com/yangyag/llm.git llm
 cd llm
 ```
 
