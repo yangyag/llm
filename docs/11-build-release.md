@@ -55,7 +55,9 @@ Frontend:
 - 이미지: `nginx:1.27-alpine`에 `.output/public`과 `nginx.conf`만 복사. Node는 이미지에 없음
 - 태그: `llm-front:1.0`
 - compose `mem_limit: 64m` (런타임 nginx 한도). EC2에서 Node generate를 하지 않는 것과 함께 호스트 메모리를 줄이기 위함
-- Nginx가 `/api/`를 `http://llm-back:8080`으로 proxy
+- Nginx가 `/api/`를 `http://llm-back:8080`으로 proxy. 큰 ZIP finalize가 60초를 넘길 수 있어 `proxy_read_timeout 600s`
+- `/_nuxt/` 빌드 산출물은 파일이 없으면 404(`try_files $uri =404`). 나머지 경로만 SPA fallback으로 `index.html`을 준다. 예전에는 없는 chunk에도 `index.html`을 200으로 줘서, 배포 뒤 옛 화면을 연 브라우저가 JS 대신 HTML을 받아 "module script" MIME 오류를 냈다
+- 빌드할 때 `npm run dev`(Nuxt dev 서버)가 같은 `front/`에서 돌고 있으면 `.nuxt`를 공유해 `.output/public/index.html`이 dev 경로(`/_nuxt/@vite/client` 등)를 가리키게 될 수 있다. 빌드 전에 dev 서버를 끄고, `index.html`에 `@vite/client`가 없는지 확인한다
 
 ## 릴리스 전 체크리스트
 

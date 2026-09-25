@@ -7,6 +7,7 @@ import com.llm.app.auth.internal.Admin;
 import com.llm.app.auth.internal.AdminRepository;
 import com.llm.app.auth.internal.AuthService;
 import com.llm.app.auth.internal.JwtProvider;
+import com.llm.app.auth.internal.LoginAttemptLimiter;
 import com.llm.app.auth.internal.LoginRequest;
 import com.llm.app.auth.api.InvalidCredentialsException;
 import com.llm.app.auth.api.UserRole;
@@ -122,7 +123,9 @@ class JwtProviderTest {
 		var encoder = mock(org.springframework.security.crypto.password.PasswordEncoder.class);
 		when(encoder.matches(any(), any())).thenReturn(true);
 		var provider = new JwtProvider(SECRET, 3600000, repository);
-		var response = new AuthService(repository, encoder, provider).login(new LoginRequest("reused", "test-input"));
+		var limiter = new LoginAttemptLimiter(10, java.time.Duration.ofMinutes(15));
+		var response = new AuthService(repository, encoder, provider, limiter)
+			.login(new LoginRequest("reused", "test-input"), "203.0.113.1");
 		var key = Keys.hmacShaKeyFor(SecretKeyDerivation.derive32Bytes(SECRET));
 		assertThat(Jwts.parser().verifyWith(key).build().parseSignedClaims(response.token()).getPayload().getSubject())
 			.isEqualTo("1");

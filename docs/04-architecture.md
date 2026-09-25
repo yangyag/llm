@@ -143,7 +143,7 @@ rich 요청은 기존 plain 요청에 다음 필드를 더합니다.
 | `removeAttachmentIds` | 반복 값(수정만) | 일반 `DOWNLOAD` 첨부 삭제에만 사용 |
 
 1. `BoardPostController`의 `POST /api/v1/posts`(201)와 `PUT /api/v1/posts/{id}`가 multipart를 받고, 기존과 같이 `AuthenticationGateway.authenticate`로 인증합니다.
-2. `BoardRichDocumentCodec`이 문서를 strict decode하고 whitelist schema로 canonical JSON을 만들며 평문을 추출합니다. 이미지 node는 평문에서 `[이미지: alt]`(alt가 없으면 `[이미지]`)가 되어 검색과 본문 복사에 내부 UUID가 노출되지 않습니다.
+2. `BoardRichDocumentCodec`이 문서를 strict decode하고 whitelist schema로 canonical JSON을 만들며 평문을 추출합니다. 이미지 node는 평문에서 `[이미지: alt]`(alt가 없으면 `[이미지]`)가 되어 본문 복사에 내부 UUID가 노출되지 않습니다.
 3. `BoardService`가 manifest 길이와 파일 수, `fileIndex` 중복·누락, `imageKey` 중복, 문서가 참조한 key 집합과 manifest/existing key 집합의 일치를 검사합니다. `InlineImageValidator`가 ImageIO reader로 실제 PNG/JPEG 여부·dimensions·payload를 확인하고 검증된 `content_type`만 저장합니다.
 4. 일반 첨부와 본문 이미지는 `APP_ATTACHMENTS_MAX_COUNT`(기본 5개)를 합계로 공유합니다. 최종 개수 검증까지 디스크·DB를 건드리기 전에 끝냅니다.
 5. `@Transactional` 트랜잭션에서 게시글 행(`body` 평문, `body_format`, `body_document`)과 `post_attachments` 행을 저장하고, 실제 bytes는 `AttachmentStorageService`가 기존 attachment volume(`APP_ATTACHMENTS_ROOT_PATH`)에 UUID 저장명으로 씁니다. 신규 파일은 `AttachmentFileLifecycle.trackCreated`에 등록해 rollback 시 정리하고, 문서에서 빠진 기존 inline 이미지는 같은 트랜잭션에서 metadata를 삭제하고 커밋 후 실파일 삭제 대기열(60초 주기 재시도)에 넣습니다.

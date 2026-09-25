@@ -1,7 +1,7 @@
 // 인증 스토어 — localStorage JWT 토큰/사용자명/역할 관리.
 import { defineStore } from "pinia";
 import { getMe, login as apiLogin } from "~/services/api";
-import type { UserRole } from "~/types/api";
+import type { ApiError, UserRole } from "~/types/api";
 
 const TOKEN_KEY = "auth_token";
 const USERNAME_KEY = "auth_username";
@@ -84,9 +84,14 @@ export const useAuthStore = defineStore("auth", {
         if (import.meta.client) localStorage.setItem(USER_ID_KEY, String(result.userId));
         this.role = result.role;
         this.checked = true;
-      } catch {
-        // 토큰 무효/만료/계정 삭제 → 저장값 정리.
-        this.logout();
+      } catch (err) {
+        // 토큰 무효/만료/계정 삭제(401) → 저장값 정리.
+        // 네트워크 오류·5xx(백엔드 재시작 중 등)는 토큰 문제가 아니므로 저장된 로그인 상태를 유지한다.
+        if ((err as Partial<ApiError> | null)?.status === 401) {
+          this.logout();
+        } else {
+          this.checked = true;
+        }
       }
     },
     logout() {

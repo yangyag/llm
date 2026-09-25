@@ -294,6 +294,78 @@ class BoardPostControllerTest {
 	}
 
 	@Test
+	void craftedAttachmentFilenameAndContentTypeShouldBeStoredAndDownloadedSafely() throws Exception {
+		String longName = "가".repeat(300) + ".txt";
+		MvcResult createResult = mockMvc.perform(multipartPost("/api/v1/posts")
+				.file(new MockMultipartFile("attachments", "/", "*/*", "슬래시".getBytes(StandardCharsets.UTF_8)))
+				.file(new MockMultipartFile("attachments", "C:\\fakepath\\evil\u0000name.txt", "not a media type",
+					"NUL".getBytes(StandardCharsets.UTF_8)))
+				.file(new MockMultipartFile("attachments", longName, "text/plain", "긴 이름".getBytes(StandardCharsets.UTF_8)))
+				.header("Authorization", "Bearer " + token)
+				.param("title", "조작된 첨부")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.attachments", hasSize(3)))
+			.andExpect(jsonPath("$.attachments[0].originalFilename").value("attachment"))
+			.andExpect(jsonPath("$.attachments[1].originalFilename").value("evilname.txt"))
+			.andExpect(jsonPath("$.attachments[2].originalFilename").value("가".repeat(251) + ".txt"))
+			.andReturn();
+
+		JsonNode attachments = objectMapper.readTree(createResult.getResponse().getContentAsString()).path("attachments");
+		for (int index = 0; index < 2; index++) {
+			mockMvc.perform(get(attachments.get(index).path("downloadUrl").asText()))
+				.andExpect(status().isOk())
+				.andExpect(header().string("Content-Type", "application/octet-stream"));
+		}
+		mockMvc.perform(get(attachments.get(2).path("downloadUrl").asText()))
+			.andExpect(status().isOk())
+			.andExpect(content().bytes("긴 이름".getBytes(StandardCharsets.UTF_8)));
+	}
+
+	@Test
+	void nulCharactersShouldBeRejectedBeforeReachingTheDatabase() throws Exception {
+		// H2는 NUL을 저장하지만 운영 PostgreSQL은 거부하므로, 저장 전에 400이어야 한다.
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "제목\u0000")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+		mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "제목")
+				.param("bodyBase64", encode("본\u0000문")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
+		assertThat(boardPostRepository.count()).isZero();
+
+		long postId = extractId(mockMvc.perform(multipartPost("/api/v1/posts")
+				.header("Authorization", "Bearer " + token)
+				.param("title", "정상 제목")
+				.param("bodyBase64", encode("정상 본문")))
+			.andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString());
+		mockMvc.perform(multipartPut("/api/v1/posts/{id}", postId)
+				.header("Authorization", "Bearer " + token)
+				.param("title", "수정\u0000")
+				.param("bodyBase64", encode("본문")))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+		mockMvc.perform(post("/api/v1/posts/{id}/replies", postId)
+				.header("Authorization", "Bearer " + token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"bodyBase64\": \"%s\"}".formatted(encode("답\u0000변"))))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_ENCODED_BODY"));
+		mockMvc.perform(get("/api/v1/posts").param("query", "정상\u0000"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+		mockMvc.perform(get("/api/v1/posts/{id}", postId))
+			.andExpect(jsonPath("$.title").value("정상 제목"))
+			.andExpect(jsonPath("$.replies", hasSize(0)));
+	}
+
+	@Test
 	void deletingPostShouldDeleteAttachmentMetadataAndFile() throws Exception {
 		MockMultipartFile attachment = new MockMultipartFile(
 			"attachments",
@@ -620,6 +692,51 @@ class BoardPostControllerTest {
 			.andExpect(jsonPath("$.items", hasSize(0)))
 			.andExpect(jsonPath("$.totalItems").value(0))
 			.andExpect(jsonPath("$.totalPages").value(0));
+	}
+
+	@Test
+	void searchShouldTreatLikeWildcardsAsLiteralText() throws Exception {
+		for (String title : new String[] { "100% 달성", "1000점 달성", "a_b 메모", "axb 메모", "느낌표! 제목" }) {
+			mockMvc.perform(multipartPost("/api/v1/posts")
+					.header("Authorization", "Bearer " + token)
+					.param("title", title)
+					.param("bodyBase64", encode("본문")))
+				.andExpect(status().isCreated());
+		}
+
+		mockMvc.perform(get("/api/v1/posts").queryParam("query", "100%"))
+			.andExpect(jsonPath("$.totalItems").value(1))
+			.andExpect(jsonPath("$.items[0].title").value("100% 달성"));
+		mockMvc.perform(get("/api/v1/posts").queryParam("query", "a_b"))
+			.andExpect(jsonPath("$.totalItems").value(1))
+			.andExpect(jsonPath("$.items[0].title").value("a_b 메모"));
+		mockMvc.perform(get("/api/v1/posts").queryParam("query", "표!"))
+			.andExpect(jsonPath("$.totalItems").value(1))
+			.andExpect(jsonPath("$.items[0].title").value("느낌표! 제목"));
+		mockMvc.perform(get("/api/v1/posts").queryParam("query", "%"))
+			.andExpect(jsonPath("$.totalItems").value(1));
+		mockMvc.perform(get("/api/v1/posts").queryParam("query", "달성"))
+			.andExpect(jsonPath("$.totalItems").value(2));
+	}
+
+	@Test
+	void postsWithSameCreatedAtShouldBeOrderedByNewestIdAcrossPages() throws Exception {
+		Instant sameTime = Instant.parse("2026-09-01T00:00:00Z");
+		List<Long> ids = new ArrayList<>();
+		for (int index = 0; index < 25; index++) {
+			ids.add(boardPostRepository.save(new BoardPost(
+				"동시각 " + index, "본문", BoardPostMode.NORMAL, "admin", sameTime, sameTime)).getId());
+		}
+		ids.sort(Comparator.reverseOrder());
+
+		List<Long> listed = new ArrayList<>();
+		for (int page = 1; page <= 3; page++) {
+			JsonNode items = objectMapper.readTree(mockMvc.perform(get("/api/v1/posts").queryParam("page", String.valueOf(page)))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString()).path("items");
+			items.forEach(item -> listed.add(item.path("id").asLong()));
+		}
+		assertThat(listed).containsExactlyElementsOf(ids);
 	}
 
 	@Test

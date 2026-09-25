@@ -30,15 +30,15 @@ public interface BoardPostRepository extends JpaRepository<BoardPost, Long> {
 			left join p.replies r
 			left join BoardAttachment a on a.post = p
 			where :keywordPattern is null
-				or lower(p.title) like :keywordPattern
+				or lower(p.title) like :keywordPattern escape '!'
 			group by p.id, p.title, p.mode, p.authorUsername, p.authorUserId, p.createdAt
-			order by p.createdAt desc
+			order by p.createdAt desc, p.id desc
 			""",
 		countQuery = """
 			select count(p)
 			from BoardPost p
 			where :keywordPattern is null
-				or lower(p.title) like :keywordPattern
+				or lower(p.title) like :keywordPattern escape '!'
 			"""
 	)
 	Page<BoardPostSummaryProjection> findPostSummaries(@Param("keywordPattern") String keywordPattern, Pageable pageable);

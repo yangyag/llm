@@ -54,17 +54,22 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 | `AuthControllerTest` | 6 | 로그인, JWT 검증, 인증 실패 |
 | `HealthControllerTest` | 1 | health endpoint |
 | `UserManagementControllerTest` | 28 | 사용자 추가/수정/삭제, ADMIN 전용, 마지막 ADMIN/자기 자신 보호 |
-| `BoardPostControllerTest` | 65 | 게시글, 댓글, 첨부파일, rich 본문·inline 이미지 계약(manifest·파일·문서 key 집합, content endpoint header, 합계 5개 한도), AI 답변 제약, 작성자 소유권(본인/ADMIN/레거시), 일괄 삭제 권한, 댓글 소유권 |
-| `UploadSessionControllerTest` | 21 | 업로드 세션 생성, chunk, finalize, 오류 조건, finalize 게시글 작성자 기록, 크기 제한 경계, 실패 시 파일 정리, 타인 접근/만료/완료 상태 |
+| `LastAdminConcurrencyTest` | 2 | 관리자 둘이 동시에 서로를 강등·삭제할 때 두 번째 요청이 ADMIN 행 잠금에서 기다렸다가 `LAST_ADMIN_PROTECTED`로 거부되고 ADMIN 1명이 남음(H2, 별도 DB `last-admin`) |
+| `LoginRateLimitTest` | 3 | 실제 내장 Tomcat(RANDOM_PORT)에서 IP별 로그인 시도 한도 429·`Retry-After`, 위조한 `X-Forwarded-For` 앞부분 무시, 다른 IP 영향 없음, 성공 시 초기화, 없는 아이디도 같은 401 메시지 |
+| `LoginAttemptLimiterTest` | 4 | 시도 한도·구간 만료·IP별 분리·성공 초기화·추적 수 상한 정리·잘못된 설정 거부(가짜 Clock) |
+| `BoardPostControllerTest` | 69 | 게시글, 댓글, 첨부파일, rich 본문·inline 이미지 계약(manifest·파일·문서 key 집합, content endpoint header, 합계 5개 한도), AI 답변 제약, 작성자 소유권(본인/ADMIN/레거시), 일괄 삭제 권한, 댓글 소유권, 조작된 첨부 파일명·Content-Type 정리, 제목·본문·댓글·검색어 NUL 400, 검색어 `%`·`_` 글자 그대로 찾기, 같은 작성 시각 id 순 정렬 |
+| `UploadSessionControllerTest` | 22 | 업로드 세션 생성, chunk, finalize, 오류 조건, finalize 게시글 작성자 기록, 크기 제한 경계, 실패 시 파일 정리, 타인 접근/만료/완료 상태, 대문자 SHA-256 세션 finalize |
 | `JwtProviderTest` | 9 | 토큰 생성/검증, 만료, 위조, Bearer 형식 |
 | `SecretKeyDerivationTest` | 5 | 키 파생(32바이트 미만 확장/이상 절단) |
 | `BoardContentCodecTest` | 7 | bodyBase64 디코딩 경계(blank/100만자/오류) |
 | `BoardRichDocumentCodecTest` | 13 | rich 문서 canonical JSON·평문 추출, node/mark/attribute whitelist, decoded 5MiB·평문 100만자·node 20,000·depth 20 경계, NUL·단독 surrogate 거부 |
-| `InlineImageValidatorTest` | 8 | PNG/JPEG 실제 형식·dimensions 검증(클라이언트 MIME·확장자 불신), 10MB·8192px·25MP 경계, 손상·markup·빈 파일 거부 |
+| `InlineImageValidatorTest` | 11 | PNG/JPEG 실제 형식·dimensions 검증(클라이언트 MIME·확장자 불신), 10MB·8192px·25MP 경계, 손상·markup·빈 파일 거부, subsampling 배율 계산, 5000x5000 16비트 PNG 검증 할당 64MB 미만(원본 decode면 약 200MB), subsampling 중에도 잘린 데이터 거부 |
+| `AttachmentStorageServiceTest` | 3 | 첨부 파일명 경로·제어 문자 제거와 255자 절단(확장자·surrogate pair 보존), Content-Type 유지·`application/octet-stream` 대체 |
 | `UploadSessionWireCodecTest` | 7 | 암호화 라운드트립, AAD alias 바인딩, 변조/타 secret 거부 |
 | `ExternalAiReplyGeneratorDefaultsTest` | 1 | legacy AI provider 기본값 및 종료된 기능의 잔재 |
 | `ApplicationModulesDiagnosticTest` | 1 | Spring Modulith 모듈 경계·순환·내부 접근·허용 의존 strict verification |
 | `GeneratedAttachmentPolicyTest` | 3 | board 공개 생성 첨부 크기 정책과 제한 경계 |
+| `GlobalExceptionHandlerTest` | 2 | DB data exception(SQLState 22xxx)은 400 `INVALID_REQUEST`, 무결성 위반(23xxx)은 409 `CONFLICT` |
 | `HttpRequestLimitsTest` | 5 | 실제 내장 Tomcat(RANDOM_PORT)에서 405 `METHOD_NOT_ALLOWED`+`Allow`, 415 `UNSUPPORTED_MEDIA_TYPE`, 깨진 multipart 400, Tomcat 기본 2MB를 넘는 rich 본문 201, 텍스트 필드 8MB 초과 413 |
 | `UploadSessionChunkWireLimitTest` | 3 | 암호화 청크 JSON 필드의 Jackson 문자열 한도에서 계산한 최대 청크(11,249,976바이트) 왕복 성공과 다음 크기 거부, 설정값 상한 적용 |
 | `SecurityAndStorageRegressionTest` | 10 | 삭제 계정 쓰기·업로드 차단, username 재사용 시 토큰/소유권 분리, 일반·inline 첨부 rollback 정리와 커밋 후 삭제 재시도, 긴 ZIP 제목 |
@@ -72,7 +77,9 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 | `PostgresUploadFinalizeTest` | 3 | disposable PostgreSQL finalize transaction rollback·commit failure와 파일 정리 |
 | `PostgresInlineImageLifecycleTest` | 4 | disposable PostgreSQL에서 레거시 plain fixture 조회, rich 글 생성·수정·삭제, rollback 파일 정리, 커밋 후 삭제 실패·재시도 |
 
-정적 합계는 201건이며, 조건부 PostgreSQL 메서드 8건(`PostgresMigrationTest` 1건, `PostgresUploadFinalizeTest` 3건, `PostgresInlineImageLifecycleTest` 4건)은 `LLM_TEST_POSTGRES_URL`이 있을 때만 실행됩니다. 최신 실행(2026-09-25): 표준 `clean test` 201건 발견·193건 통과·조건부 8건 skip·실패 0·오류 0, 같은 날 disposable `postgres:18`로 실행한 조건부 8건 모두 통과. 이전 기록(2026-09-22): 193건 발견·193건 통과(disposable `postgres:18` PostgreSQL 18.6).
+정적 합계는 223건이며, 조건부 PostgreSQL 메서드 8건(`PostgresMigrationTest` 1건, `PostgresUploadFinalizeTest` 3건, `PostgresInlineImageLifecycleTest` 4건)은 `LLM_TEST_POSTGRES_URL`이 있을 때만 실행됩니다. 최신 실행(2026-09-25, 리뷰 후속 수정 후): 표준 `clean test` 223건 발견·215건 통과·조건부 8건 skip·실패 0·오류 0, `LLM_TEST_POSTGRES_URL`로 disposable `postgres:18`(PostgreSQL 18.6)을 지정한 `clean test` 223건 모두 통과. 같은 날 `BoardPostControllerTest`·`UserManagementControllerTest`는 `SPRING_DATASOURCE_URL`로, `LastAdminConcurrencyTest`는 datasource URL을 임시로 바꿔 같은 PostgreSQL에서도 통과를 확인했습니다(검색 `escape`, 관리자 행 잠금 대기). 이전 기록: 2026-09-25 수정 전 201건 발견·193건 통과·8건 skip, 2026-09-22 193건 통과.
+
+`application.properties`(test)는 main 설정을 가리므로 운영과 같아야 하는 값을 옮겨 둡니다. 현재 `server.tomcat.max-http-form-post-size=8MB`, `server.forward-headers-strategy=native`가 그렇고, 로그인 한도는 같은 context의 여러 테스트가 127.0.0.1로 실패를 쌓으므로 `app.auth.login-attempts.max-failures=1000`으로 높여 두며 한도 동작은 `LoginRateLimitTest`가 자기 context에서 3으로 낮춰 확인합니다.
 
 ## 프론트 테스트 구성
 
@@ -85,8 +92,9 @@ curl.exe -fsS http://127.0.0.1:8083/api/v1/health
 | `inlineImageDraft.test.cjs` | 15 | clipboard PNG/JPEG 추출·텍스트 paste 유지·미지원 형식 표시, UUID v4 fallback, 파일명·10MB 경계, MIME 별칭·확장자 fallback, pending registry 20개·100MB, 문서 순서 업로드·기존/예약 key·manifest index, object URL 해제 멱등 |
 | `postDocumentNormalizer.test.cjs` | 9 | 실제 Tiptap 스키마에서 번호 목록 `start`/`type`·코드 언어·긴 alt 정규화, 중복 이미지(기존 이미지 유지)·키 없는 이미지 제외, 선택된 사본 제외 후 커서 위치(원본 이미지 보존), 유일한 자식 제외 시 문서 구조 유지, 정상 입력은 추가 트랜잭션 없음 |
 | `post.test.cjs` | 2 | 일반 첨부 0/1/5 병합 경계와 6번째 절단, 업로드 공개 안내 문구 |
+| `auth.test.cjs` | 3 | 부팅 로그인 확인(`fetchMe`)이 네트워크 오류·5xx면 저장된 로그인 유지, 401이면 저장값 정리, 성공 시 서버 값 반영 |
 
-정적 합계는 48건입니다. 2026-09-25 실행에서 `npm test` 48/48 통과(inlineImageDraft 15·postDetail 16·postDocument 6·postDocumentNormalizer 9·post 2), `npm run typecheck`·`npm run build` 성공을 확인했습니다. 이전 기록: 2026-09-22 `npm test` 36/36 통과, build client module 284개·SSR 1개·route 5개 prerender.
+정적 합계는 51건입니다. 2026-09-25 리뷰 후속 수정 후 `npm test` 51/51 통과(auth 3·inlineImageDraft 15·postDetail 16·postDocument 6·postDocumentNormalizer 9·post 2), `npm run typecheck`·`npm run build` 성공(client module 285개, route 5개 prerender)을 확인했습니다. 이전 기록: 같은 날 수정 전 48/48, 2026-09-22 36/36.
 
 ## 추가 회귀 검증
 

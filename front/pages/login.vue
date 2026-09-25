@@ -55,6 +55,8 @@ async function handleSubmit() {
     const e = err as ApiError;
     if (e.status === 401) {
       error.value = "아이디 또는 비밀번호가 올바르지 않습니다.";
+    } else if (e.status === 429) {
+      error.value = "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.";
     } else if (e.status === 400 && e.code === "INVALID_REQUEST") {
       error.value = usernamePatternMessage;
     } else {

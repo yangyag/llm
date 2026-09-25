@@ -108,7 +108,7 @@ public class UserManagementService {
             .orElseThrow(() -> UserNotFoundException.user(id));
 
         UserRole newRole = UserRole.from(request.role());
-        if (target.getRole() == UserRole.ADMIN && newRole == UserRole.USER && countAdmins() <= 1) {
+        if (target.getRole() == UserRole.ADMIN && newRole == UserRole.USER && isLastAdmin(target.getId())) {
             throw new LastAdminProtectedException("cannot demote the last remaining admin");
         }
         target.setRole(newRole);
@@ -138,7 +138,7 @@ public class UserManagementService {
             .orElseThrow(() -> UserNotFoundException.user(id));
 
         // 마지막 ADMIN 보호가 자기 자신 삭제 체크보다 먼저 오도록 순서 유지.
-        if (target.getRole() == UserRole.ADMIN && countAdmins() <= 1) {
+        if (target.getRole() == UserRole.ADMIN && isLastAdmin(target.getId())) {
             throw new LastAdminProtectedException("cannot delete the last remaining admin");
         }
         if (target.getId().equals(requesterAdmin.getId())) {
@@ -165,12 +165,17 @@ public class UserManagementService {
     }
 
     /**
-     * 현재 저장된 관리자 계정 수를 조회한다.
+     * 관리자 행을 잠근 뒤 대상이 남은 유일한 관리자인지 확인한다.
+     * 관리자 둘이 동시에 서로를 강등·삭제해도 잠금 때문에 한 요청씩 판단하므로 관리자가 0명이 되지 않는다.
      *
-     * @return 관리자 권한을 가진 계정 수
+     * @param targetId 강등·삭제하려는 계정 ID
+     * @return 대상이 현재 유일한 관리자이면 {@code true}
      */
-    private long countAdmins() {
-        return adminRepository.countByRole(UserRole.ADMIN);
+    private boolean isLastAdmin(Long targetId) {
+        adminRepository.lockAllByRole(UserRole.ADMIN);
+        // 잠금을 기다리는 동안 다른 요청이 커밋한 변경을 반영하도록 잠근 뒤에 다시 조회한다.
+        return adminRepository.existsByIdAndRole(targetId, UserRole.ADMIN)
+            && adminRepository.countByRole(UserRole.ADMIN) <= 1;
     }
 
     /**

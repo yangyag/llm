@@ -12,11 +12,13 @@ import com.llm.app.board.dto.UpdateBoardReplyRequest;
 import com.llm.app.board.exception.AiReplyDisabledException;
 import com.llm.app.board.service.BoardService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import java.nio.charset.StandardCharsets;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -46,7 +48,8 @@ public class BoardPostController {
 	@GetMapping
 	public BoardPostListResponse getPosts(
 		@RequestParam(defaultValue = "1") int page,
-		@RequestParam(required = false) String query
+		@RequestParam(required = false)
+		@Pattern(regexp = "[^\\x00]*", message = "query must not contain NUL characters") String query
 	) {
 		return boardService.getPosts(page, query);
 	}
@@ -129,12 +132,8 @@ public class BoardPostController {
 		@PathVariable Long attachmentId
 	) {
 		var attachment = boardService.downloadAttachment(id, attachmentId);
-		MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
-		if (attachment.contentType() != null && !attachment.contentType().isBlank()) {
-			mediaType = MediaType.parseMediaType(attachment.contentType());
-		}
 		return ResponseEntity.ok()
-			.contentType(mediaType)
+			.contentType(downloadMediaType(attachment.contentType()))
 			.contentLength(attachment.size())
 			.header(
 				org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
@@ -179,5 +178,18 @@ public class BoardPostController {
 	) {
 		Long userId = authenticationGateway.authenticate(authHeader);
 		boardService.deleteReply(userId, replyId);
+	}
+
+	// 예전에 검증 없이 저장된 Content-Type이 있어도 다운로드가 500으로 끝나지 않게 한다.
+	private static MediaType downloadMediaType(String contentType) {
+		if (contentType == null || contentType.isBlank()) {
+			return MediaType.APPLICATION_OCTET_STREAM;
+		}
+		try {
+			MediaType mediaType = MediaType.parseMediaType(contentType);
+			return mediaType.isConcrete() ? mediaType : MediaType.APPLICATION_OCTET_STREAM;
+		} catch (InvalidMediaTypeException exception) {
+			return MediaType.APPLICATION_OCTET_STREAM;
+		}
 	}
 }

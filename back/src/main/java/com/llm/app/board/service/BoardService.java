@@ -120,7 +120,7 @@ public class BoardService {
 	 * 검색어에 해당하는 게시글 목록을 페이지 단위로 조회한다.
 	 *
 	 * @param page 요청 페이지 번호(1보다 작으면 1로 보정)
-	 * @param query 제목 또는 본문 검색어
+	 * @param query 제목 검색어(대소문자 구분 없는 부분 일치)
 	 * @return 게시글 목록 응답
 	 */
 	@Transactional(readOnly = true)
@@ -510,6 +510,7 @@ public class BoardService {
 
 	/**
 	 * 검색어를 저장소 조회용 소문자 포함 패턴으로 변환한다.
+	 * 검색어의 {@code %}·{@code _}는 와일드카드가 아니라 글자로 찾도록 저장소 쿼리의 escape 문자 {@code !}로 감싼다.
 	 *
 	 * @param query 원본 검색어
 	 * @return 검색 패턴 또는 검색어가 없을 때 {@code null}
@@ -519,7 +520,11 @@ public class BoardService {
 			return null;
 		}
 
-		return "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
+		String keyword = query.trim().toLowerCase(Locale.ROOT)
+			.replace("!", "!!")
+			.replace("%", "!%")
+			.replace("_", "!_");
+		return "%" + keyword + "%";
 	}
 
 	private record ResolvedPostBody(

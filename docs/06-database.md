@@ -44,7 +44,7 @@ spring.flyway.create-schemas=true
 
 | 테이블 | 역할 |
 | --- | --- |
-| `posts` | 게시글 본문(검색·복사용 평문 `body`, rich canonical 문서 `body_document`), 제목, 모드, 작성자(`author_username`), 생성/수정 시각 |
+| `posts` | 게시글 본문(복사용 평문 `body`, rich canonical 문서 `body_document`), 제목, 모드, 작성자(`author_username`), 생성/수정 시각 |
 | `post_replies` | 댓글과 AI 답변(작성자 `author_username`, AI 답변은 null) |
 | `post_attachments` | 게시글 첨부파일 메타데이터. 일반 첨부(`DOWNLOAD`)와 본문 이미지(`INLINE_IMAGE`)를 함께 저장하며 합계 최대 5개 |
 | `admins` | 사용자 계정(ADMIN/USER 역할) |
@@ -81,7 +81,7 @@ spring.flyway.create-schemas=true
 V19는 게시글 본문 형식과 본문에 추가한 이미지(이하 inline 이미지)의 metadata를 추가합니다. 이미지 bytes는 DB가 아니라 기존 첨부 volume(`APP_ATTACHMENTS_ROOT_PATH`)에 저장하고, DB에는 rich canonical 문서 JSON과 attachment metadata만 둡니다.
 
 - `posts.body_format`: `varchar(30) not null default 'PLAIN_TEXT'`이며 `check (body_format in ('PLAIN_TEXT', 'TIPTAP_JSON'))`(`ck_posts_body_format`)로 두 값만 허용합니다.
-- `posts.body_document`: `text` nullable입니다. `body_format='PLAIN_TEXT'`이면 null, `TIPTAP_JSON`이면 not null이어야 합니다(`ck_posts_body_format_document`). rich 글도 검색·본문 복사에 쓰는 `posts.body`에는 서버가 canonical 문서에서 추출한 평문이 들어갑니다.
+- `posts.body_document`: `text` nullable입니다. `body_format='PLAIN_TEXT'`이면 null, `TIPTAP_JSON`이면 not null이어야 합니다(`ck_posts_body_format_document`). rich 글도 본문 복사에 쓰는 `posts.body`에는 서버가 canonical 문서에서 추출한 평문이 들어갑니다.
 - `post_attachments.attachment_kind`: `varchar(30) not null default 'DOWNLOAD'`이며 `check (attachment_kind in ('DOWNLOAD', 'INLINE_IMAGE'))`(`ck_post_attachments_kind`)로 두 값만 허용합니다.
 - `post_attachments.inline_key`: `uuid` nullable입니다. `DOWNLOAD`이면 null, `INLINE_IMAGE`이면 not null이어야 합니다(`ck_post_attachments_kind_inline_key`).
 - `(post_id, inline_key)` partial unique index(`uk_post_attachments_post_inline_key`, `where inline_key is not null`)로 한 글 안에서 inline key 중복을 막습니다. `inline_key`가 null인 일반 첨부는 index 대상이 아닙니다.

@@ -3,6 +3,7 @@ package com.llm.app.board.dto;
 import com.llm.app.board.model.BoardPostMode;
 import com.llm.app.board.model.PostBodyFormat;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
@@ -10,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class CreateBoardPostRequest {
 	@NotBlank(message = "title is required")
 	@Size(max = 200, message = "title must be 200 characters or less")
+	@Pattern(regexp = "[^\\x00]*", message = "title must not contain NUL characters")
 	private String title;
 
 	private String bodyBase64;

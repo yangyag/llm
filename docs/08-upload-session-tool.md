@@ -60,6 +60,8 @@ LLM_UPLOAD_SESSIONS_SECRET='...' \
 python3 upload_zip_post.py
 ```
 
+큰 ZIP은 finalize 응답이 늦을 수 있습니다. 서버가 청크 합치기·SHA-256 계산·첨부 복사를 모두 끝낸 뒤에야 응답하기 때문입니다. 스크립트의 HTTP 대기 시간은 기본 30초이고(`--timeout`, 인증·청크·finalize 공통), 운영 경로에는 EC2 호스트 nginx(기본 60초)와 llm-front nginx(`proxy_read_timeout 600s`)의 대기 시간도 따로 있습니다. 먼저 끝나는 쪽이 실패를 알려도 백엔드는 게시글을 계속 만들므로, 실패로 끝나면 다시 실행하기 전에 게시판에 결과 글이 생겼는지 확인합니다. 수백 MB 이상이면 `--timeout 600`처럼 늘려서 실행합니다(호스트 nginx 60초가 여전히 먼저 끊을 수 있음).
+
 ## 청크 크기
 
 기본값은 `.env.example` 기준입니다.

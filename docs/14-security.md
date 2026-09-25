@@ -33,7 +33,7 @@
 - 인가 방식은 인증과 마찬가지로 Spring Security filter chain이 아니라 컨트롤러에서 공개 인증 계약을 호출하는 방식입니다. `auth` 외부 모듈은 `AuthenticationGateway.authenticate`를 사용하고, `auth.internal`의 `JwtProvider`가 실제 JWT 검증을 수행합니다. JWT에는 role을 넣지 않고 고유 계정 ID를 subject로, `tokenVersion=2`를 claim으로 넣습니다. 이전 username 토큰은 거부하며 재로그인이 필요합니다.
 - ADMIN 여부 판단은 `UserManagementService`에서 매 요청마다 계정 ID로 DB를 조회해 수행합니다. 토큰에 역할 정보가 내장되지 않으므로, 강등이나 계정 삭제가 다음 요청부터 즉시 반영됩니다.
 - `USER`가 사용자 관리 API를 호출하면 403 `FORBIDDEN`입니다. 계정이 삭제된 경우 그 계정 JWT는 이후 요청에서 401 `INVALID_CREDENTIALS`로 거부됩니다.
-- 마지막 남은 ADMIN은 삭제하거나 USER로 강등할 수 없습니다(409 `LAST_ADMIN_PROTECTED`). 자기 자신의 계정 삭제도 불가합니다(409 `SELF_DELETE_NOT_ALLOWED`).
+- 마지막 남은 ADMIN은 삭제하거나 USER로 강등할 수 없습니다(409 `LAST_ADMIN_PROTECTED`). 자기 자신의 계정 삭제도 불가합니다(409 `SELF_DELETE_NOT_ALLOWED`). ADMIN을 강등·삭제할 때는 ADMIN 행을 id 순서로 잠근(`AdminRepository.lockAllByRole`) 뒤 최신 상태로 다시 세므로, 관리자 둘이 동시에 서로를 강등·삭제해도 ADMIN이 0명이 되지 않습니다.
 
 프론트엔드는 로그인/me 응답의 `userId`와 `role`을 auth store와 `localStorage`(`auth_user_id`, `auth_role`)에 보관합니다. `/users` 사용자 관리 화면은 라우트 가드에서 ADMIN만 접근을 허용하며, ADMIN이 아니면 `/`로 리다이렉트합니다. 이는 UX 가드일 뿐이며 실제 인가는 백엔드에서 수행됩니다.
 
@@ -52,12 +52,23 @@
 - secret 변경 시 기존 token은 무효화됩니다.
 - 코드 fallback secret은 개발용이며 운영에서 사용하지 않습니다.
 
+## 로그인 시도 제한
+
+- 클라이언트 IP마다 `APP_AUTH_LOGIN_WINDOW`(기본 15분) 동안 `APP_AUTH_LOGIN_MAX_FAILURES`(기본 10)번까지 로그인을 시도할 수 있습니다. 넘으면 비밀번호가 맞아도 429 `TOO_MANY_LOGIN_ATTEMPTS`와 `Retry-After`를 반환하고, 성공하면 그 IP의 기록을 지웁니다(`LoginAttemptLimiter`).
+- 시도는 비밀번호를 확인하기 전에 먼저 셉니다. 병렬 요청으로 결과를 기다리는 사이 한도를 넘겨 시도하지 못하게 하기 위해서입니다.
+- 계정 단위로는 잠그지 않습니다. 남이 일부러 틀려서 관리자 로그인을 막는 것을 피하기 위해서입니다. 대신 여러 IP로 나눠 시도하는 공격은 막지 못하므로 비밀번호 강도가 여전히 중요합니다(현재 최소 4자).
+- 기록은 백엔드 메모리에만 있어 재시작하면 초기화되고, 추적 IP가 1만 개를 넘으면 만료된 기록부터 정리합니다.
+- 없는 아이디도 미리 만든 해시와 비교해 틀린 비밀번호와 같은 비용을 쓰고 같은 401 메시지를 반환합니다. 응답 시간으로 아이디 존재 여부를 알아내기 어렵게 하기 위해서입니다.
+- 클라이언트 IP는 `server.forward-headers-strategy=native`가 `X-Forwarded-For`에서 복원합니다. 동작 원리와 앞단 프록시를 바꿀 때 주의할 점은 docs/05의 Auth 절을 참고합니다.
+
 ## 클라이언트 세션 처리
 
 백엔드 JWT는 발급 후 `APP_JWT_EXPIRATION_MS`(기본 1시간)에 고정 만료되며, 토큰 갱신이나 슬라이딩 세션은 없습니다. 프론트엔드는 이와 별개로 다음 두 가지 자동 로그아웃을 수행합니다.
 
 - 유휴 자동 로그아웃: 로그인 상태에서 마지막 사용자 활동(`mousedown`/`keydown`/`scroll`/`touchstart`) 후 1시간 동안 동작이 없으면 자동 로그아웃합니다. 이 1시간은 프론트 코드의 하드코딩 상수(`front/composables/useIdleTimeout.ts`의 `IDLE_TIMEOUT_MS`)이며 별도 환경 변수가 없습니다.
 - 401 강제 로그아웃: `Authorization` 헤더를 보낸 인증 요청이 `401`을 받으면(서버가 토큰을 거부) 세션 만료로 보고 즉시 로그아웃합니다. 로그인 요청은 `Authorization` 헤더가 없으므로 제외됩니다.
+
+새로고침 때 저장된 토큰을 `/api/v1/auth/me`로 확인하는 부팅 검증(`auth.fetchMe`)도 401일 때만 로그아웃합니다. 네트워크 오류나 5xx(백엔드 재시작 중 등)는 토큰 문제가 아니므로 저장된 로그인 상태를 유지하고, 토큰이 실제로 무효라면 다음 인증 요청의 401에서 로그아웃됩니다.
 
 구현 세부:
 
@@ -123,7 +134,7 @@ ZIP 세션 결과 제한:
 - `APP_ATTACHMENTS_MAX_GENERATED_FILE_SIZE`
 - `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE`
 
-저장 시 원본 파일명에서 경로 요소를 제거하고 UUID 기반 저장명을 사용합니다.
+저장 시 원본 파일명에서 경로 요소(`/`·`\`)와 제어 문자(NUL 포함)를 제거하고 255자로 자르며, 디스크에는 UUID 기반 저장명(짧은 영문·숫자 확장자만 유지)을 사용합니다. 클라이언트가 보낸 Content-Type은 해석할 수 없거나 wildcard면 `application/octet-stream`으로 저장하고, 다운로드 때도 같은 기준으로 다시 확인합니다(`AttachmentStorageService`).
 
 ## 본문 inline 이미지
 
@@ -132,7 +143,7 @@ ZIP 세션 결과 제한:
 파일 검증:
 
 - 브라우저가 보낸 MIME과 확장자를 신뢰하지 않습니다. 붙여넣기·파일 선택 시 `image/png`/`image/jpeg`만 허용하는 것은 UX 필터이며(`front/composables/useInlineImageDraft.ts`), 서버는 `InlineImageValidator`가 `ImageIO` reader의 실제 format name으로 PNG/JPEG를 판정합니다. 판정한 형식으로 `content_type`을 덮어쓰고, 파일명은 표시용으로만 쓰며 저장명은 기존 UUID 방식을 유지합니다.
-- 너비·높이·pixel 한도를 먼저 확인한 뒤 `ImageReader.read(0)`으로 payload 전체를 decode합니다. header만 남은 손상 PNG/JPEG도 저장 전에 거부됩니다.
+- 너비·높이·pixel 한도를 먼저 확인한 뒤 payload 전체를 decode합니다. header만 남은 손상 PNG/JPEG도 저장 전에 거부됩니다. decode는 결과가 100만 pixel 이하가 되도록 subsampling해서(`InlineImageValidator.decodeSubsampling`) 모든 행을 읽으면서도 메모리는 작게 씁니다. 원본 크기로 펼치면 25,000,000px 16비트 RGBA PNG 한 장이 약 200MB라 512MB 힙을 위협합니다.
 - 형식·손상·빈 파일은 400 `INVALID_ATTACHMENT_REQUEST`, 크기 초과는 413 `ATTACHMENT_TOO_LARGE`입니다.
 
 한도:

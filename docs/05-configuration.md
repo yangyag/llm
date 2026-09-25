@@ -91,11 +91,15 @@ multipart 요청의 텍스트 필드(파일 제외) 합계는 Tomcat `maxPostSiz
 | --- | --- | --- |
 | `APP_JWT_SECRET` | secret | JWT HS256 서명 secret. 운영 필수 |
 | `APP_JWT_EXPIRATION_MS` | `3600000` | JWT 만료 시간. 프론트의 유휴 자동 로그아웃(1시간)은 이 값과 무관한 `front/composables/useIdleTimeout.ts`의 하드코딩 상수 `IDLE_TIMEOUT_MS`로, 환경 변수로 조정되지 않습니다(양쪽 변경 시 함께 맞춰야 함) |
+| `APP_AUTH_LOGIN_MAX_FAILURES` | `10` | 클라이언트 IP 하나가 한 구간에서 할 수 있는 로그인 시도 수. 넘으면 429 `TOO_MANY_LOGIN_ATTEMPTS`. 성공하면 그 IP 기록 초기화 |
+| `APP_AUTH_LOGIN_WINDOW` | `15m` | 로그인 시도 수를 세는 구간(Spring Duration 형식) |
 | `LLM_JWT_TOKEN` | 선택 | 업로드 스크립트가 직접 사용할 JWT |
 | `LLM_USERNAME` | 선택 | 업로드 스크립트 로그인 계정 |
 | `LLM_PASSWORD` | 선택 | 업로드 스크립트 로그인 비밀번호 |
 
 백엔드 코드에는 개발 fallback secret이 있지만 운영에서는 사용하지 않습니다.
+
+로그인 시도 제한은 클라이언트 IP 단위이고 백엔드 메모리에만 기록되므로 재시작하면 초기화됩니다. 계정 단위로 잠그지 않는 이유는 남이 일부러 틀려서 관리자 로그인을 막을 수 있기 때문입니다. 클라이언트 IP는 `application.properties`의 `server.forward-headers-strategy=native`(Tomcat RemoteIpValve)가 `X-Forwarded-For`를 오른쪽부터 읽어 내부망 주소(10/8, 172.16/12, 192.168/16, 127/8 등)를 건너뛴 첫 주소로 정합니다. 운영 경로(호스트 nginx → llm-front nginx → back)에서는 두 nginx가 모두 `$proxy_add_x_forwarded_for`를 붙이므로 클라이언트가 보낸 위조 값은 앞쪽에 남아 무시됩니다. 앞단 프록시가 공인 IP 대역에 있거나 `X-Forwarded-For`를 붙이지 않게 바뀌면 모든 요청이 같은 IP로 세어져 한도가 사이트 전체에 걸리므로 이 설정을 함께 확인해야 합니다.
 
 ## AI providers
 

@@ -88,6 +88,7 @@ docker logs -f llm-back
 자주 보는 오류 코드:
 
 - `INVALID_CREDENTIALS`: 로그인 실패, 토큰 누락/만료
+- `TOO_MANY_LOGIN_ATTEMPTS`(429): 같은 IP의 로그인 시도 한도 초과. `Retry-After`만큼 기다리거나 `llm-back` 재시작으로 초기화. 모든 사용자가 동시에 받으면 클라이언트 IP 해석 문제(docs/05 Auth 절)
 - `FORBIDDEN`: 권한 없음. USER가 남의 게시글 수정/삭제, 레거시 글 수정/삭제, 사용자 관리 API 호출
 - `AI_PROVIDER_NOT_CONFIGURED`: API key 누락
 - `AI_REPLY_GENERATION_FAILED`: 외부 AI 호출 실패

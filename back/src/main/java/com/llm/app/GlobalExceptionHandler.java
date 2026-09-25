@@ -3,6 +3,7 @@ package com.llm.app;
 import com.llm.app.auth.exception.DuplicateUsernameException;
 import com.llm.app.auth.exception.LastAdminProtectedException;
 import com.llm.app.auth.exception.SelfDeleteNotAllowedException;
+import com.llm.app.auth.exception.TooManyLoginAttemptsException;
 import com.llm.app.auth.exception.UserNotFoundException;
 import com.llm.app.auth.api.ForbiddenException;
 import com.llm.app.auth.api.InvalidCredentialsException;
@@ -29,6 +30,7 @@ import com.llm.app.upload.exception.UploadSessionStorageException;
 import com.llm.app.upload.exception.UploadSessionStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import java.sql.SQLException;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,6 +74,16 @@ public class GlobalExceptionHandler {
 		HttpServletRequest request
 	) {
 		return buildResponse(HttpStatus.CONFLICT, "LAST_ADMIN_PROTECTED", exception.getMessage(), request);
+	}
+
+	@ExceptionHandler(TooManyLoginAttemptsException.class)
+	public org.springframework.http.ResponseEntity<ErrorResponse> handleTooManyLoginAttempts(
+		TooManyLoginAttemptsException exception,
+		HttpServletRequest request
+	) {
+		HttpHeaders headers = new HttpHeaders();
+		headers.set(HttpHeaders.RETRY_AFTER, String.valueOf(exception.getRetryAfterSeconds()));
+		return buildResponse(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_LOGIN_ATTEMPTS", exception.getMessage(), headers, request);
 	}
 
 	@ExceptionHandler(SelfDeleteNotAllowedException.class)
@@ -238,8 +250,25 @@ public class GlobalExceptionHandler {
 		RuntimeException exception,
 		HttpServletRequest request
 	) {
+		// SQLState 22xxx(길이 초과, NUL 등 data exception)는 자원 충돌이 아니라 저장할 수 없는 입력이다.
+		if (hasSqlStateClass(exception, "22")) {
+			return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "request contains a value that cannot be stored", request);
+		}
 		// Generic message on purpose: never echo raw SQL/constraint text to clients.
 		return buildResponse(HttpStatus.CONFLICT, "CONFLICT", "request conflicts with the current resource state", request);
+	}
+
+	private static boolean hasSqlStateClass(Throwable exception, String sqlStateClass) {
+		Throwable cause = exception;
+		for (int depth = 0; cause != null && depth < 16; depth++) {
+			if (cause instanceof SQLException sqlException
+				&& sqlException.getSQLState() != null
+				&& sqlException.getSQLState().startsWith(sqlStateClass)) {
+				return true;
+			}
+			cause = cause.getCause();
+		}
+		return false;
 	}
 
 	@ExceptionHandler({

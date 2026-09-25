@@ -1,6 +1,6 @@
 // 인증 부트스트랩 (클라이언트 전용).
 // - localStorage → auth store 동기화(hydrate)
-// - 토큰 있으면 getMe 검증, 실패 시 로그아웃
+// - 토큰 있으면 getMe 검증, 401이면 로그아웃(네트워크 오류·5xx는 저장된 로그인 유지)
 // - auth:unauthorized 이벤트(인증 요청 401) → 강제 로그아웃 (앱 수명 동안 전역 리스너)
 import { useAuthStore } from "~/stores/auth";
 

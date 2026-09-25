@@ -188,11 +188,14 @@ docker logs --tail 100 llm-back
 - 비밀번호 불일치
 - 운영 기본 계정 변경
 - JWT secret 변경 후 기존 token 사용
+- 429 `TOO_MANY_LOGIN_ATTEMPTS`("로그인 시도가 너무 많습니다"): 같은 IP에서 `APP_AUTH_LOGIN_WINDOW`(기본 15분) 동안 `APP_AUTH_LOGIN_MAX_FAILURES`(기본 10)번을 넘게 시도함. 이때는 비밀번호가 맞아도 거부됩니다.
+- 모든 사용자가 한꺼번에 429를 받는다면 백엔드가 클라이언트 IP를 구분하지 못하는 상태입니다. 앞단 프록시가 `X-Forwarded-For`를 붙이지 않거나 공인 IP 대역의 프록시를 거치게 바뀌었는지 확인합니다(docs/05 Auth 절).
 
 대응:
 
 - 브라우저 localStorage의 `auth_token`, `auth_user_id`, `auth_username`, `auth_role`, `auth_last_activity` 삭제 후 재로그인
 - DB `admins` 계정 확인
+- 429는 응답의 `Retry-After`(초)만큼 기다리면 풀립니다. 급하면 `llm-back`을 재시작하면 기록이 초기화됩니다.
 
 ## 사용 중 갑자기 로그아웃됨
 
@@ -203,6 +206,7 @@ docker logs --tail 100 llm-back
 - 로그인 상태에서 마지막 사용자 활동(클릭/키 입력/스크롤/터치) 후 1시간 동안 아무 동작이 없으면 자동 로그아웃됩니다(유휴 타임아웃, 프론트 하드코딩 상수 1시간).
 - 마지막 활동 시각은 브라우저 `localStorage`의 `auth_last_activity`에 보존되며, 리로드나 탭 복원으로 유휴 데드라인이 초기화되지 않습니다. 절전/탭 복귀 시점에 유휴 시간이 재평가됩니다.
 - 인증이 필요한 API 요청이 `401`을 받으면(예: 백엔드 JWT가 `APP_JWT_EXPIRATION_MS` 기본 1시간 후 만료) 즉시 강제 로그아웃됩니다. 백엔드는 토큰 갱신/슬라이딩 세션 없이 고정 만료입니다.
+- 새로고침 때의 로그인 확인(`/api/v1/auth/me`)이 네트워크 오류나 5xx로 실패한 것만으로는 로그아웃하지 않습니다(백엔드 재시작 중 새로고침 대비). 이때 목록 등은 오류를 보여도 로그인 상태는 남습니다.
 
 대응:
 
@@ -247,6 +251,7 @@ docker volume ls | grep llm-back-attachments
 - `APP_ATTACHMENTS_MAX_GENERATED_FILE_SIZE` 초과
 - 세션 생성 시 `decoded chunk size exceeds the upload session size limit`: 청크가 `APP_UPLOAD_SESSIONS_MAX_DECODED_CHUNK_SIZE`(기본 8MB) 또는 전송 상한 11,249,976바이트를 넘음. `--chunk-size-base64-chars`를 줄입니다(기본값 1398104 권장, docs/08).
 - `APP_UPLOAD_SESSIONS_ROOT_PATH` 미설정으로 예상한 volume이 아닌 JVM temp 경로를 사용하는 상황
+- 큰 ZIP에서 스크립트가 timeout 또는 504로 실패했는데 게시글은 생겨 있음: finalize는 청크 합치기·SHA-256·복사를 모두 끝낸 뒤에야 응답하므로 오래 걸릴 수 있습니다. 대기 시간은 세 곳이 따로 정합니다. 스크립트 `--timeout`(기본 30초), EC2 호스트 nginx(`/etc/nginx/sites-enabled/default`, 기본 60초), llm-front nginx(`proxy_read_timeout 600s`). 먼저 끝나는 쪽이 실패를 내도 백엔드는 게시글을 계속 만듭니다. 다시 실행하면 세션이 이미 완료·삭제돼 새로 올리게 되므로, 목록에서 게시글이 생겼는지 먼저 확인합니다.
 
 대응:
 
@@ -293,6 +298,7 @@ secret key 값은 출력하지 않습니다.
 - tar를 `/tmp`에 두어 snap Docker가 load하지 못함 (`/home/ubuntu/llm/`에 둘 것)
 - 브라우저 캐시
 - `NUXT_PUBLIC_API_BASE`가 generate 시점에 잘못 들어감
+- 배포 전에 연 탭에서 화면을 옮길 때 콘솔에 "module script ... MIME type" 오류: 옛 `index.html`이 새 배포에서 지워진 `/_nuxt/` chunk를 요청한 것입니다. 지금 nginx 설정은 없는 chunk를 404로 돌려주고, 새로고침하면 새 chunk를 받습니다.
 
 대응:
 

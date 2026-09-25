@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.util.Iterator;
 import java.util.Locale;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
@@ -20,6 +21,7 @@ public class InlineImageValidator {
 	public static final int MAX_WIDTH = 8192;
 	public static final int MAX_HEIGHT = 8192;
 	public static final long MAX_PIXELS = 25_000_000L;
+	static final long MAX_DECODED_PIXELS = 1_000_000L;
 
 	private final long maxFileSizeBytes;
 
@@ -66,7 +68,12 @@ public class InlineImageValidator {
 				|| (long) width * height > MAX_PIXELS) {
 				throw new InvalidAttachmentRequestException("inline image dimensions exceed the allowed limits");
 			}
-			reader.read(0);
+			// 원본 크기로 펼치면 16비트 RGBA 2,500만 픽셀이 약 200MB라 힙(512MB)을 위협한다.
+			// subsampling해도 decoder는 모든 행을 읽고 풀기 때문에 손상 검출은 그대로 유지된다.
+			ImageReadParam param = reader.getDefaultReadParam();
+			int subsampling = decodeSubsampling(width, height);
+			param.setSourceSubsampling(subsampling, subsampling, 0, 0);
+			reader.read(0, param);
 			return new ValidatedInlineImage(contentType, extension, width, height);
 		} catch (InvalidAttachmentRequestException | AttachmentTooLargeException exception) {
 			throw exception;
@@ -77,6 +84,14 @@ public class InlineImageValidator {
 				reader.dispose();
 			}
 		}
+	}
+
+	static int decodeSubsampling(int width, int height) {
+		int factor = 1;
+		while ((long) Math.ceilDiv(width, factor) * Math.ceilDiv(height, factor) > MAX_DECODED_PIXELS) {
+			factor++;
+		}
+		return factor;
 	}
 
 	public record ValidatedInlineImage(String contentType, String extension, int width, int height) {

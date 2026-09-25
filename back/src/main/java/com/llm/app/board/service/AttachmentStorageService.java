@@ -10,9 +10,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.http.InvalidMediaTypeException;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.util.unit.DataSize;
@@ -20,6 +23,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Component
 public class AttachmentStorageService implements GeneratedAttachmentPolicy {
+	static final int MAX_ORIGINAL_FILENAME_LENGTH = 255;
+	static final int MAX_CONTENT_TYPE_LENGTH = 255;
+	private static final String DEFAULT_FILENAME = "attachment";
+	private static final Pattern SAFE_EXTENSION = Pattern.compile("\\.[A-Za-z0-9]{1,16}");
+
 	private final Path rootPath;
 	private final long maxUploadFileSizeBytes;
 	private final long maxGeneratedFileSizeBytes;
@@ -55,7 +63,7 @@ public class AttachmentStorageService implements GeneratedAttachmentPolicy {
 		return storeMultipart(
 			attachment,
 			originalFilename,
-			attachment.getContentType(),
+			normalizeContentType(attachment.getContentType()),
 			extractExtension(originalFilename)
 		);
 	}
@@ -217,25 +225,79 @@ public class AttachmentStorageService implements GeneratedAttachmentPolicy {
 	 * @return 경로가 제거된 원본 파일명 또는 기본 파일명
 	 */
 	private String extractOriginalFilename(MultipartFile attachment) {
-		String filename = attachment.getOriginalFilename();
-		if (!StringUtils.hasText(filename)) {
-			return "attachment";
-		}
-		return Path.of(filename).getFileName().toString();
+		return sanitizeOriginalFilename(attachment.getOriginalFilename());
 	}
 
 	/**
-	 * 파일명에서 마지막 확장자를 추출한다.
+	 * 클라이언트가 보낸 파일명을 표시·저장 가능한 형태로 정리한다.
+	 * 경로 구분자 앞부분과 제어 문자(NUL 포함)를 제거하고 DB 컬럼 길이에 맞춰 자르되 확장자는 보존한다.
+	 *
+	 * @param filename 멀티파트 헤더의 원본 파일명
+	 * @return 정리된 파일명 또는 쓸 수 있는 이름이 없을 때 기본 파일명
+	 */
+	static String sanitizeOriginalFilename(String filename) {
+		if (filename == null) {
+			return DEFAULT_FILENAME;
+		}
+		// Path.of는 NUL에서 예외를 던지고 운영 OS의 구분자만 알기 때문에 두 구분자를 직접 자른다.
+		String baseName = filename.substring(Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\')) + 1);
+		String name = baseName.codePoints()
+			.filter(codePoint -> !Character.isISOControl(codePoint))
+			.collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+			.toString()
+			.strip();
+		if (name.isEmpty() || ".".equals(name) || "..".equals(name)) {
+			return DEFAULT_FILENAME;
+		}
+		if (name.length() <= MAX_ORIGINAL_FILENAME_LENGTH) {
+			return name;
+		}
+		String extension = extractExtension(name);
+		int end = MAX_ORIGINAL_FILENAME_LENGTH - extension.length();
+		if (Character.isHighSurrogate(name.charAt(end - 1))) {
+			end--;
+		}
+		return name.substring(0, end) + extension;
+	}
+
+	/**
+	 * 클라이언트가 보낸 Content-Type을 다운로드 응답에 다시 쓸 수 있는 값으로 정리한다.
+	 *
+	 * @param contentType 멀티파트 part의 Content-Type
+	 * @return 원래 값, 값이 없으면 {@code null}, 응답 헤더로 쓸 수 없으면 {@code application/octet-stream}
+	 */
+	static String normalizeContentType(String contentType) {
+		if (!StringUtils.hasText(contentType)) {
+			return null;
+		}
+		if (contentType.length() > MAX_CONTENT_TYPE_LENGTH
+			|| !contentType.chars().allMatch(ch -> ch >= 0x20 && ch < 0x7f)) {
+			return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+		}
+		try {
+			// wildcard(*/*, text/*)는 파싱은 되지만 응답 Content-Type으로 설정할 수 없다.
+			return MediaType.parseMediaType(contentType).isConcrete()
+				? contentType
+				: MediaType.APPLICATION_OCTET_STREAM_VALUE;
+		} catch (InvalidMediaTypeException exception) {
+			return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+		}
+	}
+
+	/**
+	 * 파일명에서 저장 파일명에 붙일 수 있는 마지막 확장자를 추출한다.
+	 * 저장 경로에 쓰이므로 짧은 영문·숫자 확장자만 인정한다.
 	 *
 	 * @param filename 확장자를 추출할 파일명
-	 * @return 점을 포함한 확장자 또는 확장자가 없을 때 빈 문자열
+	 * @return 점을 포함한 확장자 또는 쓸 수 있는 확장자가 없을 때 빈 문자열
 	 */
-	private String extractExtension(String filename) {
+	private static String extractExtension(String filename) {
 		int dotIndex = filename.lastIndexOf('.');
-		if (dotIndex < 0 || dotIndex == filename.length() - 1) {
+		if (dotIndex < 0) {
 			return "";
 		}
-		return filename.substring(dotIndex);
+		String extension = filename.substring(dotIndex);
+		return SAFE_EXTENSION.matcher(extension).matches() ? extension : "";
 	}
 
 	/**

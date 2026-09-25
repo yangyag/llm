@@ -69,6 +69,12 @@ Authorization: Bearer <jwt>
 
 `role`은 `ADMIN`(관리자) 또는 `USER`(일반사용자)입니다.
 
+오류:
+
+- 없는 아이디와 틀린 비밀번호는 같은 401 `INVALID_CREDENTIALS`와 같은 메시지를 반환합니다. 없는 아이디도 같은 비용의 비밀번호 해시 비교를 거쳐 응답 시간으로 아이디 존재 여부를 구분하기 어렵게 합니다.
+- 클라이언트 IP마다 `APP_AUTH_LOGIN_WINDOW`(기본 15분) 동안 `APP_AUTH_LOGIN_MAX_FAILURES`(기본 10)번까지 시도할 수 있습니다. 로그인에 성공하면 그 IP의 기록이 지워집니다. 한도를 넘으면 비밀번호가 맞아도 HTTP 429 `TOO_MANY_LOGIN_ATTEMPTS`와 `Retry-After`(남은 초) 헤더를 반환합니다. 기록은 백엔드 메모리에만 있어 재시작하면 초기화됩니다.
+- 입력 validation 실패(빈 비밀번호 등)는 400 `INVALID_REQUEST`이며 시도 횟수에 들어가지 않습니다.
+
 ### `GET /api/v1/auth/me`
 
 인증: 필요
@@ -164,7 +170,7 @@ Authorization: Bearer <jwt>
 제약:
 
 - `username`은 변경할 수 없습니다.
-- 마지막 남은 ADMIN을 USER로 강등할 수 없습니다. 위반 시 409 `LAST_ADMIN_PROTECTED`입니다.
+- 마지막 남은 ADMIN을 USER로 강등할 수 없습니다. 위반 시 409 `LAST_ADMIN_PROTECTED`입니다. ADMIN을 강등·삭제하는 요청은 ADMIN 행을 잠근 뒤 판단하므로, 관리자 둘이 동시에 서로를 강등·삭제해도 한쪽은 이 오류로 거부됩니다.
 
 ### `DELETE /api/v1/users/{id}`
 
@@ -185,6 +191,8 @@ Authorization: Bearer <jwt>
 ### `GET /api/v1/posts?page=1&query=keyword`
 
 인증: 필요 없음
+
+`query`는 선택이며 **제목**만 대소문자 구분 없이 부분 일치로 찾습니다(본문은 검색하지 않음). 검색어의 `%`·`_`는 와일드카드가 아니라 글자 그대로 찾습니다. NUL 문자가 들어 있으면 400 `INVALID_REQUEST`입니다. 목록은 `createdAt` 내림차순이고, 같은 시각이면 `id` 내림차순이라 페이지 경계에서 순서가 바뀌지 않습니다.
 
 응답 필드:
 
@@ -238,7 +246,7 @@ Authorization: Bearer <jwt>
 }
 ```
 
-`bodyFormat`은 `PLAIN_TEXT` 또는 `TIPTAP_JSON`입니다. `body`는 두 형식 모두 항상 평문이며, rich 글은 서버가 검증된 문서에서 추출한 텍스트입니다(검색·복사용). `bodyDocument`는 검증·정규화된 Tiptap JSON 객체이고 `TIPTAP_JSON` 글에서만 값이 있으며, `PLAIN_TEXT` 글은 `null`입니다. 두 필드는 additive이므로 새 backend와 기존 클라이언트를 조합해도 클라이언트는 `body` 평문을 그대로 표시할 수 있습니다.
+`bodyFormat`은 `PLAIN_TEXT` 또는 `TIPTAP_JSON`입니다. `body`는 두 형식 모두 항상 평문이며, rich 글은 서버가 검증된 문서에서 추출한 텍스트입니다(본문 복사용). `bodyDocument`는 검증·정규화된 Tiptap JSON 객체이고 `TIPTAP_JSON` 글에서만 값이 있으며, `PLAIN_TEXT` 글은 `null`입니다. 두 필드는 additive이므로 새 backend와 기존 클라이언트를 조합해도 클라이언트는 `body` 평문을 그대로 표시할 수 있습니다.
 
 rich 글의 본문 필드 예시:
 
@@ -360,8 +368,8 @@ Content-Type: `multipart/form-data`
 
 | 필드 | 필수 | 설명 |
 | --- | --- | --- |
-| `title` | 예 | 200자 이하 |
-| `bodyBase64` | 아니오 | `PLAIN_TEXT` 본문. UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
+| `title` | 예 | 200자 이하. NUL 문자가 있으면 400 `INVALID_REQUEST` |
+| `bodyBase64` | 아니오 | `PLAIN_TEXT` 본문. UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장. 디코딩한 본문에 NUL 문자가 있으면 400 `INVALID_ENCODED_BODY` |
 | `bodyFormat` | 아니오 | `PLAIN_TEXT`(기본) 또는 `TIPTAP_JSON` |
 | `bodyDocumentBase64` | 아니오 | `TIPTAP_JSON`일 때 필수인 Base64 문서 |
 | `inlineImageManifestBase64` | 아니오 | 신규 inline 이미지가 있을 때 필수인 manifest(위 "rich 본문 형식과 inline 이미지" 참조) |
@@ -370,6 +378,11 @@ Content-Type: `multipart/form-data`
 | `attachments` | 아니오 | 첨부파일. 같은 이름 `attachments`로 여러 개 전송 가능(일반 첨부 파일당 100MB, 본문 이미지 포함 합계 최대 5개) |
 
 응답: 게시글 상세(`authorUserId`는 계정 ID, `authorUsername`은 작성 시점의 표시 이름), HTTP 201
+
+일반 첨부의 파일명과 Content-Type은 클라이언트 값을 그대로 믿지 않고 저장 전에 정리합니다(생성·수정 공통).
+
+- 파일명: `/`·`\` 앞의 경로와 제어 문자(NUL 포함)를 지우고 255자로 자릅니다. 자를 때는 짧은 영문·숫자 확장자를 남깁니다. 남는 이름이 없으면 `attachment`입니다.
+- Content-Type: 해석할 수 없거나 wildcard(`*/*`, `text/*`)이거나 255자를 넘으면 `application/octet-stream`으로 저장합니다. 없으면 없는 대로 둡니다.
 
 ### `PUT /api/v1/posts/{id}`
 
@@ -383,8 +396,8 @@ Content-Type: `multipart/form-data`
 
 | 필드 | 필수 | 설명 |
 | --- | --- | --- |
-| `title` | 예 | 200자 이하 |
-| `bodyBase64` | 아니오 | `PLAIN_TEXT` 본문. UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장 |
+| `title` | 예 | 200자 이하. NUL 문자가 있으면 400 `INVALID_REQUEST` |
+| `bodyBase64` | 아니오 | `PLAIN_TEXT` 본문. UTF-8 body를 Base64로 인코딩한 값. 누락 또는 빈 값이면 빈 본문으로 저장. 디코딩한 본문에 NUL 문자가 있으면 400 `INVALID_ENCODED_BODY` |
 | `bodyFormat` | 아니오 | `PLAIN_TEXT`(기본) 또는 `TIPTAP_JSON`. 기존 rich 글은 `TIPTAP_JSON`이 필수 |
 | `bodyDocumentBase64` | 아니오 | `TIPTAP_JSON`일 때 필수인 Base64 문서 |
 | `inlineImageManifestBase64` | 아니오 | 이번 수정에서 추가하는 신규 inline 이미지 manifest |
@@ -448,6 +461,8 @@ Content-Type: `multipart/form-data`
 ```
 
 응답: 게시글 상세, HTTP 201
+
+디코딩한 본문에 NUL 문자가 있으면 400 `INVALID_ENCODED_BODY`입니다(수정도 같음).
 
 ### `PUT /api/v1/posts/replies/{replyId}`
 
@@ -518,7 +533,7 @@ Content-Type: `multipart/form-data`
 
 - 파일 stream
 - `Content-Disposition: attachment`
-- `Content-Type`은 저장된 content type이 있으면 사용하고, 없으면 `application/octet-stream`
+- `Content-Type`은 저장된 content type이 있으면 사용하고, 없거나 응답 헤더로 쓸 수 없는 값(예전에 검증 없이 저장된 값 포함)이면 `application/octet-stream`
 
 ### `GET /api/v1/posts/{id}/attachments/{attachmentId}/content`
 
@@ -599,15 +614,16 @@ Content-Type: `multipart/form-data`
 | 코드 | HTTP | 의미 |
 | --- | --- | --- |
 | `INVALID_CREDENTIALS` | 401 | 인증 실패, 토큰 누락/만료, 삭제된 계정. `/api/v1/auth/me`도 같은 공통 오류 JSON을 반환 |
+| `TOO_MANY_LOGIN_ATTEMPTS` | 429 | 같은 클라이언트 IP의 로그인 시도 한도 초과. `Retry-After` 헤더에 남은 초 |
 | `FORBIDDEN` | 403 | 권한 없음. 사용자 관리 API를 USER가 호출한 경우, 남의 게시글/댓글을 수정/삭제하려는 경우(작성자 본인/ADMIN 아님), 레거시(작성자 없음) 글/댓글을 USER가 수정/삭제하려는 경우 |
 | `DUPLICATE_USERNAME` | 409 | 사용자 추가 시 username 중복 |
 | `LAST_ADMIN_PROTECTED` | 409 | 마지막 남은 ADMIN 삭제/강등 불가 |
 | `SELF_DELETE_NOT_ALLOWED` | 409 | 자기 자신의 계정 삭제 불가 |
-| `INVALID_REQUEST` | 400 | validation 또는 JSON parsing 실패, 형식이 깨진 multipart 요청, 필수 요청 파라미터 누락 |
+| `INVALID_REQUEST` | 400 | validation 또는 JSON parsing 실패, 형식이 깨진 multipart 요청, 필수 요청 파라미터 누락, 제목·검색어의 NUL 문자, DB가 저장할 수 없는 값(SQLState 22xxx: 길이 초과·NUL 등) |
 | `METHOD_NOT_ALLOWED` | 405 | 해당 경로가 지원하지 않는 HTTP 메서드. `Allow` 헤더로 허용 메서드를 알려줌 |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | 지원하지 않는 Content-Type (예: 게시글 생성·수정에 multipart가 아닌 JSON) |
 | `NOT_ACCEPTABLE` | 406 | 요청한 `Accept` 형식으로 응답할 수 없음 |
-| `INVALID_ENCODED_BODY` | 400 | bodyBase64 decode 실패 |
+| `INVALID_ENCODED_BODY` | 400 | bodyBase64 decode 실패, 디코딩한 본문의 NUL 문자 |
 | `INVALID_RICH_DOCUMENT` | 400 | rich 문서 검증 실패. `bodyDocumentBase64` decode/JSON/schema/한도 위반, `bodyBase64`와 `bodyDocumentBase64` 동시 전송 |
 | `FILE_CONVERSION_LOCKED` | 403 | 파일 변환 게시글 수정 불가 |
 | `AI_REPLY_LOCKED` | 403 | AI 답변 수정/삭제 불가 |
@@ -623,6 +639,6 @@ Content-Type: `multipart/form-data`
 | `ATTACHMENT_STORAGE_ERROR` | 500 | 파일 저장/읽기/삭제 실패 |
 | `INVALID_UPLOAD_SESSION_REQUEST` | 400 | 업로드 세션 요청 오류. 청크 크기/번호/해시 불일치 포함 |
 | `UPLOAD_SESSION_STATE_ERROR` | 409 | 만료, 완료, finalizing 상태 오류 |
-| `CONFLICT` | 409 | DB 무결성·동시성 충돌. 응답 메시지는 상세 원인을 노출하지 않음 |
+| `CONFLICT` | 409 | DB 무결성(unique·FK 등)·동시성 충돌. 응답 메시지는 상세 원인을 노출하지 않음 |
 | `NOT_FOUND` | 404 | 리소스 없음. 다른 글의 첨부, `DOWNLOAD` 첨부의 content 요청 포함 |
 | `INTERNAL_ERROR` | 500 | 예상하지 못한 서버 오류. 응답 메시지는 고정 문구(`unexpected server error`)이고 원인은 백엔드 로그(`GlobalExceptionHandler`)에 남음 |

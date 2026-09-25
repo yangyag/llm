@@ -18,6 +18,7 @@ public class BoardContentCodec {
 		if (decoded.length() > MAX_BODY_LENGTH) {
 			throw new InvalidEncodedBodyException("decoded body must be 1000000 characters or less");
 		}
+		rejectNul(decoded);
 		return decoded;
 	}
 
@@ -30,7 +31,15 @@ public class BoardContentCodec {
 		if (decoded.length() > MAX_BODY_LENGTH) {
 			throw new InvalidEncodedBodyException("decoded body must be 1000000 characters or less");
 		}
+		rejectNul(decoded);
 		return decoded;
+	}
+
+	// PostgreSQL text 컬럼은 NUL을 저장하지 못한다. 저장 단계 오류(409)가 되기 전에 400으로 거부한다.
+	private static void rejectNul(String decoded) {
+		if (decoded.indexOf('\0') >= 0) {
+			throw new InvalidEncodedBodyException("decoded body must not contain NUL characters");
+		}
 	}
 
 	public byte[] decodeBinary(String bodyBase64) {

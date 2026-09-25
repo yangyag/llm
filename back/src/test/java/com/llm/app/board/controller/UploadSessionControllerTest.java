@@ -214,6 +214,26 @@ class UploadSessionControllerTest {
 	}
 
 	@Test
+	void finalizeShouldAcceptUppercaseSha256FromCreateRequest() throws Exception {
+		UUID sessionId = createSession("upper.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2,
+			ZIP_SHA256.toUpperCase(java.util.Locale.ROOT));
+		String encoded = encode(ZIP_BYTES);
+		for (int chunk = 1; chunk <= 2; chunk++) {
+			int start = (chunk - 1) * CHUNK_SIZE_BASE64_CHARS;
+			mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/chunks", sessionId)
+					.header("Authorization", "Bearer " + token)
+					.contentType(MediaType.APPLICATION_JSON)
+					.content(chunkRequest(chunk, encoded.substring(start, Math.min(encoded.length(), start + CHUNK_SIZE_BASE64_CHARS)))))
+				.andExpect(status().isOk());
+		}
+
+		mockMvc.perform(post("/api/v1/upload-sessions/{sessionId}/finalize", sessionId)
+				.header("Authorization", "Bearer " + token))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.body").value(containsString(ZIP_SHA256)));
+	}
+
+	@Test
 	void finalizeShouldFailWhenChunksAreMissing() throws Exception {
 		UUID sessionId = createSession("missing.zip", ZIP_BYTES.length, CHUNK_SIZE_BASE64_CHARS, 2, ZIP_SHA256);
 		String encoded = encode(ZIP_BYTES);
