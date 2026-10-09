@@ -154,6 +154,30 @@ curl -fsS https://yangyag.duckdns.org/api/v1/health
 
 도메인과 HTTPS 경로는 DNS/프록시 설정 상태에 따라 달라질 수 있습니다.
 
+## 긴 URL 줄바꿈 수정 배포 (2026-10-10)
+
+소스 커밋 `44e56bd`의 편집기·rich 읽기 영역 CSS를 Windows에서 빌드한 프론트 이미지로 배포했습니다. 운영 compose와 `.env`를 보존하고 아래 명령으로 `front`만 재생성했습니다. 백엔드·PostgreSQL 컨테이너 ID/시작 시각과 첨부 volume mount는 배포 전후 같았습니다.
+
+```bash
+cd /home/ubuntu/llm
+export LLM_ENV_FILE=/home/ubuntu/llm/.env
+docker compose --project-name ubuntu --env-file .env -f docker-compose.yml up -d --no-deps --force-recreate --wait --wait-timeout 180 front
+```
+
+| 항목 | 확인 결과 |
+| --- | --- |
+| 운영 프론트 image ID | `sha256:738e2c5e74a3507a8b04f8685e5e89ad7b95880ffff4f4059ec199c60a906eca` |
+| 전송 tar SHA-256 | `077a8094c5fecfacd7d625c29cdea0306c5fbc8f3c733eb14fdfb197cf4dfaac` (Windows/EC2 일치) |
+| 롤백 이미지 | `llm-front:rollback-20261010-url-wrap` (이전 image ID `sha256:9d90107690fd8712db8e97f132702178ca4f0fd07dbb438df67d07f7b34b67b9`) |
+| 운영 배포 자료 | `/home/ubuntu/llm/releases/20261010-url-wrap` (운영 설정 사본은 제한된 권한으로 보관) |
+| Flyway | V1~V19 파일명·체크섬·성공 상태 19/19 일치, 적용 전후 이력 동일 |
+| 데이터 개수 | 게시글 55·댓글 10·첨부 39·계정 4, 적용 전후 동일 |
+| Health | front/back/PostgreSQL healthy, 내부 front proxy 8083 및 공개 HTTPS `status=UP` |
+| 공개 HTTP | 로그인 화면·글 목록·상세·첨부 다운로드 200, 인증 없는 `/api/v1/auth/me` 401 |
+| 운영 자산 UI | Playwright 1.63.0, 1,280px·390px·320px 화면 298 assertion 통과, 브라우저 오류 0건 |
+
+운영 자산 UI 검증은 실제 HTTPS HTML·JS·CSS를 사용하되 모든 API 요청을 브라우저에서 모의 처리했습니다. 실제 저장 API E2E 검증은 수행하지 않았으며, 운영 데이터에 글을 생성하거나 수정하지 않았습니다. 실제 API 검증은 공개 조회·다운로드와 health·보호 endpoint의 GET 요청으로 수행했습니다.
+
 ## rich 본문·inline 이미지 배포 순서 (2026-09-22)
 
 V19 rich 본문·inline 이미지가 들어간 배포는 backend를 먼저, front를 나중에 올립니다. 동작 근거는 docs/04의 '호환성과 배포 순서' 절을 참조합니다.

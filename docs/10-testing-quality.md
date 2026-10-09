@@ -189,6 +189,8 @@ paste/create/edit/delete 최종 smoke 절차:
 
 2026-10-09 긴 URL 가로 확장 회귀 확인: 기존 Playwright 1.63.0/Chromium과 로컬 Nuxt 5174에서 1,602자 합성 URL을 입력하자 1,280px 화면의 페이지 너비가 11,712px로 늘어나는 현상을 재현했습니다. 편집기와 rich 읽기 영역에 `overflow-wrap: anywhere`를 직접 적용한 뒤 1,280px·390px·320px 화면에서 페이지 너비가 각각 화면 너비를 유지했고, 작성·상세·수정·새로고침을 포함한 298개 assertion이 통과했습니다. 일반 문단, 공백 없는 5,000자 문자열, 제목, 인용문, 번호/불릿 목록, 코드 블록, inline code, 일반 문장을 확인했으며 console error·page error·request failure·예상 밖 HTTP 오류는 0건입니다. 생성·수정 API는 브라우저에서 모의 처리해 실제 DB에 쓰지 않았고, multipart의 `bodyDocumentBase64`를 디코딩해 URL 원문과 수정 후 원문이 개행 없이 유지됨을 확인했습니다. 붙여넣기는 합성 `ClipboardEvent`로 검증했으며 OS 클립보드는 거치지 않았습니다. `npm test` 51/51, `npm run typecheck`, `npm run build`도 통과했습니다.
 
+2026-10-10 운영 배포 후 확인: 소스 `44e56bd`를 프론트만 배포하고 실제 `https://yangyag.duckdns.org`의 HTML·JS·CSS로 같은 1,280px·390px·320px 시나리오를 실행해 298개 assertion이 통과했습니다. 모든 `/api/` 요청은 context route에서 모의 처리하고 service worker를 차단했으며, 그 외 실제 요청은 GET/HEAD만 허용했습니다. console/page/request/예상 밖 HTTP 오류 및 실제 쓰기 시도는 0건입니다. 별도 실제 GET 검증에서 내부 8083·공개 HTTPS health `UP`, 로그인 화면·게시글 목록/상세·13,470바이트 첨부 다운로드 200, 인증 없는 `/api/v1/auth/me` 401을 확인했습니다. 운영 백엔드·DB 컨테이너와 volume mount, Flyway 이력, 게시글·댓글·첨부·계정 개수는 적용 전후 같았습니다. 이미지·tar 체크섬·롤백 위치는 docs/12의 해당 배포 기록을 참조합니다.
+
 ## 실패 분석 기준
 
 - 백엔드 테스트 실패: 실패 테스트 이름, expected/actual, 관련 controller/service를 먼저 확인합니다.
