@@ -358,6 +358,8 @@ manifest 형식(Base64 인코딩 전 JSON):
 - 일반 첨부와 inline 이미지의 합계는 게시글당 최대 5개입니다. 개수 검증은 파일 저장·DB 변경 전에 수행됩니다.
 - 위반 오류는 400 `INVALID_RICH_DOCUMENT`(문서·본문 필드), 400 `INVALID_ATTACHMENT_REQUEST`(manifest·파일·문서 key 불일치, 개수 초과), 413 `ATTACHMENT_TOO_LARGE`(파일 크기 초과)입니다.
 
+본문 텍스트의 긴 URL은 작성·상세·수정 화면에서 CSS로 줄바꿈해 표시합니다. 표시 과정의 줄바꿈은 `bodyDocumentBase64` 문서에 개행을 추가하지 않으며, 생성·수정 요청은 입력한 URL 원문을 그대로 포함합니다.
+
 ### `POST /api/v1/posts`
 
 인증: 필요

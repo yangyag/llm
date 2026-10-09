@@ -160,6 +160,8 @@ canonical 문서 금지 항목:
 - `data:`, `blob:`, `javascript:` URL은 canonical 문서에 저장될 수 없습니다. 상세 화면의 첨부 metadata resolver도 서버 `contentUrl` 패턴(`/api/v1/posts/<id>/attachments/<id>/content`)만 신뢰하고, 편집 중 pending 이미지는 컴포넌트 registry의 `blob:` URL로만 해석합니다(`front/utils/postDocument.ts`).
 - 문서 한도는 decoded 5MiB, 추출 평문 1,000,000자, node 20,000개, 중첩 깊이 20, alt 200자입니다.
 
+본문 텍스트의 긴 URL·문자열은 편집기와 rich 읽기 영역의 CSS `overflow-wrap: anywhere`로 화면 안에서 줄바꿈합니다. 이 표시 규칙은 문서에 HTML이나 개행을 삽입하지 않으며, canonical 문서 검증과 텍스트 원문 보존 규칙을 그대로 따릅니다.
+
 alt 처리:
 
 - alt는 최대 200자 문자열로만 저장하며 HTML로 해석하지 않습니다. `<img src=x onerror=alert(1)>` 같은 markup형 alt도 escape 없이 text·attribute 값으로 보존되고, 렌더링은 Vue text·attribute binding만 사용합니다(`v-html` 없음).

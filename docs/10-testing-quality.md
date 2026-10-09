@@ -187,6 +187,8 @@ paste/create/edit/delete 최종 smoke 절차:
 
 2026-09-22 최종 통합 결과: 현재 소스로 재빌드한 이미지로 compose 스택을 기동해 8083 경유 HTTP smoke 38/38 통과, Playwright 최종 browser smoke 112/112 assertion 통과(disposable PostgreSQL·로컬 8082/5174, console error·page error·예상 외 4xx·5xx 0건)를 확인했습니다(파일 선택 버튼 도입 이전 실행).
 
+2026-10-09 긴 URL 가로 확장 회귀 확인: 기존 Playwright 1.63.0/Chromium과 로컬 Nuxt 5174에서 1,602자 합성 URL을 입력하자 1,280px 화면의 페이지 너비가 11,712px로 늘어나는 현상을 재현했습니다. 편집기와 rich 읽기 영역에 `overflow-wrap: anywhere`를 직접 적용한 뒤 1,280px·390px·320px 화면에서 페이지 너비가 각각 화면 너비를 유지했고, 작성·상세·수정·새로고침을 포함한 298개 assertion이 통과했습니다. 일반 문단, 공백 없는 5,000자 문자열, 제목, 인용문, 번호/불릿 목록, 코드 블록, inline code, 일반 문장을 확인했으며 console error·page error·request failure·예상 밖 HTTP 오류는 0건입니다. 생성·수정 API는 브라우저에서 모의 처리해 실제 DB에 쓰지 않았고, multipart의 `bodyDocumentBase64`를 디코딩해 URL 원문과 수정 후 원문이 개행 없이 유지됨을 확인했습니다. 붙여넣기는 합성 `ClipboardEvent`로 검증했으며 OS 클립보드는 거치지 않았습니다. `npm test` 51/51, `npm run typecheck`, `npm run build`도 통과했습니다.
+
 ## 실패 분석 기준
 
 - 백엔드 테스트 실패: 실패 테스트 이름, expected/actual, 관련 controller/service를 먼저 확인합니다.

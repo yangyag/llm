@@ -54,6 +54,7 @@ watch(
 
 <style scoped>
 :deep(.post-document-reader) {
+  overflow-wrap: anywhere;
   outline: none;
 }
 

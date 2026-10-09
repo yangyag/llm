@@ -250,6 +250,7 @@ watch(
   color: #eef5ff;
   font: inherit;
   line-height: 1.8;
+  overflow-wrap: anywhere;
   outline: none;
   transition: border-color 0.15s ease, background 0.15s ease;
 }

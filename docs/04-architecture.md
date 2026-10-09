@@ -129,6 +129,8 @@ flowchart LR
 4. 등록 전에는 서버 요청도 DB 행도 만들지 않습니다. pending registry는 20개·100MB로 제한하고, undo를 위해 문서에서 지운 node의 파일도 편집 세션 동안 유지하되 제출 payload에는 현재 canonical 문서가 참조하는 key만 넣습니다.
 5. 편집기 상태가 canonical 규칙을 벗어나면 v-model이 갱신되지 않으므로, `postDocumentNormalizer.ts` 플러그인이 입력·붙여넣기 직후 바로잡습니다. 번호 목록의 `start`는 1~1,000,000으로 맞추고 `type`은 지웁니다(`0. ` 입력, `<ol type="a">` 붙여넣기). 허용 밖 코드 언어는 지우고, 200자를 넘는 alt는 자르며, 키가 없거나 중복된 이미지는 기존 이미지를 남기고 제외한 뒤 안내합니다(편집기 안 이미지 복사·붙여넣기). 제외한 자리는 빈 문단으로 바꾸고, 사본이 선택돼 있었다면 커서를 그 문단에 두어 다음 입력이 원본 이미지를 덮어쓰지 않게 합니다. 그래도 canonical로 바꿀 수 없으면 오류를 표시하고 저장을 막습니다. 서버 codec(`BoardRichDocumentCodec`)이나 프론트 serializer의 canonical 규칙을 바꿀 때는 이 정규화도 함께 맞춰야 입력 유실이 생기지 않습니다.
 
+작성·수정 화면이 공유하는 `PostDocumentEditor.client.vue`와 rich 본문을 표시하는 `PostDocumentReader.client.vue`는 Tiptap 본문 루트에 `overflow-wrap: anywhere`를 직접 적용해 공백 없는 URL이나 긴 문자열을 본문 너비에 맞춰 시각적으로 줄바꿈합니다. Tiptap의 기본 줄바꿈 규칙보다 우선하며, 줄바꿈 가능한 위치를 Grid의 최소 너비 계산에도 반영해 작성·상세·수정 화면이 본문 때문에 옆으로 늘어나지 않도록 합니다. 이 줄바꿈은 문서에 개행을 추가하지 않으며 입력한 문서 텍스트와 저장 원문을 유지합니다.
+
 #### 등록 (multipart)
 
 rich 요청은 기존 plain 요청에 다음 필드를 더합니다.
